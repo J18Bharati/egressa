@@ -1,0 +1,11 @@
+{
+  "name": "nextjs-analytics-heavy",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "next": "^15.1.0",
+    "@sentry/nextjs": "8.42.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": { "typescript": "^5.7.2" }
+}

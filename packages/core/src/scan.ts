@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@adequacy/kb';
+import { analyzeFile } from './callsites/index.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -109,10 +112,59 @@ export function scan(options: ScanOptions): ScanResult {
     }
   }
 
-  // Call-site analysis is wired here once the analyzer lands; the shape of the
-  // signal it produces is already fixed by the Signal type.
+  const degraded = false;
+  let filesAnalysed = 0;
+  if (includeCallsites) {
+    for (const file of sources) {
+      let text: string;
+      try {
+        text = readFileSync(join(root, file), 'utf8');
+      } catch (error) {
+        errors.push({ file, message: `unreadable: ${(error as Error).message}`, fatal: false });
+        continue;
+      }
+
+      const { hits, error } = analyzeFile(text, file);
+      if (error) {
+        errors.push({ file, message: `${error}; file skipped`, fatal: false });
+        continue;
+      }
+      filesAnalysed += 1;
+
+      for (const hit of hits) {
+        if (hit.host === null) {
+          // Destination unknown. Reported so a human can check the deployment
+          // configuration; never attributed to a vendor.
+          signals.push({
+            kind: 'callsite',
+            vendorId: null,
+            matchedOn: hit.matchedOn,
+            confidence: hit.confidence,
+            location: hit.location,
+            snippet: hit.snippet,
+            ...(hit.unresolvedReason ? { unresolvedReason: hit.unresolvedReason } : {}),
+          });
+          continue;
+        }
+
+        const match = kb.lookupHost(hit.host);
+        if (!match) {
+          unmatchedHosts.add(hit.host);
+        }
+        signals.push({
+          kind: 'callsite',
+          vendorId: match?.vendor.id ?? null,
+          matchedOn: hit.host,
+          confidence: hit.confidence,
+          location: hit.location,
+          snippet: hit.snippet,
+        });
+      }
+    }
+  }
+
   const engine = includeCallsites
-    ? ({ callsite: 'oxc', degraded: false } as const)
+    ? ({ callsite: degraded ? 'fallback' : 'oxc', degraded } as const)
     : ({ callsite: 'disabled', degraded: false } as const);
 
   const filtered = signals.filter((signal) => {
@@ -139,7 +191,7 @@ export function scan(options: ScanOptions): ScanResult {
       root,
       startedAt: startedAt.toISOString(),
       durationMs: Math.max(0, Date.now() - started),
-      filesScanned: sources.length,
+      filesScanned: includeCallsites ? filesAnalysed : sources.length,
       manifestsScanned,
       engine,
       ...(options.assumeAdequacyLapsed?.length

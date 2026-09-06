@@ -1,0 +1,6 @@
+{
+  "name": "unresolvable-hosts",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": { "fastify": "^5.2.0" }
+}
