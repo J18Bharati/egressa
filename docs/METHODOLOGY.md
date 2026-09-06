@@ -26,12 +26,34 @@ finding.
 | Facts | Flags | Rule |
 |---|---|---|
 | All jurisdictions in EEA | none set | `transfer/eu-processing` |
-| Non-EEA jurisdiction, adequacy decision in force | `adequacyDependent` | `transfer/adequate-country-egress` |
-| Non-EEA jurisdiction, no adequacy, EU region documented | `thirdCountryTransfer`, `euAlternativeAvailable` | `transfer/third-country-egress-eu-region-available` |
-| Non-EEA jurisdiction, no adequacy, no EU region | `thirdCountryTransfer` | `transfer/third-country-egress` |
+| Every non-EEA jurisdiction covered by a decision that applies to this vendor | `adequacyDependent` | `transfer/adequate-country-egress` |
+| Not covered, EU region documented | `thirdCountryTransfer`, `euAlternativeAvailable` | `transfer/third-country-egress-eu-region-available` |
+| Not covered, no EU region | `thirdCountryTransfer` | `transfer/third-country-egress` |
 
 `adequacyDependent` is set when the *only* thing standing between a vendor and a Chapter V transfer
 question is an adequacy decision — which is exactly the population that changes if adequacy lapses.
+
+**"Applies to this vendor" is doing real work in that table.** Country-level adequacy decisions
+(Japan, Switzerland, Uruguay, …) cover every recipient in that country. The EU-US Data Privacy
+Framework does not: it covers only organisations that have self-certified and appear on the DPF
+list. So a US vendor is treated as covered *only* when its own entry records
+`dpfCertified: true` from a primary source. A US vendor whose pages cite standard contractual
+clauses instead is reported as third-country egress, because that is what its own documentation
+says it relies on.
+
+The certification check is recorded in `exposure.inputs` as `dpfCertified:true|false`, so the
+reasoning behind any rating can be read off the finding.
+
+### Decisions under legal challenge
+
+A decision with status `under-challenge` is treated as **in force**. It still has legal effect, and
+recording otherwise would be a prediction about how litigation will end. The challenge itself is
+recorded factually in the decision's `notes` in `kb/adequacy-status.json`, with citations, so a
+reader can see the situation without the tool taking a position on it.
+
+To see the other side of that question, run with `--assume-adequacy-lapsed`. It treats the named
+decision as withdrawn and re-rates every affected vendor, without any special-casing of the
+hypothetical: the flag changes one field of data and the same rule table does the rest.
 
 ## 3. Adequacy status is data, not code
 

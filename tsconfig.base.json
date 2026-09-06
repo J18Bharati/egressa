@@ -18,6 +18,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@adequacy/kb": ["packages/kb-loader/src/index.ts"],
+      "@adequacy/core": ["packages/core/src/index.ts"]
+    }
   }
 }

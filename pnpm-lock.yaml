@@ -35,6 +35,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@adequacy/kb':
+        specifier: workspace:^
+        version: link:../kb-loader
       ignore:
         specifier: ^7.0.8
         version: 7.0.8
@@ -51,6 +54,8 @@ importers:
       tsdown:
         specifier: ^0.5.0
         version: 0.5.10(typescript@5.9.3)
+
+  packages/kb-loader: {}
 
 packages:
 
