@@ -29,6 +29,35 @@ Read this before trusting a clean scan.
 A finding means your code *references* a vendor. It does not mean personal data was sent, that the
 data was personal, or that sending it was unlawful. See [docs/CLAIMS.md](docs/CLAIMS.md).
 
+## The three faces
+
+One engine, three ways in. All of them consume the same versioned findings schema.
+
+| | |
+|---|---|
+| **CLI** | `npx adequacy scan .` — human, JSON, SARIF or markdown output |
+| **GitHub Action** | `uses: adequacy-dev/adequacy@v1` — findings appear as PR annotations via code scanning |
+| **MCP server** | `claude mcp add adequacy -- npx -y @adequacy/mcp@latest` — see [docs/mcp.md](docs/mcp.md) |
+| **Claude Code skill** | Triages the findings a scanner cannot judge alone — see [skill/adequacy](skill/adequacy/SKILL.md) |
+
+## What breaks if adequacy falls
+
+The EU-US Data Privacy Framework is in force and under legal challenge. To see your position if it
+were withdrawn:
+
+```bash
+npx adequacy scan . --assume-adequacy-lapsed US:DPF
+```
+
+That flag rewrites one decision's status in `kb/adequacy-status.json` and lets the ordinary rule
+table re-rate everything. A vendor covered today becomes a third-country transfer, and the
+distinction between vendors that document an EU region and those that do not becomes the thing that
+matters.
+
+Note that the framework covers only organisations that self-certified and appear on the DPF list —
+it is not blanket US adequacy. Two US vendors in the same repository can therefore carry different
+rules, and they do.
+
 ## Licensing
 
 Code is Apache-2.0. The vendor knowledge base in [`kb/`](kb/) is licensed separately under

@@ -1,0 +1,26 @@
+name: Knowledge base
+
+# A separate job so a data error never looks like an engine regression, and a
+# first-time contributor adding one vendor gets targeted feedback quickly
+# without running the whole engine test suite.
+on:
+  pull_request:
+    paths: ['kb/**']
+  push:
+    branches: [main]
+    paths: ['kb/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Validate entries
+        run: pnpm kb:validate
+      - name: Check claim scope of entries
+        run: pnpm vitest run scripts/claims-contract.test.ts

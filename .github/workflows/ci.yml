@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    # The native parser binding and Windows path handling are the two things
+    # most likely to break, and both break silently, so the matrix is not
+    # optional.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm schema:check
+      - run: pnpm test
+      - run: pnpm build
+
+  self-scan:
+    # Adequacy scans its own repository. Its fixtures deliberately contain
+    # vendor references, so this asserts the scan runs and emits valid SARIF,
+    # not that the result is empty.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Scan
+        run: node packages/cli/dist/cli.js scan . --format sarif --out adequacy.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: adequacy.sarif
+          category: adequacy
