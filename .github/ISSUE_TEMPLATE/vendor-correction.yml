@@ -1,0 +1,50 @@
+name: Vendor entry correction
+description: A fact in the knowledge base is wrong or out of date
+title: "[correction] <vendor id>: <field>"
+labels: ["kb-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for correcting us. A factual correction with a primary source is merged the same
+        day, and the entry is marked `disputed` immediately — before we finish reviewing.
+
+        If you work for the vendor in question, please say so; it helps us prioritise, and it does
+        not make your correction less welcome.
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor id
+      description: The filename in kb/vendors/, without the .json
+      placeholder: stripe
+    validations: { required: true }
+  - type: input
+    id: field
+    attributes:
+      label: Field path
+      placeholder: processing.euRegion.scope
+    validations: { required: true }
+  - type: input
+    id: current
+    attributes:
+      label: Current value
+      placeholder: "partial"
+    validations: { required: true }
+  - type: input
+    id: correct
+    attributes:
+      label: Correct value
+      placeholder: "full"
+    validations: { required: true }
+  - type: input
+    id: source
+    attributes:
+      label: Primary source URL
+      description: A page published by the vendor or a regulator that shows the correct value.
+      placeholder: https://example.com/legal/data-residency
+    validations: { required: true }
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+    validations: { required: false }

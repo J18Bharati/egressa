@@ -1,0 +1,9 @@
+{
+  "name": "clean-eu-only",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "pino": "^9.5.0"
+  }
+}

@@ -1,0 +1,28 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  '@sentry/nextjs':
+    specifier: 8.42.0
+    version: 8.42.0
+  stripe:
+    specifier: ^17.4.0
+    version: 17.4.0
+
+devDependencies:
+  vitest:
+    specifier: ^2.1.8
+    version: 2.1.8
+
+packages:
+
+  /@sentry/nextjs@8.42.0:
+    resolution: {integrity: sha512-aaa}
+    dev: false
+
+  /stripe@17.4.0:
+    resolution: {integrity: sha512-bbb}
+    dev: false
+
+  /vitest@2.1.8(happy-dom@15.11.6):
+    resolution: {integrity: sha512-ccc}
+    dev: true

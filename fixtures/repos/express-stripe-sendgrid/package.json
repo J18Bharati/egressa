@@ -1,0 +1,13 @@
+{
+  "name": "express-stripe-sendgrid",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "express": "^4.21.2",
+    "stripe": "^17.4.0",
+    "@sendgrid/mail": "^8.1.4"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,38 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      stripe:
+        specifier: ^17.4.0
+        version: 17.4.0
+      posthog-js:
+        specifier: ^1.203.1
+        version: 1.203.1
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.8
+
+packages:
+
+  stripe@17.4.0:
+    resolution: {integrity: sha512-aaa}
+    engines: {node: '>=12.*'}
+
+  posthog-js@1.203.1:
+    resolution: {integrity: sha512-bbb}
+
+  qs@6.13.0:
+    resolution: {integrity: sha512-ccc}
+
+  vitest@2.1.8:
+    resolution: {integrity: sha512-ddd}
+
+  '@sentry/core@8.42.0':
+    resolution: {integrity: sha512-eee}

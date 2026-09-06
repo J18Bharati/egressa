@@ -1,0 +1,5 @@
+# The knowledge base makes factual claims about named companies.
+# Every change to it requires maintainer review.
+/kb/                    @adequacy-dev/kb-maintainers
+/docs/CLAIMS.md         @adequacy-dev/kb-maintainers
+/docs/METHODOLOGY.md    @adequacy-dev/kb-maintainers

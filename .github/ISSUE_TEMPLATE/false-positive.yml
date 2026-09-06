@@ -1,0 +1,29 @@
+name: False positive or false negative
+description: Adequacy reported something it should not have, or missed something it should have found
+title: "[detection] <short description>"
+labels: ["detection"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which is it?
+      options: ["False positive - reported something that is not there", "False negative - missed something that is there"]
+    validations: { required: true }
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal code or manifest snippet
+      render: javascript
+    validations: { required: true }
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id (for false positives)
+      placeholder: transfer/third-country-egress
+    validations: { required: false }
+  - type: markdown
+    attributes:
+      value: |
+        Known limitations are listed in `docs/LIMITATIONS.md` and are covered by
+        failing-by-design tests. If your case is listed there it is not a bug, but a comment
+        saying it bit you is still useful — it helps us prioritise which limitation to lift.
