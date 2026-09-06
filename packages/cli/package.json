@@ -1,0 +1,17 @@
+{
+  "name": "adequacy",
+  "version": "0.1.0",
+  "description": "Detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=20.11" },
+  "bin": { "adequacy": "./dist/cli.js" },
+  "files": ["dist", "README.md"],
+  "scripts": { "build": "tsdown", "clean": "rm -rf dist" },
+  "dependencies": {
+    "@adequacy/core": "workspace:*",
+    "@adequacy/kb": "workspace:*",
+    "citty": "^0.1.6",
+    "yaml": "^2.6.1"
+  }
+}
