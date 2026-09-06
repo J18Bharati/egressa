@@ -1,0 +1,218 @@
+{
+  "$schema": "https://adequacy.dev/schemas/findings-1.0.0.json",
+  "schemaVersion": "1.0.0",
+  "disclaimer": "Adequacy detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  "tool": { "name": "adequacy", "version": "0.1.0" },
+  "kb": {
+    "version": "2026.09.01",
+    "entryCount": 5,
+    "license": "CC-BY-4.0",
+    "adequacyStatusAsOf": "2026-08-30",
+    "staleEntryCount": 1
+  },
+  "scan": {
+    "root": "/repo",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "durationMs": 1190,
+    "filesScanned": 133,
+    "manifestsScanned": 3,
+    "engine": { "callsite": "fallback", "degraded": true },
+    "assumedAdequacyLapsed": ["US:DPF"]
+  },
+  "summary": {
+    "vendorCount": 1,
+    "findingCount": 3,
+    "byRule": {
+      "transfer/unresolved-egress": 1,
+      "transfer/unknown-vendor-egress": 1,
+      "transfer/third-country-egress-eu-region-available": 1
+    },
+    "bySeverity": { "error": 0, "warning": 1, "note": 2 },
+    "byConfidence": { "high": 0, "medium": 1, "low": 2 },
+    "unresolvedEgress": 1,
+    "suppressed": 1
+  },
+  "findings": [
+    {
+      "id": "0c4a9de71b3f6620",
+      "ruleId": "transfer/third-country-egress-eu-region-available",
+      "vendor": { "id": "posthog", "name": "PostHog, Inc.", "category": "analytics" },
+      "transfer": {
+        "jurisdictions": ["US", "DE"],
+        "euRegion": {
+          "available": true,
+          "scope": "full",
+          "docUrl": "https://posthog.com/docs/data/regions",
+          "notes": "Separate EU Cloud instance; projects are region-bound at creation."
+        },
+        "mechanisms": [
+          { "mechanism": "SCC", "url": "https://posthog.com/dpa", "lastChecked": "2026-07-20" }
+        ],
+        "dpaUrl": "https://posthog.com/dpa",
+        "subprocessorsUrl": "https://posthog.com/handbook/company/security",
+        "dataCategories": ["ip_address", "device_id", "usage_telemetry"],
+        "kbSources": [
+          {
+            "url": "https://posthog.com/docs/data/regions",
+            "title": "PostHog data regions",
+            "publisher": "vendor",
+            "accessedAt": "2026-07-20"
+          }
+        ],
+        "lastVerified": "2026-07-20",
+        "disputed": null
+      },
+      "exposure": {
+        "thirdCountryTransfer": true,
+        "euAlternativeAvailable": true,
+        "adequacyDependent": false,
+        "level": "moderate",
+        "rulesVersion": "1.0.0",
+        "inputs": ["jurisdiction:US", "euRegion:full", "mechanism:SCC"]
+      },
+      "severity": "warning",
+      "confidence": "medium",
+      "signals": [
+        {
+          "kind": "dependency",
+          "vendorId": "posthog",
+          "matchedOn": "posthog-js",
+          "confidence": "medium",
+          "location": {
+            "file": "package.json",
+            "startLine": 21,
+            "startColumn": 5,
+            "endLine": 21,
+            "endColumn": 30
+          },
+          "snippet": "\"posthog-js\": \"^1.203.1\""
+        }
+      ],
+      "evidence": [
+        {
+          "file": "package.json",
+          "startLine": 21,
+          "startColumn": 5,
+          "endLine": 21,
+          "endColumn": 30,
+          "kind": "dependency",
+          "matchedOn": "posthog-js",
+          "snippet": "\"posthog-js\": \"^1.203.1\"",
+          "confidence": "medium"
+        }
+      ],
+      "remediation": {
+        "summary": "Check which region this project is configured to use. EU Cloud coverage is recorded as full.",
+        "links": [
+          { "label": "PostHog data regions", "url": "https://posthog.com/docs/data/regions" }
+        ]
+      },
+      "suppressed": true,
+      "suppression": {
+        "reason": "Project is on EU Cloud; verified in console 2026-08-11. Ticket PRIV-412.",
+        "acceptedBy": "privacy@example.com",
+        "expires": "2027-03-01",
+        "expired": false,
+        "source": "config"
+      }
+    },
+    {
+      "id": "5e81b0c2fa937744",
+      "ruleId": "transfer/unresolved-egress",
+      "vendor": null,
+      "transfer": null,
+      "exposure": null,
+      "severity": "note",
+      "confidence": "low",
+      "signals": [
+        {
+          "kind": "callsite",
+          "vendorId": null,
+          "matchedOn": "process.env.ANALYTICS_URL",
+          "confidence": "low",
+          "location": {
+            "file": "src/telemetry.ts",
+            "startLine": 7,
+            "startColumn": 3,
+            "endLine": 7,
+            "endColumn": 44
+          },
+          "snippet": "await fetch(process.env.ANALYTICS_URL, { method: 'POST' })",
+          "unresolvedReason": "host supplied by environment variable ANALYTICS_URL"
+        }
+      ],
+      "evidence": [
+        {
+          "file": "src/telemetry.ts",
+          "startLine": 7,
+          "startColumn": 3,
+          "endLine": 7,
+          "endColumn": 44,
+          "kind": "callsite",
+          "matchedOn": "process.env.ANALYTICS_URL",
+          "snippet": "await fetch(process.env.ANALYTICS_URL, { method: 'POST' })",
+          "confidence": "low"
+        }
+      ],
+      "remediation": {
+        "summary": "Determine the destination from your deployment configuration. Adequacy does not guess unresolved hosts.",
+        "links": []
+      },
+      "suppressed": false,
+      "suppression": null
+    },
+    {
+      "id": "9a30f7b6c1d84e52",
+      "ruleId": "transfer/unknown-vendor-egress",
+      "vendor": null,
+      "transfer": null,
+      "exposure": null,
+      "severity": "note",
+      "confidence": "low",
+      "signals": [
+        {
+          "kind": "callsite",
+          "vendorId": null,
+          "matchedOn": "telemetry.acme.io",
+          "confidence": "low",
+          "location": {
+            "file": "src/report.ts",
+            "startLine": 30,
+            "startColumn": 11,
+            "endLine": 30,
+            "endColumn": 52
+          },
+          "snippet": "fetch('https://telemetry.acme.io/v2/events')"
+        }
+      ],
+      "evidence": [
+        {
+          "file": "src/report.ts",
+          "startLine": 30,
+          "startColumn": 11,
+          "endLine": 30,
+          "endColumn": 52,
+          "kind": "callsite",
+          "matchedOn": "telemetry.acme.io",
+          "snippet": "fetch('https://telemetry.acme.io/v2/events')",
+          "confidence": "low"
+        }
+      ],
+      "remediation": {
+        "summary": "No knowledge base entry exists for this host. Consider opening a vendor request so it can be added with primary sources.",
+        "links": [
+          {
+            "label": "Request a vendor entry",
+            "url": "https://github.com/adequacy-dev/adequacy/issues/new?template=vendor-request.yml"
+          }
+        ]
+      },
+      "suppressed": false,
+      "suppression": null
+    }
+  ],
+  "unmatched": { "hosts": ["telemetry.acme.io"], "packages": ["some-internal-sdk"] },
+  "errors": [
+    { "file": "src/legacy.js", "message": "parse error at line 3; file skipped", "fatal": false }
+  ]
+}

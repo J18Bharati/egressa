@@ -1,0 +1,33 @@
+{
+  "$schema": "https://adequacy.dev/schemas/findings-1.0.0.json",
+  "schemaVersion": "1.0.0",
+  "disclaimer": "Adequacy detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  "tool": { "name": "adequacy", "version": "0.1.0" },
+  "kb": {
+    "version": "2026.09.01",
+    "entryCount": 5,
+    "license": "CC-BY-4.0",
+    "adequacyStatusAsOf": "2026-08-30",
+    "staleEntryCount": 0
+  },
+  "scan": {
+    "root": "/repo",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "durationMs": 214,
+    "filesScanned": 18,
+    "manifestsScanned": 1,
+    "engine": { "callsite": "oxc", "degraded": false }
+  },
+  "summary": {
+    "vendorCount": 0,
+    "findingCount": 0,
+    "byRule": {},
+    "bySeverity": { "error": 0, "warning": 0, "note": 0 },
+    "byConfidence": { "high": 0, "medium": 0, "low": 0 },
+    "unresolvedEgress": 0,
+    "suppressed": 0
+  },
+  "findings": [],
+  "unmatched": { "hosts": [], "packages": [] },
+  "errors": []
+}

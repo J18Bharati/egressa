@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adequacy.dev/schemas/findings-1.0.0.json",
+  "title": "Adequacy findings document",
+  "description": "Output of an Adequacy scan. Adequacy detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "disclaimer",
+    "tool",
+    "kb",
+    "scan",
+    "summary",
+    "findings",
+    "unmatched",
+    "errors"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "disclaimer": { "type": "string", "minLength": 1 },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "adequacy" },
+        "version": { "type": "string" }
+      }
+    },
+    "kb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "entryCount", "license", "adequacyStatusAsOf", "staleEntryCount"],
+      "properties": {
+        "version": { "type": "string" },
+        "entryCount": { "type": "integer", "minimum": 0 },
+        "license": { "const": "CC-BY-4.0" },
+        "adequacyStatusAsOf": { "$ref": "#/$defs/isoDate" },
+        "staleEntryCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "startedAt", "durationMs", "filesScanned", "manifestsScanned", "engine"],
+      "properties": {
+        "root": { "type": "string" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "filesScanned": { "type": "integer", "minimum": 0 },
+        "manifestsScanned": { "type": "integer", "minimum": 0 },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["callsite", "degraded"],
+          "properties": {
+            "callsite": { "enum": ["oxc", "fallback", "disabled"] },
+            "degraded": { "type": "boolean" }
+          }
+        },
+        "assumedAdequacyLapsed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vendorCount",
+        "findingCount",
+        "byRule",
+        "bySeverity",
+        "byConfidence",
+        "unresolvedEgress",
+        "suppressed"
+      ],
+      "properties": {
+        "vendorCount": { "type": "integer", "minimum": 0 },
+        "findingCount": { "type": "integer", "minimum": 0 },
+        "byRule": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "bySeverity": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "byConfidence": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "unresolvedEgress": { "type": "integer", "minimum": 0 },
+        "suppressed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "unmatched": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hosts", "packages"],
+      "properties": {
+        "hosts": { "type": "array", "items": { "type": "string" } },
+        "packages": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "message", "fatal"],
+        "properties": {
+          "file": { "type": "string" },
+          "message": { "type": "string" },
+          "fatal": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "isoDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "ruleId": {
+      "enum": [
+        "transfer/third-country-egress",
+        "transfer/third-country-egress-eu-region-available",
+        "transfer/adequate-country-egress",
+        "transfer/eu-processing",
+        "transfer/unknown-vendor-egress",
+        "transfer/unresolved-egress",
+        "kb/stale-entry",
+        "config/expired-suppression"
+      ]
+    },
+    "severity": { "enum": ["error", "warning", "note"] },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "signalKind": { "enum": ["dependency", "callsite", "html-script"] },
+    "location": {
+      "type": "object",
+      "required": ["file", "startLine", "startColumn", "endLine", "endColumn"],
+      "properties": {
+        "file": { "type": "string" },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "startColumn": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "endColumn": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "kbSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "title", "publisher", "accessedAt"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^https://" },
+        "title": { "type": "string" },
+        "publisher": { "enum": ["vendor", "regulator", "other"] },
+        "accessedAt": { "$ref": "#/$defs/isoDate" }
+      }
+    },
+    "transferFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdictions",
+        "euRegion",
+        "mechanisms",
+        "dataCategories",
+        "kbSources",
+        "lastVerified"
+      ],
+      "properties": {
+        "jurisdictions": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^([A-Z]{2}|EEA)$" },
+          "minItems": 1
+        },
+        "euRegion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available"],
+          "properties": {
+            "available": { "type": "boolean" },
+            "scope": { "enum": ["full", "partial", "product-specific"] },
+            "docUrl": { "type": "string", "pattern": "^https://" },
+            "notes": { "type": "string" }
+          }
+        },
+        "mechanisms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mechanism"],
+            "properties": {
+              "mechanism": { "enum": ["DPF", "SCC", "BCR", "adequacy", "derogation", "none"] },
+              "dpfCertified": { "type": "boolean" },
+              "url": { "type": "string", "pattern": "^https://" },
+              "lastChecked": { "$ref": "#/$defs/isoDate" }
+            }
+          }
+        },
+        "dpaUrl": { "type": "string", "pattern": "^https://" },
+        "subprocessorsUrl": { "type": "string", "pattern": "^https://" },
+        "dataCategories": { "type": "array", "items": { "type": "string" } },
+        "kbSources": { "type": "array", "items": { "$ref": "#/$defs/kbSource" }, "minItems": 1 },
+        "lastVerified": { "$ref": "#/$defs/isoDate" },
+        "disputed": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["issueUrl", "raisedAt", "summary"],
+              "properties": {
+                "issueUrl": { "type": "string", "pattern": "^https://" },
+                "raisedAt": { "$ref": "#/$defs/isoDate" },
+                "summary": { "type": "string" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thirdCountryTransfer",
+        "euAlternativeAvailable",
+        "adequacyDependent",
+        "level",
+        "rulesVersion",
+        "inputs"
+      ],
+      "properties": {
+        "thirdCountryTransfer": { "type": "boolean" },
+        "euAlternativeAvailable": { "type": "boolean" },
+        "adequacyDependent": { "type": "boolean" },
+        "level": { "enum": ["none", "low", "moderate", "elevated"] },
+        "rulesVersion": { "type": "string" },
+        "inputs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ruleId",
+        "vendor",
+        "transfer",
+        "exposure",
+        "severity",
+        "confidence",
+        "signals",
+        "evidence",
+        "remediation",
+        "suppressed",
+        "suppression"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 8 },
+        "ruleId": { "$ref": "#/$defs/ruleId" },
+        "vendor": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "category"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+                "name": { "type": "string" },
+                "category": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "transfer": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/transferFacts" }] },
+        "exposure": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/exposure" }] },
+        "severity": { "$ref": "#/$defs/severity" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "signals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "vendorId", "matchedOn", "confidence", "location", "snippet"],
+            "properties": {
+              "kind": { "$ref": "#/$defs/signalKind" },
+              "vendorId": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
+              "matchedOn": { "type": "string" },
+              "confidence": { "$ref": "#/$defs/confidence" },
+              "location": { "$ref": "#/$defs/location" },
+              "snippet": { "type": "string" },
+              "devOnly": { "type": "boolean" },
+              "transitiveVia": { "type": "array", "items": { "type": "string" } },
+              "unresolvedReason": { "type": "string" }
+            }
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/location" },
+              {
+                "type": "object",
+                "required": ["kind", "matchedOn", "snippet", "confidence"],
+                "properties": {
+                  "kind": { "$ref": "#/$defs/signalKind" },
+                  "matchedOn": { "type": "string" },
+                  "snippet": { "type": "string" },
+                  "confidence": { "$ref": "#/$defs/confidence" },
+                  "devOnly": { "type": "boolean" },
+                  "transitiveVia": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            ]
+          }
+        },
+        "remediation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["summary", "links"],
+          "properties": {
+            "summary": { "type": "string" },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["label", "url"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "url": { "type": "string", "pattern": "^https://" }
+                }
+              }
+            }
+          }
+        },
+        "suppressed": { "type": "boolean" },
+        "suppression": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["reason", "source"],
+              "properties": {
+                "reason": { "type": "string", "minLength": 1 },
+                "acceptedBy": { "type": "string" },
+                "expires": { "$ref": "#/$defs/isoDate" },
+                "expired": { "type": "boolean" },
+                "source": { "enum": ["config", "inline"] }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
