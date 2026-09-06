@@ -8,3 +8,4 @@ export * from './output/sarif.js';
 export * from './scan.js';
 export * from './merge/index.js';
 export * from './merge/confidence.js';
+export * from './summarize.js';
