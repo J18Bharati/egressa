@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "mailgun",
+  "name": "Mailgun Technologies, Inc.",
+  "product": "Mailgun",
+  "category": "email",
+  "homepage": "https://www.mailgun.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "mailgun.js", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "mailgun-js", "kind": "wrapper", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      { "pattern": "api.mailgun.net", "match": "exact", "purpose": "api" },
+      {
+        "pattern": "api.eu.mailgun.net",
+        "match": "exact",
+        "purpose": "api",
+        "note": "EU region API host"
+      }
+    ],
+    "clientConstructors": []
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Mailgun Technologies, Inc. is registered at 112 E Pecan Street #1135, San Antonio, TX, per its Data Privacy Framework participant record."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://www.mailgun.com/about/regions/",
+      "notes": "Mailgun hosts infrastructure in both the EU and the US and lets the customer choose which region a given domain's data is processed in, via the api.eu.mailgun.net host. Per Mailgun: message data is region-bound and 'never leaves the region that it is processed by' — this includes domain metadata (e.g. SMTP credentials), messages, event logs, suppressions, mailing lists, tags, statistics, routes, and IP addresses. Account-level data (account information, user accounts, billing details/invoices, API keys, and domain names) is described as global and 'only a limited amount of account data is replicated globally,' i.e. not confined to the EU region."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://sinch.com/legal/terms-and-conditions/other-sinch-terms-conditions/data-processing-agreement/",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-06"
+    },
+    "subprocessors": {
+      "url": "https://sinch.com/legal/data-protection-agreement-sub-processors/",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "url": "https://sinch.com/legal/terms-and-conditions/other-sinch-terms-conditions/data-processing-agreement/",
+        "lastChecked": "2026-09-06"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/1738",
+        "lastChecked": "2026-09-06"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "email", "typical": true },
+    { "category": "name", "typical": true },
+    { "category": "ip_address", "typical": true },
+    { "category": "phone", "typical": true },
+    { "category": "content", "typical": true }
+  ],
+  "sources": [
+    {
+      "url": "https://sinch.com/legal/terms-and-conditions/other-sinch-terms-conditions/data-processing-agreement/",
+      "title": "Sinch Data Processing Agreement (Version 8, 29 October 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://sinch.com/legal/data-protection-agreement-sub-processors/",
+      "title": "Sinch sub-processor list (Mailgun and Sinch Email entries)",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.mailgun.com/about/regions/",
+      "title": "Mailgun Regions — one account, two regions",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://documentation.mailgun.com/docs/mailgun/api-reference/api-overview",
+      "title": "Mailgun API Reference — API overview and base URLs",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://documentation.mailgun.com/docs/mailgun/sdk/nodejs_sdk",
+      "title": "Mailgun Node.js SDK Reference",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.mailgun.com/legal/terms/",
+      "title": "Sinch Email's Terms of Service",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/1738",
+      "title": "Data Privacy Framework participant record: Mailgun Technologies, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "lastVerified": "2026-09-06",
+  "notes": "Legal entity name and DPF status are taken from Mailgun Technologies, Inc.'s own Data Privacy Framework participant record (ID 1738): Verification Method 'Self-Assessment', with an active 'EU-US Certification' (installed 2017-07-05) and an active 'UK Extension Certification' (installed 2023-09-11), both showing a 'UsageEndDate' of 2027-01-26 in that record. Mailgun's own Node.js SDK documentation identifies mailgun.js (npm) as the official SDK; mailgun-js is a separate, older community package that a Mailgun-maintained GitHub issue (mailgun/mailgun.js#126) describes as deprecated with an unfixable high-severity vulnerability in a sub-dependency. The DPA does not itself state whether it is click-through or signed; it states only that it 'forms part of and is subject to the underlying services agreement,' so it is recorded here as incorporated by reference into the Sinch Email Terms of Service, which are accepted by subscribing to the service."
+}

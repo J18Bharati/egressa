@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "sentry",
+  "name": "Functional Software, Inc.",
+  "product": "Sentry application monitoring",
+  "category": "error-tracking",
+  "homepage": "https://sentry.io",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@sentry/node", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@sentry/browser", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@sentry/react", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/vue", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/angular", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/nextjs", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/remix", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/svelte", "kind": "framework-integration", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      { "pattern": "sentry.io", "match": "exact", "purpose": "api" },
+      { "pattern": "us.sentry.io", "match": "exact", "purpose": "api" },
+      {
+        "pattern": "de.sentry.io",
+        "match": "exact",
+        "purpose": "api",
+        "note": "EU data storage location"
+      },
+      { "pattern": "ingest.sentry.io", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "ingest.de.sentry.io", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "app.getsentry.com", "match": "exact", "purpose": "ingest" }
+    ],
+    "clientConstructors": [
+      { "module": "@sentry/node", "export": "init", "hostOption": "dsn" },
+      { "module": "@sentry/browser", "export": "init", "hostOption": "dsn" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Default data storage location is Iowa, United States. Account-level metadata including user accounts, tokens, SSO and SAML metadata, audit logs and support ticket content is stored in the United States regardless of the region selected."
+      },
+      {
+        "country": "EEA",
+        "role": "support",
+        "note": "Customers may select the EU data storage location, in Frankfurt, Germany, at organisation creation. The documentation states the choice is permanent."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://docs.sentry.io/organization/data-storage-location/",
+      "notes": "Event data (errors, transactions, spans, profiles, logs, metrics, release health, session replays and their backups) is stored in the selected region. Sentry documents that user accounts and notification settings, organisation integration metadata, access tokens, organisation settings and teams, audit logs, and SSO, SAML and SCIM metadata are stored in the United States regardless of region, that identifying metadata is replicated out of the selected region to facilitate login and backwards-compatible APIs, that data shared in a support interaction is stored in the United States, and that uptime check data is stored in all locations regardless of selection."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://sentry.io/legal/dpa/",
+      "type": "click-through",
+      "lastChecked": "2026-09-06"
+    },
+    "subprocessors": {
+      "url": "https://sentry.io/legal/subprocessors/",
+      "listType": "page",
+      "notifications": "rss"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/5869",
+        "lastChecked": "2026-09-06"
+      },
+      { "mechanism": "SCC", "url": "https://sentry.io/legal/dpa/", "lastChecked": "2026-09-06" }
+    ]
+  },
+  "dataCategories": [
+    { "category": "stack_traces", "typical": true },
+    { "category": "usage_telemetry", "typical": true },
+    {
+      "category": "session_recording",
+      "typical": false,
+      "note": "Session Replay is a separate product feature."
+    },
+    { "category": "ip_address", "typical": false },
+    { "category": "email", "typical": false },
+    { "category": "user_id", "typical": false }
+  ],
+  "sources": [
+    {
+      "url": "https://sentry.io/legal/dpa/",
+      "title": "Sentry Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://sentry.io/legal/subprocessors/",
+      "title": "Sentry subprocessors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://sentry.io/trust/privacy/",
+      "title": "Sentry and your data",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://docs.sentry.io/organization/data-storage-location/",
+      "title": "Data storage location (US or EU)",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://docs.sentry.io/security-legal-pii/security/ip-ranges/",
+      "title": "Sentry IP ranges",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://docs.sentry.io/security-legal-pii/scrubbing/protecting-user-privacy/",
+      "title": "Protecting user privacy in Session Replay",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5869",
+      "title": "Data Privacy Framework participant record 5869",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "lastVerified": "2026-09-06",
+  "verifiedBy": "adequacy-kb",
+  "notes": "Sentry markets performance monitoring and session replay alongside error tracking; the category field holds one value and error-tracking was selected as the closest. Verification limitation: docs.sentry.io did not resolve during verification, so the content of the docs.sentry.io sources above was read from the vendor's own public documentation source repository at github.com/getsentry/sentry-docs, which is the source of those published pages. The npm scope @sentry/ is not registered as a wildcard alias; eight package names were confirmed individually on the registry."
+}
