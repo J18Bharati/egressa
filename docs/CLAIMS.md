@@ -34,14 +34,37 @@ real and documented:
 - **Non-JavaScript surfaces.** Tag managers, CSP headers, native mobile code, and infrastructure
   configuration are out of scope in v1.
 
+## Surfaces whose scope is wider than transfers
+
+`skill/privacy-review/` reviews consent, retention, logging, session replay and opt-out signals. The
+sentence at the top of this file describes the *scanner*, so quoting its first clause on that surface
+would misdescribe what the review looks at — but the refusal in its second clause applies to every
+surface without exception.
+
+So `claims.ts` exports that sentence on its own, as `NON_ASSESSMENT`, and every skill carries it
+verbatim. `DISCLAIMER` is unchanged and still ends with it; a test asserts that, so the two cannot
+drift apart into two different refusals.
+
+The review skill adds one refusal of its own, in `skill/privacy-review/references/language-rules.md`:
+it reports the pattern, the provision that pattern engages, and the question a human must answer. It
+does not conclude that a provision was breached, because that depends on the legal basis, the
+retention schedule, the processor agreements and what the person was actually shown — none of which
+is in a repository.
+
 ## Enforcement
 
-Two tests enforce this document:
+Three tests enforce this document:
 
 1. `DISCLAIMER` appears verbatim in human output, the JSON `disclaimer` field, SARIF
    `tool.driver.fullDescription`, every rule's `help.markdown`, MCP tool descriptions, and the README.
 2. No generated string contains a word from `FORBIDDEN_CLAIM_WORDS` — `compliant`, `violation`,
    `illegal`, `guarantees`, and similar. Each is a claim that leaps from "code references a vendor"
    to "data was sent" or "sending it was unlawful."
+3. Every `SKILL.md` under `skill/` carries `NON_ASSESSMENT`, and no markdown shipped under `skill/`
+   contains a forbidden word. The file list is computed by walking the tree, not hand-maintained, so
+   a new specialist checklist cannot ship outside the contract by nobody remembering to register it.
+   `references/language-rules.md` is exempt because it is the table that quotes the forbidden
+   vocabulary deliberately — and that exemption is itself asserted, so a file stops being exempt if
+   it stops being the vocabulary table.
 
 Language drift is the failure mode for tooling in this category. A test cannot drift.

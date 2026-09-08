@@ -71,10 +71,35 @@ emit FILES_UNDER_REVIEW "$(printf '%s\n' "$SRC" | sed '/^$/d' | wc -l | tr -d ' 
 # Existing files only -- a deleted path cannot be grepped.
 EXISTING="$(printf '%s\n' "$SRC" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && printf '%s\n' "$f"; done)"
 
-# grep helper: search the reviewed file set for a pattern, print nothing, return status.
+# Exclude this skill's own tree from its own review.
+#
+# Without this the review reports on itself: every pattern the checklists document
+# and every pattern this script greps for is a literal string inside a file the
+# scan would otherwise read, so a repository that merely *contains* the reviewer
+# trips every gate. Same failure as a secret scanner flagging its own fixtures.
+SELF_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd -P || true)"
+REPO_ROOT="$(pwd -P)"
+case "$SELF_DIR" in
+  "$REPO_ROOT"/*)
+    SELF_REL="${SELF_DIR#"$REPO_ROOT"/}"
+    EXISTING="$(printf '%s\n' "$EXISTING" | grep -v "^${SELF_REL}/" || true)"
+    emit SELF_EXCLUDED "$SELF_REL"
+    ;;
+esac
+
+# Code files only, for the content gates.
+#
+# Prose is not behaviour. Documentation, a changelog or a knowledge base entry that
+# names a tracker is not a tracker, and grepping every text file makes a repository
+# that writes *about* privacy look identical to one with a privacy problem. Path-shape
+# gates below stay over the full set, because a path is not a claim about content.
+CODE="$(printf '%s\n' "$EXISTING" | grep -EI '\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|astro|html|htm|ejs|hbs|handlebars|pug|php|py|rb|go|java|kt|cs|swift|erb)$' || true)"
+emit CODE_FILES "$(printf '%s\n' "$CODE" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+# grep helper: search the reviewed CODE set for a pattern, print nothing, return status.
 hits() {
-  [ -z "$EXISTING" ] && return 1
-  printf '%s\n' "$EXISTING" | tr '\n' '\0' | xargs -0 -r grep -lIE "$1" 2>/dev/null | grep -q .
+  [ -z "$CODE" ] && return 1
+  printf '%s\n' "$CODE" | tr '\n' '\0' | xargs -0 -r grep -lIE "$1" 2>/dev/null | grep -q .
 }
 paths() {
   [ -z "$EXISTING" ] && return 1
@@ -82,7 +107,12 @@ paths() {
 }
 # Dependency manifests are read whole regardless of mode: a tracker dependency added
 # three commits ago is still in the product being reviewed.
-declared() { grep -rIlE "$1" --include=package.json . 2>/dev/null | grep -v node_modules | grep -q .; }
+declared() {
+  grep -rIlE "$1" --include=package.json . 2>/dev/null \
+    | grep -v node_modules \
+    | { [ -n "${SELF_REL:-}" ] && grep -v "^\./${SELF_REL}/" || cat; } \
+    | grep -q .
+}
 
 flag() { if "$@"; then echo true; else echo false; fi; }
 

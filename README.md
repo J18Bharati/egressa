@@ -29,16 +29,23 @@ Read this before trusting a clean scan.
 A finding means your code *references* a vendor. It does not mean personal data was sent, that the
 data was personal, or that sending it was unlawful. See [docs/CLAIMS.md](docs/CLAIMS.md).
 
-## The three faces
+## The surfaces
 
-One engine, three ways in. All of them consume the same versioned findings schema.
+One engine. All of these consume the same versioned findings schema.
 
 | | |
 |---|---|
 | **CLI** | `npx adequacy scan .` — human, JSON, SARIF or markdown output |
 | **GitHub Action** | `uses: adequacy-dev/adequacy@v1` — findings appear as PR annotations via code scanning |
 | **MCP server** | `claude mcp add adequacy -- npx -y @adequacy/mcp@latest` — see [docs/mcp.md](docs/mcp.md) |
-| **Claude Code skill** | Triages the findings a scanner cannot judge alone — see [skill/adequacy](skill/adequacy/SKILL.md) |
+| **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/adequacy](skill/adequacy/SKILL.md) |
+| **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
+
+The last one is a different kind of thing from the others and the difference matters. The engine is a
+parser with a sourced knowledge base, and its answers are reproducible. The review skill is a set of
+checklists an agent applies by reading code, so its findings carry an extra axis — whether the
+question is settled by the source at all — and anything that is not settled ends in a question for
+you rather than an instruction. Neither surface scores anything.
 
 ## What breaks if adequacy falls
 

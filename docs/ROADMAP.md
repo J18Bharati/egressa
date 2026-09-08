@@ -31,6 +31,19 @@ it would ship as a distinct low-confidence signal kind.
 - **Article 30 processing register generation.** Only meaningful once data-flow analysis exists;
   generating one from vendor references alone would overstate what the scan knows.
 
+## Covered by the review skills rather than the engine
+
+Consent gating, retention, personal data in logs, session replay configuration and opt-out signals
+are checked by `skill/privacy-review/`, not by engine rules. That split is deliberate: these
+questions turn on reading surrounding control flow and on judgements a rule table cannot encode —
+whether a cookie is strictly necessary, whether a logged object was redacted first — and a wrong
+answer to any of them is worse than no answer.
+
+Promoting any of them into an engine rule would mean it must be reproducible and hold up as a golden
+test case. Two are close to that bar and are the candidates if it happens: the LogRocket masking
+check, which is a literal option in a call's config object, and Redis `set` with no expiry argument.
+The rest should stay agent-driven.
+
 ## Not planned
 
 - **Scanning arbitrary GitHub URLs as a service.** A hosted service that scans repositories the
@@ -39,4 +52,17 @@ it would ship as a distinct low-confidence signal kind.
 - **Telemetry.** The `unmatched` block plus the skill's issue-filing loop is a weaker recall signal
   than telemetry, and that trade is deliberate.
 - **A compliance score or grade.** Reducing a transfer position to a number invites exactly the
-  claim the tool refuses to make.
+  claim the tool refuses to make. This applies to the review skills too: they report findings and
+  counts, never a grade, and never a per-category subscore that adds up to one in the reader's head.
+- **Erasure not propagating to backups, logs, warehouses or sub-processors.** Article 17 is real and
+  the gap is real, but establishing it needs runtime tracing across services that no single
+  repository represents. Deletion may legitimately happen in another service, through a vendor API,
+  or by backup expiry configured outside the repo, and authorities generally tolerate putting
+  backups beyond use rather than purging them immediately. Nothing stronger than an informational
+  "no in-repo deletion mechanism was found" is defensible.
+- **General data minimisation, Article 5(1)(c), and privacy by design, Article 25(1).** Whether a
+  column or a form field is necessary is a judgement against a purpose statement that does not exist
+  in source. Every enforcement action here turned on facts a scanner cannot see: what a manager
+  typed in a free-text note, what abuse pattern emerged in production, what a form asked a person.
+  The one checkable slice is Article 25(2) default values — a tracking or marketing field whose
+  literal default is on — and that is the only part built.

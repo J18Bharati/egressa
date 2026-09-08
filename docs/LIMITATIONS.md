@@ -97,3 +97,25 @@ alias list rather than a redesign.
 Even a high-confidence, resolved call site only shows that code *references* a vendor. It does not
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
+
+## The review skills have no golden table
+
+Everything above is about the engine, and every limitation above has a corresponding
+failing-by-design case in `packages/core/src/callsites/golden.test.ts`. That is what makes those
+limits a contract rather than a list of good intentions.
+
+`skill/privacy-review/` works differently. It is a set of checklists an agent applies by reading
+code, so there is no parser whose output a table can pin down, and no equivalent contract. Its
+limits live in three places instead:
+
+- `skill/privacy-review/references/legal-basis.md` — the only provisions and citations a specialist
+  may use, plus the two checks that are deliberately not built and why, plus a table of widely
+  repeated enforcement claims that did not survive checking against the authority's own decision.
+- `skill/privacy-review/specialists/retention.md` — the narrowest checklist in the set, and the one
+  that lists what cannot be checked at more length than what can.
+- Each checklist's own **Do not report** section, which is where the false-positive traps are
+  recorded — the strict-necessity exemption for session and CSRF cookies being the largest.
+
+What the two surfaces share is the third axis on every review finding: whether the source settles
+the question at all. Anything that does not ends in a question rather than a fix, which is the same
+rule that makes the engine name an unresolved variable instead of guessing a host.

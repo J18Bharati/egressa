@@ -115,6 +115,30 @@ nothing. **Do not report a redacted log as a leak.** That is the single fastest 
 whole review switched off, and the research on scanner abandonment is blunt about it: once
 developers learn most alerts are noise, they treat every alert as noise, correct ones included.
 
+## A program's own output is not logging
+
+Some programs write to stdout as their designed function: a CLI printing its results, a code
+generator, a formatter, a build script, a test reporter, anything piped into another process. Those
+`console.log` and `process.stdout.write` calls are the product, not a log of someone's data.
+
+Tell them apart by **what is in the argument**, which is the same question as everywhere else in this
+checklist:
+
+```js
+console.log(JSON.stringify(scanResult, null, 2));   // the program's output. Do not report
+console.log(`${rule.id}: ${rule.description}`);     // its own metadata. Do not report
+console.log(req.body);                              // a person's data. Report
+```
+
+The distinguishing question is whether the value originated with a user of the running system or with
+the program itself. A CLI printing its own findings has no data subject in the payload. If a program
+writes personal data to stdout **and** something captures that stream — a CI log, a container log
+driver, a hosting platform's log aggregator — that is a real finding, so do not use this exemption to
+skip a server process that logs a request and happens to use `console`.
+
+When you cannot tell whether stdout is captured, that is a `config` finding with a question, not a
+skip.
+
 ## Do not report
 
 - Log lines that print an identifier only — a user id, a request id, a trace id. A pseudonymous

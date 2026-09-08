@@ -31,6 +31,35 @@ is the product.
 | "You must delete this data" | Legal advice, and probably wrong | "Art 17 would require this to be reachable by a deletion path. I could not find one" |
 | "Fined up to 4% of turnover" | Fear-selling, and the arithmetic is almost never real at this scale | Cite the actual decision, its authority, its date and its amount, or cite nothing |
 
+## What counts as code under review
+
+A pattern has to be able to *run* against a real person before it is a finding. Several kinds of file
+contain the exact text a checklist looks for and are not findings, and the distinction is not
+cosmetic — a repository that writes about privacy patterns will match every detector aimed at them.
+
+Not findings:
+
+- **Documentation and prose.** A guide, a changelog, a README or a checklist that shows
+  `fbq('init', ...)` in a code fence is describing the pattern, not executing it.
+- **Reference data.** A knowledge base entry recording that a vendor's product category is session
+  recording is a sourced fact about that vendor. It says nothing about the reviewed project.
+- **Test fixtures and golden cases.** A snippet that exists so a test can assert an analyzer's
+  behaviour has no data subject. The same goes for seeds, examples and demos.
+- **A detector's own pattern list.** A tool that searches for `document.cookie` necessarily contains
+  the string `document.cookie`. Reporting it is the tool reviewing itself.
+
+Findings, despite looking similar:
+
+- A fixture, seed or demo that **ships to production** or runs against a real database. "Fixture" is
+  a claim about intent; check where it actually runs.
+- A documentation **site** that loads a real tracker to measure its own traffic. Docs are prose; a
+  docs app is an app.
+- A test that sends real personal data to a live third-party endpoint rather than a stub.
+
+When you cannot tell which side a file falls on, open it and decide from what it does, not from the
+directory it sits in. If it is still unclear, that is a `config` finding with a question — not a
+silent skip, and not a `code` finding.
+
 ## Distinctions to preserve
 
 - **Engages a provision vs. breaches it.** A cookie set before a consent check *engages* Art 5(3)

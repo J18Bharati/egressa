@@ -70,6 +70,14 @@ Read the checklist file for each specialist you dispatch. Each lives in
 | Opt-out signals | `opt-out-signals.md` | `SCOPE_TRACKERS` or `SCOPE_TRACKER_CODE` is true |
 | Transfers | `transfers.md` | Always, when a manifest or JS/TS source changed |
 
+**Not every gate selects a specialist.** Four are context, passed to specialists to inform severity
+and to the summary, but never used to dispatch: `SCOPE_FRONTEND`, `SCOPE_BACKEND`, `SCOPE_CONSENT`
+and `SCOPE_ERASURE`. A true value on any of them is not an unrouted finding and not a bug.
+
+`SCOPE_ERASURE` in particular fires on any `delete`-shaped function or the word `GDPR`, so it goes
+true on almost any codebase including ones with nothing to report. It is there to tell a specialist
+that deletion machinery exists to look at, not to claim anything.
+
 If the user passes `--all`, dispatch every specialist regardless of gates. If they name one
 (`--consent`, `--retention`, `--logs`, `--session-replay`, `--opt-out`, `--transfers`), dispatch
 only that one.

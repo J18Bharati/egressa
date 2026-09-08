@@ -49,7 +49,8 @@ packages/core       @adequacy/core  — discovery, manifests, callsites, merge, 
 packages/kb-loader  @adequacy/kb    — loads and indexes kb/, ships the data
 packages/cli        adequacy        — the npx binary
 packages/mcp        @adequacy/mcp   — stdio MCP server
-skill/adequacy      Claude Code skill (shells out to the CLI, not to MCP)
+skill/adequacy      Claude Code skill: transfer triage (shells out to the CLI, not to MCP)
+skill/privacy-review Claude Code skill: consent, retention, logs, session replay, opt-out signals
 kb/                 CC-BY-4.0 data, its own LICENSE
 schemas/            published findings + vendor JSON Schemas
 ```
@@ -106,10 +107,47 @@ forbidden claim word. If you reword user-facing output, run `pnpm test` before a
 The forbidden-word list lives in `claims.ts`; `references/language-rules.md` is the only file
 allowed to quote those words.
 
+It also walks `skill/` and asserts every `SKILL.md` carries `NON_ASSESSMENT` and no shipped markdown
+carries a forbidden word. **The file list is computed, not hardcoded** — a hardcoded one would let
+the next specialist checklist ship outside the contract just by nobody remembering to add it. Adding
+a file under `skill/` therefore opts it in automatically, and the `language-rules.md` exemption is
+itself asserted, so a file stops being exempt if it stops being the vocabulary table.
+
 **`packages/core/src/callsites/golden.test.ts`** is a table of ~45 snippets → `{host|null, reason}`.
 The `null` half is the important half: every entry in `docs/LIMITATIONS.md` has a corresponding
 failing-by-design case. **A limitation starting to resolve is a test failure, not a win** — lift it
 deliberately in both places or fix the regression.
+
+## The review skills
+
+`skill/privacy-review/` is an orchestrator plus six specialist checklists, dispatched in parallel as
+subagents. It covers what the engine does not: trackers firing before consent, personal data in logs,
+session replay recording inputs, storage with no expiry, opt-out signals. `transfers.md` shells out
+to the CLI rather than reimplementing detection by grep.
+
+Four rules govern it, and three of them exist because the research contradicted the obvious design:
+
+**Findings carry a third axis: `decidability`.** `code` means the source settles it; `config` means
+the code is consistent with several deployment realities; `undecidable` means no amount of source
+reading answers it. **A `config` or `undecidable` finding must emit a `question`, never a `fix`.** A
+remediation instruction attached to a question you cannot answer is how this produces a false
+accusation, which is the same failure `resolve-host.ts` avoids by naming a variable instead of
+guessing a host.
+
+**Never emit a score.** `docs/ROADMAP.md` forbids a grade. gstack's `/review`, which this is modelled
+on, ends with `PR Quality Score: X/10`; copying that would ship the exact number the project promised
+not to. Counts only.
+
+**`references/legal-basis.md` is the only place a provision or citation may come from.** It carries a
+table of five widely repeated enforcement claims that failed verification, including a CNIL decision
+number that does not exist. Two of them would otherwise have reached our output. Pass this file to
+every specialist in full — a specialist that has not seen the table will cite from memory.
+
+**The narrow checks are narrow on purpose.** Retention lost its general "no deletion path" check
+because Prisma has no TTL construct, so there is no absence to test for. Session replay reduced to
+one finding because five of six vendors already mask inputs by default; LogRocket's `inputSanitizer`
+defaults to `false`. Consent gating must skip strictly-necessary cookies — session, CSRF, load
+balancer — which is an exemption in Art 5(3) itself and the largest false-positive source in the set.
 
 ## Knowledge base
 
