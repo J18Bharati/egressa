@@ -12,6 +12,22 @@
  * that a clean scan means compliance. A test cannot drift.
  */
 
+/**
+ * The sentence that refuses the conclusion, shared by every surface that reports a
+ * legal exposure of any kind.
+ *
+ * It exists so that a surface whose *scope* is not cross-border transfers -- the
+ * review skills, which also look at consent, retention and logging -- can carry
+ * the identical refusal without quoting a scope sentence that would misdescribe
+ * it. One refusal, one source.
+ *
+ * It is a separate literal rather than interpolated into DISCLAIMER, so that both
+ * read as plain sentences at the point of definition. `claims.test.ts` asserts
+ * DISCLAIMER still ends with it, which is what keeps them from drifting apart --
+ * the same trade this file makes everywhere: a test instead of a convention.
+ */
+export const NON_ASSESSMENT = 'It does not assess or certify GDPR compliance.';
+
 /** The claim, used verbatim everywhere. Never reword per-surface. */
 export const DISCLAIMER =
   'Adequacy detects third-party data-egress patterns in source code and their ' +

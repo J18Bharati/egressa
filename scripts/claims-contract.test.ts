@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { DISCLAIMER, findForbiddenClaims, scan, toSarif } from '@adequacy/core';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { DISCLAIMER, NON_ASSESSMENT, findForbiddenClaims, scan, toSarif } from '@adequacy/core';
 import { describe, expect, it } from 'vitest';
 import { formatHuman } from '../packages/cli/src/format/human.js';
 import { formatMarkdown } from '../packages/cli/src/format/markdown.js';
@@ -107,6 +108,65 @@ describe('no generated output can claim compliance', () => {
       expect({ id, forbidden: findForbiddenClaims(entry) }).toEqual({ id, forbidden: [] });
     }
   });
+});
+
+/**
+ * Every markdown file shipped under `skill/`, found by walking the tree rather
+ * than by a hand-maintained list.
+ *
+ * The list is computed on purpose. A hardcoded one lets the next specialist
+ * checklist ship outside the contract simply by nobody remembering to add it,
+ * which is the same drift this file exists to prevent -- one directory down.
+ */
+const skillMarkdown = (): string[] => {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith('.md')) out.push(path);
+    }
+  };
+  walk('skill');
+  return out.sort();
+};
+
+describe('every shipped skill is inside the claim scope', () => {
+  const files = skillMarkdown();
+
+  it('finds skill markdown to check at all', () => {
+    // Guards against a refactor that moves the directory and silently
+    // turns every assertion below into a vacuous pass over an empty list.
+    expect(files.length).toBeGreaterThan(4);
+  });
+
+  for (const file of files.filter((f) => f.endsWith('/SKILL.md'))) {
+    it(`${file} refuses the assessment claim`, () => {
+      expect(flat(read(file))).toContain(flat(NON_ASSESSMENT));
+    });
+  }
+
+  for (const file of files) {
+    // language-rules.md quotes the forbidden vocabulary deliberately -- it is
+    // the table that tells the model what never to write.
+    if (file.endsWith('language-rules.md')) continue;
+    it(`${file} makes no forbidden claim`, () => {
+      expect({ file, forbidden: findForbiddenClaims(read(file)) }).toEqual({
+        file,
+        forbidden: [],
+      });
+    });
+  }
+
+  for (const file of files.filter((f) => f.endsWith('language-rules.md'))) {
+    it(`${file} still tells the model what not to write`, () => {
+      // The exemption above is only defensible while the file is actually the
+      // vocabulary table. If it stops quoting the words, it stops being exempt.
+      const text = read(file);
+      expect(text).toContain('Never write');
+      expect(findForbiddenClaims(text).length).toBeGreaterThan(3);
+    });
+  }
 });
 
 describe('a clean scan states what it did not check', () => {

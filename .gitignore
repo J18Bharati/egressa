@@ -9,3 +9,10 @@ packages/*/kb/
 
 # Agent session transcripts dumped into the repo root: YYYY-MM-DD-HHMMSS-slug.txt
 /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-*.txt
+
+# gstack tool artifacts (biome honours .gitignore via vcs.useIgnoreFile)
+.gstack/
+
+# Local skill install: a symlink into skill/ so /privacy-review resolves in this
+# checkout. Not committed -- symlinks are unreliable on the Windows CI leg.
+.claude/skills/

@@ -3,9 +3,19 @@ import {
   DISCLAIMER,
   DISCLAIMER_SHORT,
   FORBIDDEN_CLAIM_WORDS,
+  NON_ASSESSMENT,
   findForbiddenClaims,
 } from './claims.js';
 import { RULES, RULE_IDS } from './rules.js';
+
+describe('the refusal sentence', () => {
+  it('is the tail of the full disclaimer, so both surfaces refuse identically', () => {
+    // A surface whose scope is not cross-border transfers carries NON_ASSESSMENT
+    // alone. If someone reworded either literal, the two claims would quietly
+    // diverge and the review skills would stop refusing what the scanner refuses.
+    expect(DISCLAIMER.endsWith(NON_ASSESSMENT)).toBe(true);
+  });
+});
 
 describe('claims contract', () => {
   it('the disclaimer itself passes the forbidden-word scan', () => {
