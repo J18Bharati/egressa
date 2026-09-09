@@ -86,6 +86,26 @@ Out of scope in v1: HTML `<script src>` tags, Google Tag Manager containers, Con
 headers, `next.config.js` remote domains, native mobile code, and infrastructure configuration. A
 tag manager in particular can load vendors that appear nowhere in your source.
 
+### The native parser can be absent
+
+Call-site analysis needs `oxc-parser`, a native addon that ships a platform-specific binary through
+optional dependencies. On a platform with no matching prebuild it cannot load, and the scan then
+reads dependency manifests only. That is reported, not hidden: `scan.engine.callsite` is
+`unavailable`, `scan.engine.degraded` is `true`, and human output says call-site analysis was
+unavailable.
+
+**A degraded scan is much weaker than a full one**, and not proportionally. A vendor called by URL
+without its SDK declared as a dependency is invisible in this mode — which is precisely the case
+call-site analysis exists to catch. Treat a clean degraded scan as almost no evidence.
+
+There is deliberately **no regex fallback**. A second, weaker analyser would produce findings whose
+provenance nobody could reason about, and the confidence model exists to prevent exactly that.
+`engine.degraded` is the honest alternative. `packages/core/src/degraded.test.ts` forces the binding
+failure and asserts the output stays schema-valid.
+
+The copy of the CLI bundled inside `skill/privacy-review/bin/` does not ship the native binding, so
+it normally runs in this mode. `scan-transfers.sh` prefers a real build for that reason.
+
 ### Ecosystems other than npm
 
 v1 parses npm manifests and JavaScript/TypeScript sources only. The knowledge base is keyed by

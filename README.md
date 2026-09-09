@@ -6,12 +6,26 @@
 Point it at a JavaScript or TypeScript repository. It tells you which third-party vendors your code
 references, where those vendors process data, and what your exposure is if EU-US adequacy lapses.
 
-```bash
-npx egressa scan .
+**Nothing is published to npm yet.** Today it installs as a Claude Code plugin, which brings both
+skills and the write-time hook:
+
+```
+/plugin marketplace add egressa-dev/egressa
+/plugin install egressa@egressa
 ```
 
+Or from a checkout:
+
+```bash
+pnpm install && pnpm build
+node packages/cli/dist/cli.js scan .
+```
+
+Once published, `npx egressa scan .` will be the one-liner. The commands below show the CLI as
+`egressa` for readability.
+
 No account, no API key, no telemetry, no network calls. Runs entirely offline against a knowledge
-base shipped in the package.
+base shipped alongside the binary.
 
 ## What it cannot see
 
@@ -25,6 +39,9 @@ Read this before trusting a clean scan.
 - **Vendors not in the knowledge base**, reported as `transfer/unknown-vendor-egress`. The knowledge
   base is a curated seed set, not a census.
 - **Non-JavaScript surfaces** — tag managers, CSP headers, native mobile, infrastructure config.
+- **Call sites, when the native parser is unavailable** on the platform. The scan falls back to
+  dependency manifests alone and says so (`engine.degraded`). A vendor called by URL with no SDK
+  installed is invisible in that mode, so a clean degraded scan means very little.
 
 A finding means your code *references* a vendor. It does not mean personal data was sent, that the
 data was personal, or that sending it was unlawful. See [docs/CLAIMS.md](docs/CLAIMS.md).
@@ -35,9 +52,9 @@ One engine. All of these consume the same versioned findings schema.
 
 | | |
 |---|---|
-| **CLI** | `npx egressa scan .` — human, JSON, SARIF or markdown output |
+| **CLI** | `egressa scan .` — human, JSON, SARIF or markdown output. Not on npm yet; build from a checkout |
 | **GitHub Action** | `uses: egressa-dev/egressa@v1` — findings appear as PR annotations via code scanning |
-| **MCP server** | `claude mcp add egressa -- npx -y @egressa/mcp@latest` — see [docs/mcp.md](docs/mcp.md) |
+| **MCP server** | `claude mcp add egressa -- npx -y @egressa/mcp@latest` — once published; see [docs/mcp.md](docs/mcp.md) |
 | **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/egressa](skill/egressa/SKILL.md) |
 | **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
 

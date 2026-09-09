@@ -1,5 +1,8 @@
 # MCP server
 
+
+> **Not published yet.** The `npx` invocations below will work once the packages are on npm.
+> From a checkout, run the built server directly: `node packages/mcp/dist/server.js`.
 Exposes the scanner and the knowledge base to any MCP-capable client.
 
 ## Configure

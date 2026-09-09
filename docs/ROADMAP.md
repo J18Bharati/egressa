@@ -44,6 +44,15 @@ test case. Two are close to that bar and are the candidates if it happens: the L
 check, which is a literal option in a call's config object, and Redis `set` with no expiry argument.
 The rest should stay agent-driven.
 
+## Open decisions
+
+**Whether to vendor the native parser binding into the skill bundle.** The bundled CLI in
+`skill/privacy-review/bin/` runs without `oxc-parser`, so it reads dependency manifests only and
+reports `engine.degraded`. Shipping the binding would give it full call-site analysis, at roughly
+2 MB per platform committed to git — about 8 MB to cover Linux, macOS and Windows. The alternative is
+to leave the bundle manifest-only and rely on a real build where one exists, which is what it does
+today. Not decided.
+
 ## Not planned
 
 - **Scanning arbitrary GitHub URLs as a service.** A hosted service that scans repositories the

@@ -53,7 +53,7 @@ is in a repository.
 
 ## Enforcement
 
-Three tests enforce this document:
+Four tests enforce this document:
 
 1. `DISCLAIMER` appears verbatim in human output, the JSON `disclaimer` field, SARIF
    `tool.driver.fullDescription`, every rule's `help.markdown`, MCP tool descriptions, and the README.
@@ -66,5 +66,9 @@ Three tests enforce this document:
    `references/language-rules.md` is exempt because it is the table that quotes the forbidden
    vocabulary deliberately — and that exemption is itself asserted, so a file stops being exempt if
    it stops being the vocabulary table.
+4. The plugin's write-time hook makes no forbidden claim, emits no permission decision, and points
+   the reader at the full review instead of concluding. It writes sentences about the law directly
+   into a session and only speaks when it fires, which makes it the claim-bearing surface where
+   drift would go unnoticed longest.
 
 Language drift is the failure mode for tooling in this category. A test cannot drift.

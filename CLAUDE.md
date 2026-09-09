@@ -42,7 +42,7 @@ Run the built CLI end to end with `node packages/cli/dist/cli.js scan fixtures/r
 
 ## Architecture
 
-One engine, three consumers. The real interface is the versioned findings schema, not the CLI.
+One engine, several consumers. The real interface is the versioned findings schema, not the CLI.
 
 ```
 packages/core       @egressa/core  — discovery, manifests, callsites, merge, exposure, output

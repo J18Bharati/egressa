@@ -16,11 +16,23 @@ code and their cross-border transfer exposure. It does not assess or certify GDP
 ## Run the scan
 
 ```bash
-npx -y egressa@latest scan . --format json
+bash skill/egressa/scripts/scan.sh <path> [extra flags]
 ```
 
-No install, no configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the
-Data Privacy Framework being struck down.
+The script finds a binary rather than assuming one: a build in the repository being scanned, then
+the prebuilt copy shipped with the privacy-review skill, then `egressa` on `PATH`, then `npx` only
+if `EGRESSA_ALLOW_NPX=1`. **Nothing is published to npm yet**, so an `npx egressa` invocation will
+fail — do not fall back to it by hand.
+
+No configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the Data Privacy
+Framework being struck down.
+
+If the script exits 3 no binary resolved and **the scan did not run**. Say that plainly rather than
+reporting that nothing was found.
+
+Check `scan.engine` before summarising. `callsite: "unavailable"` with `degraded: true` means the
+native parser could not load and only dependency manifests were read, so a vendor called by URL with
+no SDK installed is invisible. The bundled copy normally runs in that mode.
 
 If the user has the MCP server configured, `scan_repository` returns the same data pre-summarised;
 either source is fine.

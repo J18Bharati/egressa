@@ -77,7 +77,26 @@ signal was obtained:
 A transitive dependency on a US vendor and a resolved call site to the same vendor carry identical
 severity and very different confidence. Both are reported; neither is presented as the other.
 
-## 5. Corrections
+## 5. When an analyser cannot run
+
+Two analysers produce signals: dependency manifests and call sites. Either can be switched off with
+`--no-manifests` or `--no-callsites`, and call sites can also be unavailable because `oxc-parser` is
+a native addon with no prebuild for the platform.
+
+Those two are reported differently on purpose, because conflating a choice with a failure would make
+every deliberate manifest-only scan look broken:
+
+| `engine.callsite` | `degraded` | Means |
+|---|---|---|
+| `oxc` | `false` | Full analysis |
+| `disabled` | `false` | The user passed `--no-callsites` |
+| `unavailable` | `true` | The parser could not load; manifests only |
+
+There is no second, weaker call-site analyser to fall back to. Adding one would put findings into
+the output whose provenance the confidence model could not describe, which is the opposite of what
+section 4 is for.
+
+## 6. Corrections
 
 Any factual error is a bug. `kb/KB_POLICY.md` sets out the correction process, including that an
 entry is marked `disputed` on any good-faith objection *before* review concludes, and that the
