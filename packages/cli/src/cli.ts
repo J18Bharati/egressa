@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { defineCommand, runMain } from 'citty';
 import { explainCommand } from './commands/explain.js';
 import { scanCommand } from './commands/scan.js';

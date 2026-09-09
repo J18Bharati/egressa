@@ -16,7 +16,8 @@
     "kb:validate": "tsx packages/kb-loader/scripts/validate.ts",
     "kb:coverage": "tsx packages/kb-loader/scripts/coverage.ts",
     "schema:check": "tsx scripts/check-schemas.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm kb:validate && pnpm schema:check && pnpm test"
+    "verify": "pnpm lint && pnpm typecheck && pnpm kb:validate && pnpm schema:check && pnpm test",
+    "skill:bundle": "node scripts/bundle-skill-cli.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "openai",
+  "name": "OpenAI OpCo, LLC",
+  "product": "OpenAI API",
+  "category": "ai",
+  "homepage": "https://openai.com/api/",
+  "aliases": {
+    "packages": {
+      "npm": [{ "name": "openai", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      { "pattern": "api.openai.com", "match": "exact", "purpose": "api" },
+      {
+        "pattern": "eu.api.openai.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "EU data residency endpoint"
+      },
+      { "pattern": "us.api.openai.com", "match": "exact", "purpose": "api" }
+    ],
+    "clientConstructors": [{ "module": "openai", "export": "default", "hostOption": "baseURL" }]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "OpenAI OpCo, LLC (San Francisco, CA) is the contracting entity for customers outside the EEA and Switzerland."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "OpenAI Ireland Ltd. is the contracting party for EEA and Swiss customers under the DPA."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://platform.openai.com/docs/guides/your-data",
+      "notes": "Data residency is configured per project. When enabled, customer content for that project is stored at rest in the selected region to the extent the endpoint requires persistence, and inference is performed in-region where the region supports regional processing. OpenAI states that data residency does not apply to system data, which may be processed and stored outside the selected region, and does not cover transmission or storage caused by the location of an end user or the customer's own infrastructure. EU residency requires eligibility approval and a new project; existing projects cannot be converted."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://openai.com/policies/data-processing-addendum/",
+      "type": "click-through",
+      "lastChecked": "2026-09-06"
+    },
+    "subprocessors": {
+      "url": "https://platform.openai.com/subprocessors",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "dpfCertified": false,
+        "url": "https://openai.com/policies/data-processing-addendum/",
+        "lastChecked": "2026-09-06"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "prompt_content", "typical": true },
+    { "category": "usage_telemetry", "typical": true }
+  ],
+  "sources": [
+    {
+      "url": "https://openai.com/policies/data-processing-addendum/",
+      "title": "OpenAI Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://platform.openai.com/subprocessors",
+      "title": "OpenAI sub-processor list",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://platform.openai.com/docs/guides/your-data",
+      "title": "Data controls in the OpenAI platform",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://openai.com/index/introducing-data-residency-in-europe/",
+      "title": "Introducing data residency in Europe",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://openai.com/security-and-privacy/",
+      "title": "Security and privacy at OpenAI",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "lastVerified": "2026-09-06",
+  "notes": "OpenAI states that data sent to the OpenAI API is not used to train or improve OpenAI models unless the customer explicitly opts in. Abuse-monitoring logs, which may contain prompts and responses, are retained by default for up to 30 days; approved customers may enable Zero Data Retention or Modified Abuse Monitoring. No Data Privacy Framework certification is recorded: the vendor pages checked cite standard contractual clauses and the UK addendum as the transfer mechanism, and the DPF participant registry could not be read directly."
+}

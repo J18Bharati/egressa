@@ -12,7 +12,8 @@
       "fixtures/repos/**/*.min.js",
       "LICENSE",
       "kb/LICENSE",
-      "schemas/vendor/**"
+      "schemas/vendor/**",
+      "skill/*/bin/**"
     ]
   },
   "formatter": {

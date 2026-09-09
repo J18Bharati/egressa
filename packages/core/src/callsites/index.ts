@@ -1,8 +1,37 @@
-import { parseSync } from 'oxc-parser';
+import type { parseSync as ParseSync } from 'oxc-parser';
 import type { Confidence, Signal, SourceLocation } from '../types.js';
 import { LineIndex } from '../util/line-index.js';
 import { type HostResolution, MAX_DEPTH, hostFromUrlPrefix } from './resolve-host.js';
 import { type CalleeShape, findSink } from './sinks.js';
+
+/**
+ * The native parser, loaded at module evaluation and allowed to be absent.
+ *
+ * `oxc-parser` is a native addon: it ships a platform-specific `.node` binary
+ * through optional dependencies, and on a platform with no matching prebuild it
+ * fails. A *static* `import` of it cannot be guarded, because ESM resolves and
+ * links every static import before any code in the module runs -- the failure
+ * arrives as a SyntaxError at link time, which no try/catch in this program can
+ * see. A top-level `await import()` can be guarded, and costs nothing at run
+ * time because the result is bound once here.
+ *
+ * Callers stay synchronous: top-level await makes this module async to *load*,
+ * which every ESM importer already handles, so `analyzeFile` and `scan` keep
+ * their signatures.
+ */
+let parseSync: typeof ParseSync | null = null;
+try {
+  ({ parseSync } = await import('oxc-parser'));
+} catch {
+  // No prebuilt binding for this platform. Call-site analysis is unavailable;
+  // `scan()` reports engine.degraded so the gap is visible rather than silent.
+  parseSync = null;
+}
+
+/** Whether call-site analysis can run at all in this process. */
+export function parserAvailable(): boolean {
+  return parseSync !== null;
+}
 
 export * from './resolve-host.js';
 export * from './sinks.js';
@@ -48,6 +77,9 @@ type Binding =
  * limitation with a failing-by-design test, not an oversight.
  */
 export function analyzeFile(text: string, filePath: string): AnalyzeFileResult {
+  if (parseSync === null) {
+    return { hits: [], error: 'native parser unavailable on this platform' };
+  }
   let program: Node;
   try {
     const parsed = parseSync(filePath, text);

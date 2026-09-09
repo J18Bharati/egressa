@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
-import { analyzeFile } from './callsites/index.js';
+import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -112,9 +112,11 @@ export function scan(options: ScanOptions): ScanResult {
     }
   }
 
-  const degraded = false;
+  // Degraded means the user asked for call-site analysis and the native parser
+  // could not be loaded. The scan still runs on manifests, and says so.
+  const degraded = includeCallsites && !parserAvailable();
   let filesAnalysed = 0;
-  if (includeCallsites) {
+  if (includeCallsites && !degraded) {
     for (const file of sources) {
       let text: string;
       try {
@@ -164,7 +166,7 @@ export function scan(options: ScanOptions): ScanResult {
   }
 
   const engine = includeCallsites
-    ? ({ callsite: degraded ? 'fallback' : 'oxc', degraded } as const)
+    ? ({ callsite: degraded ? 'unavailable' : 'oxc', degraded } as const)
     : ({ callsite: 'disabled', degraded: false } as const);
 
   const filtered = signals.filter((signal) => {

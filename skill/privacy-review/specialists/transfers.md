@@ -7,16 +7,34 @@ Emit findings per `references/finding-schema.md`. Cite only provisions in `refer
 data-backed, and reimplementing it by grep would be strictly worse than running it. Shell out.
 
 ```bash
-npx -y egressa@latest scan . --format json
+bash skill/privacy-review/scripts/scan-transfers.sh <path> [extra flags]
 ```
 
-Add `--assume-adequacy-lapsed US:DPF` when the user asks what breaks if the Data Privacy Framework
-is struck down. The scanner is offline, needs no key, and never reads `node_modules`.
+The script resolves a binary in a fixed order — a build in the repository being scanned, then the
+copy bundled inside this skill, then one on `PATH`, then npx if `EGRESSA_ALLOW_NPX=1` is set. It
+never reaches the network on its own. The scanner is offline, needs no key, and never reads
+`node_modules`.
 
-If the binary is not available, say so plainly and emit `NO FINDINGS` for this specialist. Do not
-substitute your own vendor list — the scanner's answers come from a knowledge base of sourced
-facts with verification dates, and a guess from memory about where a vendor processes data is
-exactly the kind of confident error this review is built to avoid.
+Add `--assume-adequacy-lapsed US:DPF` when the user asks what breaks if the Data Privacy Framework
+is struck down.
+
+**Check `scan.engine` in the output before you report anything.**
+
+| `engine.callsite` | Means | What you must say |
+|---|---|---|
+| `oxc` | Full analysis: dependency manifests and call sites | Nothing extra |
+| `unavailable` | `degraded: true`. The native parser could not load on this platform, so **only dependency manifests were read** | Say so in your summary. A vendor called by URL without its SDK installed is invisible in this mode, so absence of a finding means much less than usual |
+| `disabled` | Call sites were switched off deliberately with `--no-callsites` | Say it was a choice, not a failure |
+
+The bundled copy usually runs in the `unavailable` mode, because the native parser is not shipped
+with it. That is a real capability gap, not a formality: report it rather than presenting a
+manifest-only scan as a complete one.
+
+If the script exits 3, no binary resolved and **transfer detection did not run at all**. Emit
+`NO FINDINGS` and say that plainly so the orchestrator puts it in `NOT CHECKED`. Do not substitute
+your own vendor list — the scanner's answers come from a knowledge base of sourced facts with
+verification dates, and a guess from memory about where a vendor processes data is exactly the kind
+of confident error this review is built to avoid.
 
 ## Converting scanner output into review findings
 

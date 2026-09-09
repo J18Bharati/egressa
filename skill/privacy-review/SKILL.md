@@ -1,6 +1,7 @@
 ---
 name: privacy-review
 description: Use when reviewing code for privacy and data-protection problems - GDPR or UK GDPR questions, cookies or trackers firing without consent, analytics loaded before a consent gate, personal data kept with no retention period or deletion path, personal data in logs or error reports, session replay recording input fields, Do Not Sell / Global Privacy Control opt-out signals, or a general "review this diff for legal problems" request.
+allowed-tools: [Bash, Read, Grep, Glob, Agent, AskUserQuestion, Write, Edit]
 ---
 
 # Privacy review

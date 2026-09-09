@@ -1,0 +1,264 @@
+{
+  "schemaVersion": "1.0.0",
+  "asOf": "2026-09-06",
+  "sources": [
+    {
+      "url": "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en",
+      "title": "Data protection adequacy for non-EU countries",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://curia.europa.eu/site/upload/docs/application/pdf/2025-09/cp250106en.pdf",
+      "title": "CJEU Press Release No 106/25 — Judgment in Case T-553/23, Latombe v Commission",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/eli/C/2025/6610/oj/eng",
+      "title": "Notice of appeal, Case C-703/25 P, Latombe v Commission (Official Journal)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.pclob.gov/Board/Index",
+      "title": "Privacy and Civil Liberties Oversight Board — Board Members",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.supremecourt.gov/opinions/25pdf/25-332_qn12.pdf",
+      "title": "Trump v. Slaughter, No. 25-332, 609 U.S. ___ (2026)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023D1795",
+      "title": "Commission Implementing Decision (EU) 2023/1795 (EU-US Data Privacy Framework)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/eli/dec_impl/2025/2574/oj/eng",
+      "title": "Commission Implementing Decision (EU) 2025/2574 (UK adequacy renewal, GDPR)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/eli/dec_impl/2026/179/oj/eng",
+      "title": "Commission Implementing Decision (EU) 2026/179 (Brazil)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32022D0254",
+      "title": "Commission Implementing Decision (EU) 2022/254 (Republic of Korea)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32019D0419",
+      "title": "Commission Implementing Decision (EU) 2019/419 (Japan)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32010D0625",
+      "title": "Commission Decision 2010/625/EU (Andorra)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003D0490",
+      "title": "Commission Decision 2003/490/EC (Argentina)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002D0002",
+      "title": "Commission Decision 2002/2/EC (Canada)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/en/ALL/?uri=CELEX%3A32010D0146",
+      "title": "Commission Decision 2010/146/EU (Faroe Islands)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003D0821",
+      "title": "Commission Decision 2003/821/EC (Guernsey)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011D0061",
+      "title": "Commission Decision 2011/61/EU (Israel)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32004D0411",
+      "title": "Commission Decision 2004/411/EC (Isle of Man)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32008D0393",
+      "title": "Commission Decision 2008/393/EC (Jersey)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:32013D0065",
+      "title": "Commission Implementing Decision 2013/65/EU (New Zealand)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32000D0518",
+      "title": "Commission Decision 2000/518/EC (Switzerland)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32012D0484",
+      "title": "Commission Implementing Decision 2012/484/EU (Uruguay)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "decisions": [
+    {
+      "country": "AD",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2010-10-19",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32010D0625",
+      "notes": "Commission Decision 2010/625/EU, done at Brussels 19 October 2010. Reviewed, along with ten other pre-GDPR adequacy decisions, in the Commission's 15 January 2024 report on the first review of the adequacy decisions adopted under Directive 95/46/EC."
+    },
+    {
+      "country": "AR",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2003-06-30",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003D0490",
+      "notes": "Commission Decision 2003/490/EC, done at Brussels 30 June 2003. Reviewed in the Commission's 15 January 2024 report on the first review of the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "BR",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2026-01-26",
+      "sourceUrl": "https://eur-lex.europa.eu/eli/dec_impl/2026/179/oj/eng",
+      "notes": "Commission Implementing Decision (EU) 2026/179, done 26 January 2026, on the adequate level of protection of personal data by Brazil. The decision text itself covers only the transfer of personal data from the EU to Brazil; it states that Brazil's data protection authority (ANPD) 'is only working on an adequacy decision with the European Union' in the other direction, i.e. the decision text does not itself describe a completed mutual/reciprocal arrangement, notwithstanding contemporaneous Commission and Brazilian press statements describing it that way."
+    },
+    {
+      "country": "CA",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2001-12-20",
+      "scope": "Commercial organisations only — data processed under Canada's Personal Information Protection and Electronic Documents Act (PIPEDA).",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002D0002",
+      "notes": "Commission Decision 2002/2/EC, done at Brussels 20 December 2001. The Commission's adequacy decisions overview page lists Canada's entry as 'Canada (commercial organisations)'. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "FO",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2010-03-05",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/en/ALL/?uri=CELEX%3A32010D0146",
+      "notes": "Commission Decision 2010/146/EU, done at Brussels 5 March 2010; the decision states it 'shall apply from 15 June 2010'. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "GG",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2003-11-21",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003D0821",
+      "notes": "Commission Decision 2003/821/EC, done at Brussels 21 November 2003, concerning the Bailiwick of Guernsey. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "IL",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2011-01-31",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011D0061",
+      "notes": "Commission Decision 2011/61/EU, done at Brussels 31 January 2011. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "IM",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2004-04-28",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32004D0411",
+      "notes": "Commission Decision 2004/411/EC, done at Brussels 28 April 2004, concerning the Isle of Man. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "JP",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2019-01-23",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32019D0419",
+      "notes": "Commission Implementing Decision (EU) 2019/419 of 23 January 2019. The Commission published its report on the first periodic review of this decision on 4 April 2023."
+    },
+    {
+      "country": "JE",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2008-05-08",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32008D0393",
+      "notes": "Commission Decision 2008/393/EC, done at Brussels 8 May 2008, concerning the Bailiwick of Jersey. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "NZ",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2012-12-19",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:32013D0065",
+      "notes": "Commission Implementing Decision 2013/65/EU, done at Brussels 19 December 2012. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "KR",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2021-12-17",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32022D0254",
+      "notes": "Commission Implementing Decision (EU) 2022/254 of 17 December 2021. The Commission completed its first periodic review of this decision and, per the Commission's adequacy decisions page, published a report on 23 July 2026 finding that the Republic of Korea continues to provide an adequate level of protection."
+    },
+    {
+      "country": "CH",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2000-07-26",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32000D0518",
+      "notes": "Commission Decision 2000/518/EC, done at Brussels 26 July 2000. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    },
+    {
+      "country": "GB",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2021-06-28",
+      "scope": "Two separate decisions: one under the GDPR and one under the Law Enforcement Directive (Directive (EU) 2016/680). Per the Commission's adequacy decisions overview page, the UK is the only adequacy partner whose decisions also cover law enforcement data exchanges — every other adequacy decision is limited to data within GDPR scope.",
+      "sourceUrl": "https://eur-lex.europa.eu/eli/dec_impl/2025/2574/oj/eng",
+      "notes": "The original decisions (Commission Implementing Decision (EU) 2021/1772 under the GDPR, and a corresponding LED decision) were adopted 28 June 2021 and were due to expire 27 June 2025 unless extended. The Commission adopted a technical extension on 24 June 2025 prolonging both by six months, to 27 December 2025, while it assessed the UK's Data (Use and Access) Act 2025. On 19 December 2025 the Commission adopted renewal decisions — Commission Implementing Decision (EU) 2025/2574 under the GDPR and a corresponding LED renewal — which the Commission's adequacy decisions page dates to 19 December 2025. Secondary reporting on the renewal (e.g. eucrim.eu, 'Commission Renewed Adequacy Decisions for Data Transfers to the UK') states the renewed decisions carry a sunset clause expiring 27 December 2031 with a periodic review at least four years after adoption; this specific sunset date was not located verbatim in the portion of the decision text retrieved directly."
+    },
+    {
+      "country": "US",
+      "mechanism": "DPF",
+      "status": "under-challenge",
+      "effectiveFrom": "2023-07-10",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023D1795",
+      "notes": "Commission Implementing Decision (EU) 2023/1795 of 10 July 2023 established the EU-US Data Privacy Framework adequacy decision. It was challenged by Philippe Latombe in Case T-553/23; on 3 September 2025 the General Court dismissed the action in its entirety, confirming that on the date of adoption the United States ensured an adequate level of protection, while noting the Commission's obligation to monitor the framework continuously and its power to suspend, amend or repeal the decision if the US legal framework changes (CJEU Press Release No 106/25). Latombe appealed to the Court of Justice: a notice of appeal in Case C-703/25 P, lodged 31 October 2025, was published in the Official Journal, asking the Court to set aside the General Court's judgment and annul the adequacy decision; as of 2026-09-06 the appeal was pending with no hearing date published. Separately, on 27 January 2025 the President removed three of the five members of the Privacy and Civil Liberties Oversight Board (PCLOB), a body the adequacy decision relies on for oversight of US signals-intelligence activities; as of 2026-09-06 the PCLOB's own public board-membership page (pclob.gov/Board/Index) lists one current member (in office since February 2022) and lists the rest as former members. On 29 June 2026 the US Supreme Court held in Trump v. Slaughter, No. 25-332, 609 U.S. ___ (2026), that the Federal Trade Commission's statutory for-cause removal protections for its Commissioners are unconstitutional; the FTC is the US enforcement authority named in the adequacy decision for DPF compliance. As of 2026-09-06, no Commission decision to suspend, amend, or repeal the adequacy decision, and no CJEU ruling on the pending appeal, had been published."
+    },
+    {
+      "country": "UY",
+      "mechanism": "adequacy",
+      "status": "in-force",
+      "effectiveFrom": "2012-08-21",
+      "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32012D0484",
+      "notes": "Commission Implementing Decision 2012/484/EU, done at Brussels 21 August 2012. Reviewed in the Commission's 15 January 2024 report on the eleven pre-GDPR adequacy decisions."
+    }
+  ]
+}

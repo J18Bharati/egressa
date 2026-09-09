@@ -1,6 +1,7 @@
 ---
-name: adequacy
+name: egressa
 description: Use when checking where a codebase sends personal data - GDPR data transfer questions, third-party vendors and SDKs, data egress, EU-US adequacy or Data Privacy Framework exposure, sub-processors, DPAs, cross-border transfers, or "what breaks if adequacy falls".
+allowed-tools: [Bash, Read, Grep, Glob, Write, Edit]
 ---
 
 # Transfer exposure review

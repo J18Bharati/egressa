@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "stripe",
+  "name": "Stripe, LLC",
+  "product": "Stripe payments",
+  "category": "payments",
+  "homepage": "https://stripe.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "stripe", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@stripe/stripe-js", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@stripe/react-stripe-js",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      { "pattern": "api.stripe.com", "match": "exact", "purpose": "api" },
+      { "pattern": "js.stripe.com", "match": "exact", "purpose": "browser-sdk" },
+      { "pattern": "checkout.stripe.com", "match": "exact", "purpose": "other" },
+      { "pattern": "connect-js.stripe.com", "match": "exact", "purpose": "browser-sdk" }
+    ],
+    "clientConstructors": [
+      { "module": "stripe", "export": "default", "hostOption": null },
+      { "module": "@stripe/stripe-js", "export": "loadStripe", "hostOption": null }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "The DPA states that personal data may be transferred to Stripe, LLC in the United States and to Stripe affiliates and sub-processors in other jurisdictions."
+      },
+      {
+        "country": "IE",
+        "role": "support",
+        "note": "Stripe Technology Company, Limited is described in the Privacy Center as Stripe's main establishment in Europe under GDPR. Stripe Payments Europe, Limited contracts with users located outside the Americas."
+      }
+    ],
+    "euRegion": {
+      "available": false,
+      "notes": "No EU-hosted data storage option is described on the Stripe DPA or Privacy Center pages that were checked; those pages describe a United States processing location with SCC and DPF transfer mechanisms. Recorded as unavailable on the basis that no such option appears in the vendor pages checked, not on the basis of a vendor statement that none exists."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://stripe.com/legal/dpa",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-06"
+    },
+    "subprocessors": {
+      "url": "https://stripe.com/legal/service-providers",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://stripe.com/legal/data-privacy-framework",
+        "lastChecked": "2026-09-06"
+      },
+      { "mechanism": "SCC", "url": "https://stripe.com/legal/dta", "lastChecked": "2026-09-06" }
+    ]
+  },
+  "dataCategories": [
+    { "category": "payment_data", "typical": true },
+    { "category": "device_id", "typical": true },
+    { "category": "usage_telemetry", "typical": true }
+  ],
+  "sources": [
+    {
+      "url": "https://stripe.com/legal/dpa",
+      "title": "Stripe Data Processing Agreement",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://stripe.com/legal/service-providers",
+      "title": "Stripe service providers, sub-processors and affiliates",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://stripe.com/legal/data-privacy-framework",
+      "title": "Stripe Data Privacy Framework Policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://stripe.com/legal/privacy-center",
+      "title": "Stripe Privacy Center",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://docs.stripe.com/security/guide",
+      "title": "Stripe integration security guide",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/6436",
+      "title": "Data Privacy Framework participant record 6436",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "lastVerified": "2026-09-06",
+  "verifiedBy": "egressa-kb",
+  "notes": "The DPA names two contracting entities depending on account region: Stripe, LLC for accounts in North and South America, and Stripe Payments Europe, Limited elsewhere. The DPF notice and sub-processor page refer to Stripe, LLC. Verification limitation: the DPF participant record 6436 was reachable, but its certification fields returned empty when queried, so dpfCertified rests on Stripe's own published DPF policy rather than on the registry record. Data categories are limited to those itemised on the pages checked; name, email and IP address were not itemised there and are therefore not listed."
+}

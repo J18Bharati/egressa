@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egressa.dev/schemas/adequacy-status-1.0.0.json",
+  "title": "Adequacy decisions and transfer framework status",
+  "description": "European Commission adequacy decisions and framework status, joined at scan time. Kept separate from vendor entries so that a change in the legal landscape is a data change, not a schema migration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "asOf", "sources", "decisions"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "asOf": { "$ref": "#/$defs/isoDate" },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "title", "publisher", "accessedAt"],
+        "properties": {
+          "url": { "type": "string", "pattern": "^https://" },
+          "title": { "type": "string" },
+          "publisher": { "enum": ["regulator", "vendor", "other"] },
+          "accessedAt": { "$ref": "#/$defs/isoDate" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["country", "mechanism", "status", "sourceUrl"],
+        "properties": {
+          "country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+          "mechanism": { "enum": ["adequacy", "DPF"] },
+          "status": { "enum": ["in-force", "partial", "withdrawn", "under-challenge"] },
+          "effectiveFrom": { "$ref": "#/$defs/isoDate" },
+          "scope": {
+            "type": "string",
+            "description": "Factual scope limitation, e.g. commercial organisations only."
+          },
+          "sourceUrl": { "type": "string", "pattern": "^https://" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": { "isoDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } }
+}

@@ -56,7 +56,7 @@
           "additionalProperties": false,
           "required": ["callsite", "degraded"],
           "properties": {
-            "callsite": { "enum": ["oxc", "fallback", "disabled"] },
+            "callsite": { "enum": ["oxc", "unavailable", "disabled"] },
             "degraded": { "type": "boolean" }
           }
         },

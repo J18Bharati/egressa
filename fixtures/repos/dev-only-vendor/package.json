@@ -1,0 +1,11 @@
+{
+  "name": "dev-only-vendor",
+  "private": true,
+  "description": "A knowledge-base vendor that appears ONLY in devDependencies, so --no-dev has something to remove.",
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "mailgun.js": "^10.2.1"
+  }
+}

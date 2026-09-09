@@ -72,7 +72,7 @@ signal was obtained:
 |---|---|
 | `high` | Resolved call-site host matching a host pattern; direct dependency on an official SDK |
 | `medium` | Wrapper or plugin package; host resolved via a client binding or a 2–3 step constant chain; dev-only dependency |
-| `low` | Transitive dependency; `<script src>` extraction; degraded-parser fallback |
+| `low` | Transitive dependency; `<script src>` extraction |
 
 A transitive dependency on a US vendor and a resolved call site to the same vendor carry identical
 severity and very different confidence. Both are reported; neither is presented as the other.

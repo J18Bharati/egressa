@@ -63,7 +63,12 @@ export function formatHuman(result: ScanResult, options: HumanOptions): string {
     );
   }
   if (result.scan.engine.degraded) {
-    lines.push(c('yellow', 'call-site analysis ran in degraded mode; results are less complete'));
+    lines.push(
+      c(
+        'yellow',
+        'call-site analysis was unavailable on this platform; only dependency manifests were read',
+      ),
+    );
   }
   lines.push(c('dim', DISCLAIMER_SHORT));
 

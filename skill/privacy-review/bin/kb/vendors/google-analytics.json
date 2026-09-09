@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "google-analytics",
+  "name": "Google LLC",
+  "product": "Google Analytics (GA4)",
+  "category": "analytics",
+  "homepage": "https://marketingplatform.google.com/about/analytics/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@google-analytics/data", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@google-analytics/admin", "kind": "official-sdk", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      { "pattern": "www.google-analytics.com", "match": "exact", "purpose": "ingest" },
+      { "pattern": "analytics.google.com", "match": "exact", "purpose": "ingest" },
+      { "pattern": "www.googletagmanager.com", "match": "exact", "purpose": "browser-sdk" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA, is the contracting entity under the Google Ads Data Processing Terms."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://support.google.com/analytics/answer/12017362?hl=en",
+      "notes": "Google states that Analytics collects data from EU, Switzerland and UK based devices through domains and servers based in the EU, Switzerland or UK before forwarding traffic to Analytics servers for processing, and that IP addresses collected from those users are dropped after geo-location derivation. The page documents initial collection only; it does not state where traffic is forwarded for final processing or storage."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://business.safety.google/adsprocessorterms/",
+      "type": "click-through",
+      "lastChecked": "2026-09-06"
+    },
+    "subprocessors": {
+      "url": "https://business.safety.google/adssubprocessors/",
+      "listType": "page",
+      "notifications": "page-only"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://business.safety.google/adsdatatransfers/",
+        "lastChecked": "2026-09-06"
+      },
+      {
+        "mechanism": "SCC",
+        "dpfCertified": false,
+        "url": "https://business.safety.google/adsdatatransfers/",
+        "lastChecked": "2026-09-06"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "cookie_id", "typical": true },
+    { "category": "ip_address", "typical": true },
+    { "category": "device_id", "typical": true },
+    { "category": "usage_telemetry", "typical": true }
+  ],
+  "sources": [
+    {
+      "url": "https://business.safety.google/adsprocessorterms/",
+      "title": "Google Ads Data Processing Terms",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://business.safety.google/adssubprocessors/",
+      "title": "Google Ads Data Processing Terms - Subprocessor Information",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://business.safety.google/adsdatatransfers/",
+      "title": "Advertising and analytics products: information about international data transfers",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://support.google.com/analytics/answer/12017362?hl=en",
+      "title": "EU, Switzerland, or UK-focused data and privacy",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://support.google.com/analytics/answer/3379636?hl=en",
+      "title": "Data Processing Terms - Analytics Help",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://developers.google.com/tag-platform/gtagjs",
+      "title": "Set up the Google tag with gtag.js",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://dsb.gv.at/sites/site0344/media/downloads/d155.027_ga.pdf",
+      "title": "Austrian Datenschutzbehoerde decision D155.027 (Google Analytics)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.edpb.europa.eu/system/files/2022-08/fr_2022-03_decisionpublic_redacted.pdf",
+      "title": "CNIL decision on Google Analytics data transfers, EDPB cooperation file fr_2022-03 (redacted)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.garanteprivacy.it/home/docweb/-/docweb-display/docweb/9782890",
+      "title": "Garante per la protezione dei dati personali, provvedimento n. 224 del 9 giugno 2022 (Google Analytics)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-06"
+    }
+  ],
+  "lastVerified": "2026-09-06",
+  "notes": "gtag.js is loaded via script tag from www.googletagmanager.com rather than distributed as an npm package. The two npm packages listed are Google client libraries for the GA4 Data and Admin reporting APIs, not for client-side hit collection. The Google Ads Data Processing Terms are the terms linked from Google Analytics Help as applicable to Analytics customers with a direct Google contract."
+}

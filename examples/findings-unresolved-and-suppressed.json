@@ -16,7 +16,7 @@
     "durationMs": 1190,
     "filesScanned": 133,
     "manifestsScanned": 3,
-    "engine": { "callsite": "fallback", "degraded": true },
+    "engine": { "callsite": "unavailable", "degraded": true },
     "assumedAdequacyLapsed": ["US:DPF"]
   },
   "summary": {

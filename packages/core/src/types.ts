@@ -203,8 +203,13 @@ export interface ScanSummary {
 }
 
 export interface EngineInfo {
-  callsite: 'oxc' | 'fallback' | 'disabled';
-  /** True when the native parser was unavailable and the regex fallback ran. */
+  callsite: 'oxc' | 'unavailable' | 'disabled';
+  /**
+   * True when call-site analysis was requested but the native parser could not
+   * be loaded on this platform, so only manifest signals were collected.
+   * There is no regex fallback: the scan is narrower, and says so rather than
+   * pretending the missing analysis produced nothing to find.
+   */
   degraded: boolean;
 }
 

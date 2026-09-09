@@ -26,9 +26,25 @@ export const scanCommand = defineCommand({
       description: 'Exit 1 when a finding reaches this level: none | note | warning | error',
     },
     'include-transitive': { type: 'boolean', default: false },
-    'no-dev': { type: 'boolean', default: false, description: 'Skip devDependencies' },
-    'no-callsites': { type: 'boolean', default: false },
-    'no-manifests': { type: 'boolean', default: false },
+    // Declared positively with a `true` default so citty's own `--no-x` negation
+    // lands on the key this code reads. Declaring them as `no-dev` instead made
+    // citty write `dev: false` while `args['no-dev']` stayed at its default, so
+    // every one of these flags parsed cleanly and then did nothing at all.
+    dev: {
+      type: 'boolean',
+      default: true,
+      description: 'Include devDependencies (--no-dev skips)',
+    },
+    callsites: {
+      type: 'boolean',
+      default: true,
+      description: 'Analyse call sites (--no-callsites skips)',
+    },
+    manifests: {
+      type: 'boolean',
+      default: true,
+      description: 'Analyse dependency manifests (--no-manifests skips)',
+    },
     'min-confidence': { type: 'string', default: 'low', description: 'low | medium | high' },
     'only-vendor': { type: 'string', description: 'Comma-separated vendor ids' },
     'assume-adequacy-lapsed': {
@@ -37,7 +53,11 @@ export const scanCommand = defineCommand({
     },
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
     config: { type: 'string', description: 'Path to .egressa.yml' },
-    'no-color': { type: 'boolean', default: false },
+    color: {
+      type: 'boolean',
+      default: true,
+      description: 'Colourise output (--no-color disables)',
+    },
     quiet: { type: 'boolean', default: false },
   },
   run({ args }) {
@@ -53,9 +73,9 @@ export const scanCommand = defineCommand({
         ...(args.kb ? { kbPath: String(args.kb) } : {}),
         ...(config.exclude ? { exclude: config.exclude } : {}),
         includeTransitive: Boolean(args['include-transitive']) || config.includeTransitive === true,
-        includeDev: !args['no-dev'],
-        includeManifests: !args['no-manifests'],
-        includeCallsites: !args['no-callsites'],
+        includeDev: args.dev !== false,
+        includeManifests: args.manifests !== false,
+        includeCallsites: args.callsites !== false,
         minConfidence: parseConfidence(String(args['min-confidence'])),
         ...(args['only-vendor'] ? { onlyVendor: String(args['only-vendor']).split(',') } : {}),
         ...(args['assume-adequacy-lapsed']
@@ -70,7 +90,7 @@ export const scanCommand = defineCommand({
     }
 
     const suppressed = applySuppressions(result, config);
-    const output = render(suppressed, String(args.format), !args['no-color']);
+    const output = render(suppressed, String(args.format), args.color !== false);
 
     if (args.out) writeFileSync(String(args.out), `${output}\n`);
     else if (!args.quiet) process.stdout.write(`${output}\n`);

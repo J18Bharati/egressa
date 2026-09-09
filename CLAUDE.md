@@ -149,6 +149,21 @@ one finding because five of six vendors already mask inputs by default; LogRocke
 defaults to `false`. Consent gating must skip strictly-necessary cookies — session, CSRF, load
 balancer — which is an exemption in Art 5(3) itself and the largest false-positive source in the set.
 
+### The bundled CLI inside the skill
+
+`pnpm skill:bundle` copies the built CLI and `kb/` into `skill/privacy-review/bin/`, so the
+transfers specialist runs with no install. Layout is `bin/lib/egressa.mjs` beside `bin/kb/`, because
+kb-loader resolves `../kb` from the JavaScript file — and the directory is `lib`, not `dist`, since
+`.gitignore` excludes `dist/` everywhere and would silently drop the bundle.
+
+It is a committed build artifact, so `scripts/skill-bundle.test.ts` fails loudly when its
+`BUNDLE.json` tool or kb version drifts from source, naming the command that fixes it. Without that
+the skill would keep reporting against an old knowledge base while looking current.
+
+The bundle runs without the native parser and therefore usually reports `engine.degraded: true`
+(manifest signals only). `scan-transfers.sh` prefers a real repo build for that reason, and the
+specialist checklist requires the degraded state to be reported rather than glossed.
+
 ## Knowledge base
 
 `kb/` is CC-BY-4.0 with its own LICENSE, deliberately separable from the Apache-2.0 code. Entries
@@ -175,9 +190,28 @@ Builds use **tsup**, not tsdown (which failed on rolldown export mismatches and 
 breaks tsup's DTS build with "not under rootDir 'src'".
 
 `oxc-parser` must stay a direct dependency of `egressa` and `@egressa/mcp`, not just of core, or
-the published binaries cannot resolve it.
+the published binaries cannot resolve it. Note pnpm keeps it under `packages/cli/node_modules`, not
+the workspace root, so anything running from elsewhere in the tree will not find it and will report
+`engine.degraded`.
 
-Do not add a shebang banner in `tsup.config.ts`; `cli.ts` already has one.
+**The CLI banner is load-bearing.** `packages/cli/tsup.config.ts` emits the shebang *and* a
+`createRequire` shim, and `cli.ts` no longer carries a shebang of its own — a banner is written
+above the entry's first line, and a shebang only counts as the first bytes of the file.
+
+The `require` shim is there because `citty` and `yaml` are inlined (`noExternal`), and the CommonJS
+inside them calls `require()` at run time. esbuild rewrites those to a `__require` shim whose first
+branch is `typeof require !== "undefined" ? require : <throw>`; in an ESM bundle nothing defines it,
+so the binary threw `Dynamic require of "process" is not supported` the moment it ran outside a
+`node_modules` tree. Defining `require` above the shim is the supported fix.
+
+`splitting: false` on the CLI, because the dynamic `import('oxc-parser')` gave tsup a split point
+and the emitted chunks broke any consumer that copies `cli.js` alone.
+
+**`oxc-parser` is loaded with a guarded top-level `await import()`,** never a static import. It is a
+native addon and fails on a platform with no prebuild; a static ESM import cannot be caught, because
+the failure arrives as a `SyntaxError` at link time before any code runs. `parserAvailable()` in
+`packages/core/src/callsites/index.ts` is the seam, `scan()` turns it into `engine.degraded`, and
+`packages/core/src/degraded.test.ts` forces the failure. Do not convert it back to a static import.
 
 ## Current state
 

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scan } from '@egressa/core';
@@ -205,5 +205,66 @@ describe('cli end to end', () => {
   it('resolves a vendor by package name', () => {
     const { stdout } = run(['vendors', 'show', '@sentry/nextjs', '--kb', 'kb']);
     expect(stdout).toContain('Functional Software');
+  });
+});
+
+describe('negated flags actually change the scan', () => {
+  // These four parsed cleanly and did nothing for the whole of v1. citty already
+  // implements `--no-x` as negation of `x`, so declaring an argument *named*
+  // `no-callsites` made citty write `callsites: false` while the code kept
+  // reading `args['no-callsites']`, which stayed at its default forever.
+  // Each test below fails if that regresses, because each asserts an observable
+  // difference rather than the parsed value.
+  const json = (args: string[]) => {
+    const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return JSON.parse(stdout) as ReturnType<typeof scan>;
+  };
+
+  it('--no-callsites disables call-site analysis', () => {
+    const base = ['scan', 'fixtures/repos/unresolvable-hosts', '--format', 'json'];
+    // Every finding in this fixture comes from a call site, so switching the
+    // analyser off must take the count to zero.
+    expect(json(base).summary.findingCount).toBe(3);
+    const off = json([...base, '--no-callsites']);
+    expect(off.summary.findingCount).toBe(0);
+    expect(off.scan.engine.callsite).toBe('disabled');
+  });
+
+  it('--no-manifests stops dependency signals without touching call sites', () => {
+    const base = ['scan', 'fixtures/repos/nextjs-analytics-heavy', '--format', 'json'];
+    const on = json(base);
+    expect(on.scan.manifestsScanned).toBe(1);
+    expect(on.findings.some((f) => f.signals.some((s) => s.kind === 'dependency'))).toBe(true);
+
+    const off = json([...base, '--no-manifests']);
+    expect(off.scan.manifestsScanned).toBe(0);
+    expect(off.findings.some((f) => f.signals.some((s) => s.kind === 'dependency'))).toBe(false);
+    // Call sites are a separate analyser and must survive.
+    expect(off.findings.some((f) => f.signals.some((s) => s.kind === 'callsite'))).toBe(true);
+  });
+
+  it('--no-dev drops a vendor that appears only in devDependencies', () => {
+    const base = ['scan', 'fixtures/repos/dev-only-vendor', '--format', 'json'];
+    const on = json(base);
+    expect(on.summary.findingCount).toBe(1);
+    // dev-only carries reduced confidence, which is the other half of the contract.
+    expect(on.findings[0]?.signals[0]?.devOnly).toBe(true);
+    expect(on.findings[0]?.confidence).toBe('medium');
+
+    expect(json([...base, '--no-dev']).summary.findingCount).toBe(0);
+  });
+
+  it('declares no boolean argument with a "no-" prefix', () => {
+    // The structural guard. Behavioural tests above catch these four; this one
+    // catches the fifth someone adds later, before it can silently do nothing.
+    const source = readFileSync('packages/cli/src/commands/scan.ts', 'utf8');
+    const declared = [...source.matchAll(/^\s*'?([a-z-]+)'?:\s*\{\s*type:\s*'boolean'/gm)].map(
+      (m) => m[1],
+    );
+    expect(declared.length).toBeGreaterThan(3);
+    expect(declared.filter((name) => name?.startsWith('no-'))).toEqual([]);
   });
 });
