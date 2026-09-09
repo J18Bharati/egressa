@@ -41,11 +41,30 @@ One engine. All of these consume the same versioned findings schema.
 | **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/egressa](skill/egressa/SKILL.md) |
 | **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
 
+| **Plugin** | `/plugin marketplace add egressa-dev/egressa` then `/plugin install egressa@egressa` — installs both skills and the write-time hook in one step |
+
 The last one is a different kind of thing from the others and the difference matters. The engine is a
 parser with a sourced knowledge base, and its answers are reproducible. The review skill is a set of
 checklists an agent applies by reading code, so its findings carry an extra axis — whether the
 question is settled by the source at all — and anything that is not settled ends in a question for
 you rather than an instruction. Neither surface scores anything.
+
+## The write-time hook
+
+The plugin registers a `PreToolUse` hook on `Write` and `Edit`. When a tracker init, a
+session-replay init, or a non-essential storage write is about to be added to a source file, it
+names the provision that pattern engages and asks the question that decides it.
+
+**It never blocks an edit.** It emits no permission decision and cannot return the exit code that
+would stop a tool call — a test asserts both, because the temptation to block "just the bad one"
+will come back. The tool detects; it does not adjudicate, which is the same reason nothing in the
+scanner defaults to `error`.
+
+It also stays quiet unless it is confident. Storage that is strictly necessary — session, CSRF,
+load balancer, a preference the user set — is exempt in the text of Art 5(3) itself and is never
+reported. Neither is an edit that already carries its own consent check, a test file, a fixture, or
+this repository's own checklists, which necessarily contain every pattern it looks for. Each
+finding is reported once per file per session.
 
 ## What breaks if adequacy falls
 

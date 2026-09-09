@@ -169,6 +169,35 @@ describe('every shipped skill is inside the claim scope', () => {
   }
 });
 
+describe('the plugin hook is inside the claim scope too', () => {
+  // The PreToolUse hook writes sentences about the law straight into a
+  // session, which makes it a claim-bearing surface exactly like the CLI and
+  // the skills -- and one that no reviewer reads as often, because it only
+  // speaks when it fires.
+  const hook = read('hooks/tracker-write-check.mjs');
+
+  it('makes no forbidden claim', () => {
+    expect(findForbiddenClaims(hook)).toEqual([]);
+  });
+
+  it('never emits a permission decision', () => {
+    // Blocking an edit on a privacy heuristic would adjudicate, which is the
+    // one thing this project refuses to do. Enforced here as well as in the
+    // hook's own tests, because the temptation to "just block the bad one"
+    // will come back.
+    // Matches the key as it would be written into the output object, not the
+    // word itself -- the hook's own comment explains why it never sets one, and
+    // that explanation is worth keeping.
+    expect(hook).not.toMatch(/permissionDecision\s*:/);
+    expect(hook).not.toContain('"permissionDecision"');
+  });
+
+  it('sends the reader to the full review rather than concluding', () => {
+    expect(hook).toContain('/privacy-review');
+    expect(hook).toContain('not a conclusion about lawfulness');
+  });
+});
+
 describe('a clean scan states what it did not check', () => {
   const clean = scan({
     root: 'fixtures/repos/clean-eu-only',

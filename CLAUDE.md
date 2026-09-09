@@ -164,6 +164,32 @@ The bundle runs without the native parser and therefore usually reports `engine.
 (manifest signals only). `scan-transfers.sh` prefers a real repo build for that reason, and the
 specialist checklist requires the degraded state to be reported rather than glossed.
 
+## Plugin packaging
+
+`.claude-plugin/plugin.json` makes the repository installable as a Claude Code plugin, and
+`.claude-plugin/marketplace.json` makes it its own single-plugin marketplace. `skills: "./skill/"`
+points at the existing directory rather than moving anything, and `hooks: "./hooks/hooks.json"`
+registers the write-time hook. `claude plugin validate .` checks both manifests.
+
+`hooks/tracker-write-check.mjs` is a `PreToolUse` hook on `Write|Edit|MultiEdit`. Four invariants,
+all tested in `scripts/tracker-hook.test.ts` and the last also in the claims contract:
+
+- **It never blocks.** No `permissionDecision` is ever emitted and it never exits 2, which is the
+  only exit code that blocks a tool call.
+- **It inspects only added text** — `content`, `new_string`, or each entry of `edits` — because an
+  unchanged file is not a new decision.
+- **It fires once per session, per file, per pattern**, keyed under `CLAUDE_PLUGIN_DATA`.
+- **It exits 0 in silence on anything unexpected.** A hook that breaks an editing session is worse
+  than one that misses something.
+
+It skips test files, fixtures, non-code extensions, `skill/privacy-review/**` and any edit that
+already contains a consent check, and it applies the Art 5(3) strict-necessity exemption to storage
+writes. Those exclusions are the difference between a hook people keep and one they disable — and
+disabling it disables the skills with it, since they ship in the same plugin.
+
+It is written in Node rather than shell with `jq`, because Node is already required by everything
+else here and `jq` is not guaranteed.
+
 ## Knowledge base
 
 `kb/` is CC-BY-4.0 with its own LICENSE, deliberately separable from the Apache-2.0 code. Entries

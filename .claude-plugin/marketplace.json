@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
+  "name": "egressa",
+  "description": "Privacy and data-protection review skills for source code.",
+  "owner": { "name": "The Egressa Authors" },
+  "plugins": [
+    {
+      "name": "egressa",
+      "source": "./",
+      "description": "Privacy review skills: transfer exposure, consent gating, retention, personal data in logs, session replay, opt-out signals.",
+      "category": "code-review",
+      "keywords": ["gdpr", "privacy", "consent", "data-transfer"],
+      "license": "Apache-2.0"
+    }
+  ]
+}

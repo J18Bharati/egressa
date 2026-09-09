@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "egressa",
+  "displayName": "Egressa",
+  "version": "0.1.0",
+  "description": "Reviews source code for privacy and data-protection problems: third-party data egress and cross-border transfer exposure, trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, and opt-out signals. Detection only, never a compliance assessment.",
+  "author": { "name": "The Egressa Authors" },
+  "repository": "https://github.com/egressa-dev/egressa",
+  "license": "Apache-2.0",
+  "keywords": [
+    "gdpr",
+    "privacy",
+    "data-protection",
+    "eprivacy",
+    "cookies",
+    "consent",
+    "data-transfer",
+    "static-analysis",
+    "code-review"
+  ],
+  "skills": "./skill/",
+  "hooks": "./hooks/hooks.json"
+}
