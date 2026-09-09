@@ -9,8 +9,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      '@adequacy/kb': fileURLToPath(new URL('./packages/kb-loader/src/index.ts', import.meta.url)),
-      '@adequacy/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@egressa/kb': fileURLToPath(new URL('./packages/kb-loader/src/index.ts', import.meta.url)),
+      '@egressa/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
     },
   },
   test: {

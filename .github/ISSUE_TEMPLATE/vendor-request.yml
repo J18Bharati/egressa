@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Adequacy reported an unknown host or package and you would like an entry for it. Sources
+        Egressa reported an unknown host or package and you would like an entry for it. Sources
         are welcome but not required — we will do the sourcing.
   - type: input
     id: vendor

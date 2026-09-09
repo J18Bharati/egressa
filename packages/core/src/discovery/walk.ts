@@ -5,7 +5,7 @@ import { globSync } from 'tinyglobby';
 
 /**
  * Default exclusions. `node_modules` is excluded structurally rather than by
- * configuration: Adequacy never reads installed packages, so a scan is
+ * configuration: Egressa never reads installed packages, so a scan is
  * deterministic, works on a fresh clone with nothing installed, and cannot be
  * influenced by whatever happens to be on disk.
  *
@@ -40,7 +40,7 @@ export const SOURCE_PATTERNS = ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'];
 export interface WalkOptions {
   root: string;
   exclude?: string[];
-  /** Honour .gitignore and .adequacyignore. On by default. */
+  /** Honour .gitignore and .egressaignore. On by default. */
   respectIgnoreFiles?: boolean;
 }
 
@@ -71,7 +71,7 @@ export function walk(options: WalkOptions): WalkResult {
 function buildIgnoreFilter(root: string): ReturnType<typeof ignore> | null {
   const matcher = ignore();
   let found = false;
-  for (const name of ['.gitignore', '.adequacyignore']) {
+  for (const name of ['.gitignore', '.egressaignore']) {
     try {
       matcher.add(readFileSync(`${root}/${name}`, 'utf8'));
       found = true;

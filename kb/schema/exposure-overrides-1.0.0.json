@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://adequacy.dev/schemas/exposure-overrides-1.0.0.json",
+  "$id": "https://egressa.dev/schemas/exposure-overrides-1.0.0.json",
   "title": "Exposure overrides",
   "description": "The only place a human judgment about exposure may be recorded. Every override requires a rationale and an author, and is versioned separately from the factual entries.",
   "type": "object",

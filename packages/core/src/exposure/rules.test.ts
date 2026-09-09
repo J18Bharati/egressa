@@ -1,4 +1,4 @@
-import { loadKnowledgeBase } from '@adequacy/kb';
+import { loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
 import { classifyExposure } from './rules.js';
 

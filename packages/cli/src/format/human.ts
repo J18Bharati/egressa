@@ -1,5 +1,5 @@
-import type { Finding, ScanResult } from '@adequacy/core';
-import { DISCLAIMER_SHORT } from '@adequacy/core';
+import type { Finding, ScanResult } from '@egressa/core';
+import { DISCLAIMER_SHORT } from '@egressa/core';
 
 /** Built at runtime so no literal control character appears in the source. */
 const ESC = String.fromCharCode(27);

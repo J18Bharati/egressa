@@ -1,7 +1,7 @@
 {
-  "name": "@adequacy/core",
+  "name": "@egressa/core",
   "version": "0.0.0",
-  "description": "Engine for Adequacy: detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
+  "description": "Engine for Egressa: detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -21,7 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@adequacy/kb": "workspace:^",
+    "@egressa/kb": "workspace:^",
     "ignore": "^7.0.8",
     "jsonc-parser": "^3.3.1",
     "oxc-parser": "^0.148.0",

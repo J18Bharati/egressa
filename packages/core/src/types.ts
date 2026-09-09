@@ -241,7 +241,7 @@ export interface ScanResult {
   $schema?: string;
   schemaVersion: string;
   disclaimer: string;
-  tool: { name: 'adequacy'; version: string };
+  tool: { name: 'egressa'; version: string };
   kb: KbMeta;
   scan: ScanMeta;
   summary: ScanSummary;

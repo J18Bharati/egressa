@@ -17,7 +17,7 @@ beforeAll(async () => {
     args: ['tsx', 'packages/mcp/src/server.ts'],
     cwd: process.cwd(),
   });
-  client = new Client({ name: 'adequacy-tests', version: '0' }, { capabilities: {} });
+  client = new Client({ name: 'egressa-tests', version: '0' }, { capabilities: {} });
   await client.connect(transport);
 }, 60_000);
 

@@ -1,5 +1,5 @@
 /**
- * The single source of truth for what Adequacy claims about itself.
+ * The single source of truth for what Egressa claims about itself.
  *
  * Every user-visible surface -- human output, JSON, SARIF, MCP tool descriptions,
  * the skill, and the README -- imports the disclaimer from here. `claims.test.ts`
@@ -30,7 +30,7 @@ export const NON_ASSESSMENT = 'It does not assess or certify GDPR compliance.';
 
 /** The claim, used verbatim everywhere. Never reword per-surface. */
 export const DISCLAIMER =
-  'Adequacy detects third-party data-egress patterns in source code and their ' +
+  'Egressa detects third-party data-egress patterns in source code and their ' +
   'cross-border transfer exposure. It does not assess or certify GDPR compliance.';
 
 /** Short form for space-constrained surfaces (CLI footer, SARIF result messages). */
@@ -39,7 +39,7 @@ export const DISCLAIMER_SHORT = 'Detection only - not a compliance assessment.';
 /**
  * Words that must never appear in generated output.
  *
- * Each entry is a claim Adequacy is not entitled to make from static analysis:
+ * Each entry is a claim Egressa is not entitled to make from static analysis:
  * it observes that code references a vendor, not that any personal data was
  * actually sent, nor that sending it was unlawful. Matching is case-insensitive
  * and word-boundary anchored, so "compliance" as part of the disclaimer itself

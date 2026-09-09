@@ -35,10 +35,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@adequacy/core':
+      '@egressa/core':
         specifier: workspace:*
         version: link:../core
-      '@adequacy/kb':
+      '@egressa/kb':
         specifier: workspace:*
         version: link:../kb-loader
       citty:
@@ -57,7 +57,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@adequacy/kb':
+      '@egressa/kb':
         specifier: workspace:^
         version: link:../kb-loader
       ignore:
@@ -88,10 +88,10 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@adequacy/core':
+      '@egressa/core':
         specifier: workspace:*
         version: link:../core
-      '@adequacy/kb':
+      '@egressa/kb':
         specifier: workspace:*
         version: link:../kb-loader
       '@modelcontextprotocol/sdk':

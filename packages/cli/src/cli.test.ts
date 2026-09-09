@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scan } from '@adequacy/core';
+import { scan } from '@egressa/core';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 import { EXIT } from './exit-codes.js';
@@ -66,7 +66,7 @@ describe('config', () => {
   it('refuses a suppression with no reason', () => {
     const dir = mkdtempSync(join(tmpdir(), 'adq-'));
     writeFileSync(
-      join(dir, '.adequacy.yml'),
+      join(dir, '.egressa.yml'),
       'version: 1\nsuppressions:\n  - vendor: stripe\n    reason: ""\n',
     );
     expect(() => loadConfig(dir)).toThrow(/must say why/);
@@ -75,7 +75,7 @@ describe('config', () => {
   it('reads suppressions and excludes', () => {
     const dir = mkdtempSync(join(tmpdir(), 'adq-'));
     writeFileSync(
-      join(dir, '.adequacy.yml'),
+      join(dir, '.egressa.yml'),
       'version: 1\nexclude: ["**/legacy/**"]\nsuppressions:\n  - vendor: stripe\n    reason: accepted for now\n',
     );
     const config = loadConfig(dir);

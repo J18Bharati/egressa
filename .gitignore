@@ -4,7 +4,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 *.log
-.adequacy-cache/
+.egressa-cache/
 packages/*/kb/
 
 # Agent session transcripts dumped into the repo root: YYYY-MM-DD-HHMMSS-slug.txt

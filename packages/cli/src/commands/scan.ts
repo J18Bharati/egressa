@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { type ScanResult, scan, toSarif } from '@adequacy/core';
-import type { Confidence, Severity } from '@adequacy/core';
+import { type ScanResult, scan, toSarif } from '@egressa/core';
+import type { Confidence, Severity } from '@egressa/core';
 import { defineCommand } from 'citty';
 import { loadConfig } from '../config.js';
 import { EXIT } from '../exit-codes.js';
@@ -36,7 +36,7 @@ export const scanCommand = defineCommand({
       description: 'Treat these decisions as withdrawn, e.g. US:DPF. Use "all" for every decision.',
     },
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
-    config: { type: 'string', description: 'Path to .adequacy.yml' },
+    config: { type: 'string', description: 'Path to .egressa.yml' },
     'no-color': { type: 'boolean', default: false },
     quiet: { type: 'boolean', default: false },
   },
@@ -64,7 +64,7 @@ export const scanCommand = defineCommand({
       });
     } catch (error) {
       process.stderr.write(
-        `adequacy: could not load the knowledge base: ${(error as Error).message}\n`,
+        `egressa: could not load the knowledge base: ${(error as Error).message}\n`,
       );
       process.exit(EXIT.KB);
     }
@@ -90,7 +90,7 @@ function render(result: ScanResult, format: string, color: boolean): string {
     case 'human':
       return formatHuman(result, { color: color && process.stdout.isTTY === true });
     default:
-      process.stderr.write(`adequacy: unknown format "${format}"\n`);
+      process.stderr.write(`egressa: unknown format "${format}"\n`);
       process.exit(EXIT.USAGE);
   }
 }
@@ -111,12 +111,12 @@ function exitCodeFor(result: ScanResult, failOn: FailOn): number {
 
 function parseFailOn(value: string): FailOn {
   if ((FAIL_ON as readonly string[]).includes(value)) return value as FailOn;
-  process.stderr.write(`adequacy: --fail-on must be one of ${FAIL_ON.join(', ')}\n`);
+  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON.join(', ')}\n`);
   process.exit(EXIT.USAGE);
 }
 
 function parseConfidence(value: string): Confidence {
   if (value === 'low' || value === 'medium' || value === 'high') return value;
-  process.stderr.write('adequacy: --min-confidence must be low, medium or high\n');
+  process.stderr.write('egressa: --min-confidence must be low, medium or high\n');
   process.exit(EXIT.USAGE);
 }

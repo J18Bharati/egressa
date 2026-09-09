@@ -112,6 +112,6 @@
     }
   ],
   "lastVerified": "2026-09-06",
-  "verifiedBy": "adequacy-kb",
+  "verifiedBy": "egressa-kb",
   "notes": "The DPA names two contracting entities depending on account region: Stripe, LLC for accounts in North and South America, and Stripe Payments Europe, Limited elsewhere. The DPF notice and sub-processor page refer to Stripe, LLC. Verification limitation: the DPF participant record 6436 was reachable, but its certification fields returned empty when queried, so dpfCertified rests on Stripe's own published DPF policy rather than on the registry record. Data categories are limited to those itemised on the pages checked; name, email and IP address were not itemised there and are therefore not listed."
 }

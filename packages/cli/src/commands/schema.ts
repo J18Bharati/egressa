@@ -18,7 +18,7 @@ export const schemaCommand = defineCommand({
     try {
       process.stdout.write(readFileSync(path, 'utf8'));
     } catch {
-      process.stderr.write(`adequacy: schema "${which}" not found\n`);
+      process.stderr.write(`egressa: schema "${which}" not found\n`);
       process.exit(2);
     }
   },

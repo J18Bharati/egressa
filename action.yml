@@ -1,4 +1,4 @@
-name: Adequacy transfer scan
+name: Egressa transfer scan
 description: >-
   Detects third-party data-egress patterns in source code and their cross-border
   transfer exposure. Does not assess or certify GDPR compliance.
@@ -18,7 +18,7 @@ inputs:
     # something the user typed rather than something a KB update caused.
     default: 'warning'
   version:
-    description: Version of the adequacy package to run. Pin this.
+    description: Version of the egressa package to run. Pin this.
     required: false
     default: 'latest'
   upload-sarif:
@@ -40,14 +40,14 @@ runs:
         if [ -n "${{ inputs.assume-adequacy-lapsed }}" ]; then
           extra="--assume-adequacy-lapsed ${{ inputs.assume-adequacy-lapsed }}"
         fi
-        npx -y adequacy@${{ inputs.version }} scan "${{ inputs.path }}" \
-          --format sarif --out adequacy.sarif $extra
-        npx -y adequacy@${{ inputs.version }} scan "${{ inputs.path }}" \
+        npx -y egressa@${{ inputs.version }} scan "${{ inputs.path }}" \
+          --format sarif --out egressa.sarif $extra
+        npx -y egressa@${{ inputs.version }} scan "${{ inputs.path }}" \
           --fail-on "${{ inputs.fail-on }}" $extra
 
     - name: Upload SARIF
       if: always() && inputs.upload-sarif == 'true'
       uses: github/codeql-action/upload-sarif@v3
       with:
-        sarif_file: adequacy.sarif
-        category: adequacy
+        sarif_file: egressa.sarif
+        category: egressa

@@ -1,4 +1,4 @@
-import type { AdequacyDecision, KnowledgeBase, VendorEntry } from '@adequacy/kb';
+import type { AdequacyDecision, KnowledgeBase, VendorEntry } from '@egressa/kb';
 import type { Exposure, ExposureLevel, RuleId } from '../types.js';
 
 /**

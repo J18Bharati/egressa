@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { DISCLAIMER, NON_ASSESSMENT, findForbiddenClaims, scan, toSarif } from '@adequacy/core';
+import { DISCLAIMER, NON_ASSESSMENT, findForbiddenClaims, scan, toSarif } from '@egressa/core';
 import { describe, expect, it } from 'vitest';
 import { formatHuman } from '../packages/cli/src/format/human.js';
 import { formatMarkdown } from '../packages/cli/src/format/markdown.js';
@@ -69,7 +69,7 @@ describe('the disclaimer reaches every surface', () => {
   });
 
   it('the skill', () => {
-    expect(flat(read('skill/adequacy/SKILL.md'))).toContain(flat(DISCLAIMER));
+    expect(flat(read('skill/egressa/SKILL.md'))).toContain(flat(DISCLAIMER));
   });
 
   it('the MCP server, which scopes every tool description', () => {
@@ -99,7 +99,7 @@ describe('no generated output can claim compliance', () => {
   it('the skill instructions do not themselves make a forbidden claim', () => {
     // SKILL.md gives instructions; the forbidden-word table lives in
     // references/language-rules.md, which quotes them deliberately.
-    expect(findForbiddenClaims(read('skill/adequacy/SKILL.md'))).toEqual([]);
+    expect(findForbiddenClaims(read('skill/egressa/SKILL.md'))).toEqual([]);
   });
 
   it('knowledge base entries contain no evaluative language', () => {

@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Adequacy is a static analyzer that detects third-party data-egress patterns in JS/TS source and
+Egressa is a static analyzer that detects third-party data-egress patterns in JS/TS source and
 reports their cross-border transfer exposure under GDPR Chapter V. pnpm workspace, TypeScript
 ESM-only, Node >= 20.11.
 
 The claim scope is load-bearing and is enforced by tests, not by convention:
 
-> Adequacy detects third-party data-egress patterns in source code and their cross-border transfer
+> Egressa detects third-party data-egress patterns in source code and their cross-border transfer
 > exposure. It does not assess or certify GDPR compliance.
 
 ## Commands
@@ -35,7 +35,7 @@ pnpm vitest run -t 'template literal'
 
 There is no `pnpm ci` script — the name collides with a pnpm builtin. Use `pnpm verify`.
 
-`vitest.config.ts` aliases `@adequacy/core` and `@adequacy/kb` to their **source**, so tests run
+`vitest.config.ts` aliases `@egressa/core` and `@egressa/kb` to their **source**, so tests run
 against edits without a build. Never add a build step before `pnpm test`.
 
 Run the built CLI end to end with `node packages/cli/dist/cli.js scan fixtures/repos/<name>`.
@@ -45,11 +45,11 @@ Run the built CLI end to end with `node packages/cli/dist/cli.js scan fixtures/r
 One engine, three consumers. The real interface is the versioned findings schema, not the CLI.
 
 ```
-packages/core       @adequacy/core  — discovery, manifests, callsites, merge, exposure, output
-packages/kb-loader  @adequacy/kb    — loads and indexes kb/, ships the data
-packages/cli        adequacy        — the npx binary
-packages/mcp        @adequacy/mcp   — stdio MCP server
-skill/adequacy      Claude Code skill: transfer triage (shells out to the CLI, not to MCP)
+packages/core       @egressa/core  — discovery, manifests, callsites, merge, exposure, output
+packages/kb-loader  @egressa/kb    — loads and indexes kb/, ships the data
+packages/cli        egressa        — the npx binary
+packages/mcp        @egressa/mcp   — stdio MCP server
+skill/egressa      Claude Code skill: transfer triage (shells out to the CLI, not to MCP)
 skill/privacy-review Claude Code skill: consent, retention, logs, session replay, opt-out signals
 kb/                 CC-BY-4.0 data, its own LICENSE
 schemas/            published findings + vendor JSON Schemas
@@ -59,7 +59,7 @@ schemas/            published findings + vendor JSON Schemas
 I/O and formatting live in the CLI. The MCP server validates arguments and shapes results and
 contains zero analysis logic; behaviour changes go in core so all three surfaces get them at once.
 
-**Pipeline.** `discovery/walk.ts` (honours `.gitignore`/`.adequacyignore`) → `manifests/` and
+**Pipeline.** `discovery/walk.ts` (honours `.gitignore`/`.egressaignore`) → `manifests/` and
 `callsites/` produce signals → `merge/` matches signals to KB entries and aggregates to one finding
 per `(vendorId, ruleId)` with an `evidence[]` array → `exposure/rules.ts` derives flags from KB
 facts → `output/sarif.ts` or the CLI formatters.
@@ -102,7 +102,7 @@ required when `available: true`. Every vendor in the KB that has one is partial 
 
 **`scripts/claims-contract.test.ts`** asserts the disclaimer from `packages/core/src/claims.ts`
 reaches JSON, the SARIF driver, every rule's `help.markdown`, markdown, human output, the README,
-`skill/adequacy/SKILL.md` and the MCP source, and that no generated surface or KB entry contains a
+`skill/egressa/SKILL.md` and the MCP source, and that no generated surface or KB entry contains a
 forbidden claim word. If you reword user-facing output, run `pnpm test` before assuming it is fine.
 The forbidden-word list lives in `claims.ts`; `references/language-rules.md` is the only file
 allowed to quote those words.
@@ -174,7 +174,7 @@ Builds use **tsup**, not tsdown (which failed on rolldown export mismatches and 
 `baseUrl`/`paths` live in the root `tsconfig.json` only — putting them in `tsconfig.base.json`
 breaks tsup's DTS build with "not under rootDir 'src'".
 
-`oxc-parser` must stay a direct dependency of `adequacy` and `@adequacy/mcp`, not just of core, or
+`oxc-parser` must stay a direct dependency of `egressa` and `@egressa/mcp`, not just of core, or
 the published binaries cannot resolve it.
 
 Do not add a shebang banner in `tsup.config.ts`; `cli.ts` already has one.

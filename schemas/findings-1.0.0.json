@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://adequacy.dev/schemas/findings-1.0.0.json",
-  "title": "Adequacy findings document",
-  "description": "Output of an Adequacy scan. Adequacy detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  "$id": "https://egressa.dev/schemas/findings-1.0.0.json",
+  "title": "Egressa findings document",
+  "description": "Output of an Egressa scan. Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": { "const": "adequacy" },
+        "name": { "const": "egressa" },
         "version": { "type": "string" }
       }
     },

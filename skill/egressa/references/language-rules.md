@@ -4,7 +4,7 @@ Load this before writing any summary of a scan.
 
 ## The claim, verbatim
 
-> Adequacy detects third-party data-egress patterns in source code and their cross-border transfer
+> Egressa detects third-party data-egress patterns in source code and their cross-border transfer
 > exposure. It does not assess or certify GDPR compliance.
 
 ## Never write

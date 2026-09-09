@@ -1,6 +1,6 @@
 # Methodology
 
-How Adequacy gets from source code to a finding, and where judgment enters.
+How Egressa gets from source code to a finding, and where judgment enters.
 
 ## 1. Facts come from primary sources
 

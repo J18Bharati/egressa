@@ -1,5 +1,5 @@
 name: False positive or false negative
-description: Adequacy reported something it should not have, or missed something it should have found
+description: Egressa reported something it should not have, or missed something it should have found
 title: "[detection] <short description>"
 labels: ["detection"]
 body:

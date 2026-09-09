@@ -10,6 +10,6 @@ export default defineConfig({
   // The native parser must stay external; everything else is bundled so the
   // published binary is self-contained.
   external: ['oxc-parser'],
-  noExternal: [/@adequacy\//],
+  noExternal: [/@egressa\//],
   // No banner: the source entrypoint already carries the shebang.
 });

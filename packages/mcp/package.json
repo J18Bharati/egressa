@@ -1,14 +1,14 @@
 {
-  "name": "@adequacy/mcp",
+  "name": "@egressa/mcp",
   "version": "0.1.0",
-  "description": "MCP server exposing Adequacy transfer-exposure scanning and vendor lookups.",
+  "description": "MCP server exposing Egressa transfer-exposure scanning and vendor lookups.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20.11"
   },
   "bin": {
-    "adequacy-mcp": "./dist/server.js"
+    "egressa-mcp": "./dist/server.js"
   },
   "files": ["dist", "README.md", "kb"],
   "scripts": {
@@ -16,8 +16,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@adequacy/core": "workspace:*",
-    "@adequacy/kb": "workspace:*",
+    "@egressa/core": "workspace:*",
+    "@egressa/kb": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.13.0",
     "oxc-parser": "^0.148.0",
     "zod": "^3.24.1"

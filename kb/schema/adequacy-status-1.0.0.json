@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://adequacy.dev/schemas/adequacy-status-1.0.0.json",
+  "$id": "https://egressa.dev/schemas/adequacy-status-1.0.0.json",
   "title": "Adequacy decisions and transfer framework status",
   "description": "European Commission adequacy decisions and framework status, joined at scan time. Kept separate from vendor entries so that a change in the legal landscape is a data change, not a schema migration.",
   "type": "object",

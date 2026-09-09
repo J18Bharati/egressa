@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 import { isAbsolute, resolve } from 'node:path';
-import { DISCLAIMER, RULES, RULE_IDS, scan, summarise } from '@adequacy/core';
-import type { RuleId } from '@adequacy/core';
-import { loadKnowledgeBase } from '@adequacy/kb';
+import { DISCLAIMER, RULES, RULE_IDS, scan, summarise } from '@egressa/core';
+import type { RuleId } from '@egressa/core';
+import { loadKnowledgeBase } from '@egressa/kb';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 /**
- * MCP server for Adequacy.
+ * MCP server for Egressa.
  *
- * Deliberately thin: it validates arguments, calls @adequacy/core, and shapes
+ * Deliberately thin: it validates arguments, calls @egressa/core, and shapes
  * the result. There is no analysis logic here at all. Anything that changes
  * behaviour changes in core, and the CLI, this server and the skill all get it
  * at once -- which is the whole point of the findings schema being the real
@@ -22,7 +22,7 @@ import { z } from 'zod';
 
 const TOOL_VERSION = '0.1.0';
 
-const server = new McpServer({ name: 'adequacy', version: TOOL_VERSION });
+const server = new McpServer({ name: 'egressa', version: TOOL_VERSION });
 
 /** Every tool description carries the claim scope, not just the README. */
 const scoped = (text: string) => `${text}\n\n${DISCLAIMER}`;

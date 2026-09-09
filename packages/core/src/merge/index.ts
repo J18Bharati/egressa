@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { KnowledgeBase, VendorEntry } from '@adequacy/kb';
+import type { KnowledgeBase, VendorEntry } from '@egressa/kb';
 import { classifyExposure } from '../exposure/rules.js';
 import { RULES } from '../rules.js';
 import type {
@@ -160,7 +160,7 @@ function buildRemediation(
   if (!vendor) {
     links.push({
       label: 'Request a knowledge base entry',
-      url: 'https://github.com/adequacy-dev/adequacy/issues/new?template=vendor-request.yml',
+      url: 'https://github.com/egressa-dev/egressa/issues/new?template=vendor-request.yml',
     });
   }
 

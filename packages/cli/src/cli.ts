@@ -8,7 +8,7 @@ import { EXIT } from './exit-codes.js';
 
 const main = defineCommand({
   meta: {
-    name: 'adequacy',
+    name: 'egressa',
     description:
       'Detects third-party data-egress patterns in source code and their cross-border ' +
       'transfer exposure. Does not assess or certify GDPR compliance.',
@@ -19,7 +19,7 @@ const main = defineCommand({
     explain: explainCommand,
     schema: schemaCommand,
   },
-  // `adequacy .` with no subcommand runs a scan, which is what people type.
+  // `egressa .` with no subcommand runs a scan, which is what people type.
   args: scanCommand.args,
   async run(context) {
     if (
@@ -38,6 +38,6 @@ function existsAsPath(value: string | undefined): boolean {
 }
 
 runMain(main).catch((error: unknown) => {
-  process.stderr.write(`adequacy: ${(error as Error).message}\n`);
+  process.stderr.write(`egressa: ${(error as Error).message}\n`);
   process.exit(EXIT.INTERNAL);
 });

@@ -10,7 +10,7 @@ export interface SuppressionRule {
   expires?: string;
 }
 
-export interface AdequacyConfig {
+export interface EgressaConfig {
   version?: number;
   exclude?: string[];
   includeTransitive?: boolean;
@@ -19,17 +19,17 @@ export interface AdequacyConfig {
 }
 
 /**
- * Loads .adequacy.yml. A missing config is the normal case, not an error.
+ * Loads .egressa.yml. A missing config is the normal case, not an error.
  *
  * `reason` is required on every suppression by design: a suppression without a
  * stated reason is indistinguishable from having never looked, and six months
  * later nobody can tell which it was.
  */
-export function loadConfig(root: string, explicitPath?: string): AdequacyConfig {
-  const path = explicitPath ?? join(root, '.adequacy.yml');
+export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
+  const path = explicitPath ?? join(root, '.egressa.yml');
   if (!existsSync(path)) return {};
 
-  const parsed = parse(readFileSync(path, 'utf8')) as AdequacyConfig | null;
+  const parsed = parse(readFileSync(path, 'utf8')) as EgressaConfig | null;
   if (!parsed || typeof parsed !== 'object') return {};
 
   for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {

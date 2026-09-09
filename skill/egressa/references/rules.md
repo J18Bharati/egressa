@@ -1,6 +1,6 @@
 # Rule reference
 
-Full text is available offline with `npx adequacy explain <ruleId>`.
+Full text is available offline with `npx egressa explain <ruleId>`.
 
 | Rule | Level | Means |
 |---|---|---|

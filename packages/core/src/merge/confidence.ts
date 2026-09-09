@@ -1,4 +1,4 @@
-import type { PackageAlias } from '@adequacy/kb';
+import type { PackageAlias } from '@egressa/kb';
 import type { Confidence, DependencyRecord } from '../index-types.js';
 
 /**

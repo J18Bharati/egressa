@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type KnowledgeBase, loadKnowledgeBase } from '@adequacy/kb';
+import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile } from './callsites/index.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
@@ -176,10 +176,10 @@ export function scan(options: ScanOptions): ScanResult {
   const findings = mergeSignals(filtered, { kb, staleVendorIds });
 
   return {
-    $schema: `https://adequacy.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,
+    $schema: `https://egressa.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,
     schemaVersion: FINDINGS_SCHEMA_VERSION,
     disclaimer: DISCLAIMER,
-    tool: { name: 'adequacy', version: toolVersion },
+    tool: { name: 'egressa', version: toolVersion },
     kb: {
       version: kb.version,
       entryCount: kb.vendors.length,

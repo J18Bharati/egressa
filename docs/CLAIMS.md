@@ -1,6 +1,6 @@
-# What Adequacy claims
+# What Egressa claims
 
-> Adequacy detects third-party data-egress patterns in source code and their cross-border transfer
+> Egressa detects third-party data-egress patterns in source code and their cross-border transfer
 > exposure. It does not assess or certify GDPR compliance.
 
 That sentence is the whole contract. It lives in exactly one place in the codebase —

@@ -1,5 +1,5 @@
 {
-  "name": "adequacy",
+  "name": "egressa",
   "version": "0.1.0",
   "description": "Detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
   "license": "Apache-2.0",
@@ -8,7 +8,7 @@
     "node": ">=20.11"
   },
   "bin": {
-    "adequacy": "./dist/cli.js"
+    "egressa": "./dist/cli.js"
   },
   "files": ["dist", "README.md", "kb"],
   "scripts": {
@@ -16,8 +16,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@adequacy/core": "workspace:*",
-    "@adequacy/kb": "workspace:*",
+    "@egressa/core": "workspace:*",
+    "@egressa/kb": "workspace:*",
     "citty": "^0.1.6",
     "oxc-parser": "^0.148.0",
     "yaml": "^2.6.1"

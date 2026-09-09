@@ -1,5 +1,5 @@
-import { DISCLAIMER, RULES, RULE_IDS } from '@adequacy/core';
-import type { RuleId } from '@adequacy/core';
+import { DISCLAIMER, RULES, RULE_IDS } from '@egressa/core';
+import type { RuleId } from '@egressa/core';
 import { defineCommand } from 'citty';
 
 export const explainCommand = defineCommand({
@@ -19,7 +19,7 @@ export const explainCommand = defineCommand({
     const id = String(args.rule) as RuleId;
     const rule = RULES[id];
     if (!rule) {
-      process.stderr.write(`adequacy: unknown rule "${id}"\n`);
+      process.stderr.write(`egressa: unknown rule "${id}"\n`);
       process.exit(2);
     }
     process.stdout.write(

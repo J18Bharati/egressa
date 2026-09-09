@@ -1,4 +1,4 @@
-import { loadKnowledgeBase } from '@adequacy/kb';
+import { loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
 
 /**
@@ -50,7 +50,7 @@ export const vendorsCommand = defineCommand({
     }
 
     if (!query) {
-      process.stderr.write(`adequacy: "vendors ${action}" needs an argument\n`);
+      process.stderr.write(`egressa: "vendors ${action}" needs an argument\n`);
       process.exit(2);
     }
 

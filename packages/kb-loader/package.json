@@ -1,7 +1,7 @@
 {
-  "name": "@adequacy/kb",
+  "name": "@egressa/kb",
   "version": "0.0.0",
-  "description": "Loads and indexes the Adequacy vendor knowledge base. Code Apache-2.0; bundled data CC-BY-4.0.",
+  "description": "Loads and indexes the Egressa vendor knowledge base. Code Apache-2.0; bundled data CC-BY-4.0.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {

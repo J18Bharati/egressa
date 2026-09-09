@@ -193,7 +193,7 @@ accepted:
 scanner requires them: an accepted risk that nobody revisits is not accepted, it is forgotten, and
 "not applicable" helps nobody in six months. A reason must name what was checked and by whom.
 
-The scanner's own suppressions live in `.adequacy.yml` and match on vendor and rule id. These are
+The scanner's own suppressions live in `.egressa.yml` and match on vendor and rule id. These are
 separate files today because review findings are keyed by path and category rather than by vendor.
 Say so if the user asks why there are two.
 

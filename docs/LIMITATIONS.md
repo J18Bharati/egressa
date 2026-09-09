@@ -1,6 +1,6 @@
 # Limitations
 
-What Adequacy cannot see. Every entry here has a corresponding failing-by-design case in
+What Egressa cannot see. Every entry here has a corresponding failing-by-design case in
 `packages/core/src/callsites/golden.test.ts`, so these are an executable contract rather than a
 disclaimer. If a change makes one of them resolve, the test fails and the limitation must be lifted
 deliberately.
@@ -33,7 +33,7 @@ fetch(process.env.ANALYTICS_URL);        // transfer/unresolved-egress, names AN
 fetch(`https://${region}.example.com`);  // transfer/unresolved-egress, authority interpolated
 ```
 
-Adequacy names the variable and the location. It never guesses the host.
+Egressa names the variable and the location. It never guesses the host.
 
 ### Vendors absent from the knowledge base
 

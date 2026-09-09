@@ -6,4 +6,4 @@ set -euo pipefail
 target="${1:-.}"
 shift || true
 
-npx -y adequacy@latest scan "$target" --format json "$@"
+npx -y egressa@latest scan "$target" --format json "$@"

@@ -7,15 +7,15 @@ Exposes the scanner and the knowledge base to any MCP-capable client.
 ```json
 {
   "mcpServers": {
-    "adequacy": {
+    "egressa": {
       "command": "npx",
-      "args": ["-y", "@adequacy/mcp@latest"]
+      "args": ["-y", "@egressa/mcp@latest"]
     }
   }
 }
 ```
 
-In Claude Code: `claude mcp add adequacy -- npx -y @adequacy/mcp@latest`
+In Claude Code: `claude mcp add egressa -- npx -y @egressa/mcp@latest`
 
 ## Tools
 
@@ -42,7 +42,7 @@ locations per finding, and sets `truncated` and `omittedFindings` when it withhe
 findings document for a repository with thirty vendors will otherwise flood a model's context, and
 an agent that runs out of room mid-review is worse than one that asked for more.
 
-The summariser lives in `@adequacy/core`, so an agent's view and the CLI's markdown output can
+The summariser lives in `@egressa/core`, so an agent's view and the CLI's markdown output can
 never disagree about what a scan said.
 
 ## Verified transcript

@@ -1,5 +1,5 @@
-import type { Finding, ScanResult } from '@adequacy/core';
-import type { AdequacyConfig, SuppressionRule } from './config.js';
+import type { Finding, ScanResult } from '@egressa/core';
+import type { EgressaConfig, SuppressionRule } from './config.js';
 
 /**
  * Applies configured suppressions.
@@ -15,7 +15,7 @@ import type { AdequacyConfig, SuppressionRule } from './config.js';
  */
 export function applySuppressions(
   result: ScanResult,
-  config: AdequacyConfig,
+  config: EgressaConfig,
   now: Date = new Date(),
 ): ScanResult {
   const rules = config.suppressions ?? [];

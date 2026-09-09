@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://adequacy.dev/schemas/vendor-1.0.0.json",
-  "title": "Adequacy vendor knowledge base entry",
+  "$id": "https://egressa.dev/schemas/vendor-1.0.0.json",
+  "title": "Egressa vendor knowledge base entry",
   "description": "Factual, sourced record of one vendor. Entries state facts and cite them. Anything evaluative belongs in ratings/exposure-overrides.json, not here.",
   "type": "object",
   "additionalProperties": false,

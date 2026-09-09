@@ -1,5 +1,5 @@
-import type { Finding, ScanResult } from '@adequacy/core';
-import { DISCLAIMER } from '@adequacy/core';
+import type { Finding, ScanResult } from '@egressa/core';
+import { DISCLAIMER } from '@egressa/core';
 
 /**
  * Markdown summary, shared by `--format markdown` and the MCP server's

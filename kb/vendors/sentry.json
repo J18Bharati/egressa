@@ -135,6 +135,6 @@
     }
   ],
   "lastVerified": "2026-09-06",
-  "verifiedBy": "adequacy-kb",
+  "verifiedBy": "egressa-kb",
   "notes": "Sentry markets performance monitoring and session replay alongside error tracking; the category field holds one value and error-tracking was selected as the closest. Verification limitation: docs.sentry.io did not resolve during verification, so the content of the docs.sentry.io sources above was read from the vendor's own public documentation source repository at github.com/getsentry/sentry-docs, which is the source of those published pages. The npm scope @sentry/ is not registered as a wildcard alias; eight package names were confirmed individually on the registry."
 }

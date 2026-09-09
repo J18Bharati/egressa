@@ -7,7 +7,7 @@ do not open a public issue for a security problem.
 
 ## Threat model
 
-Adequacy runs locally against source code you already have. It makes no network calls, has no
+Egressa runs locally against source code you already have. It makes no network calls, has no
 telemetry, requires no credentials, and never reads `node_modules`. The realistic risks are
 therefore:
 
@@ -17,10 +17,10 @@ therefore:
 - **Path traversal.** The scanner only reads beneath the root it is given, and the MCP server
   exposes no write tools and no path escape.
 - **Supply chain.** Releases are published with npm provenance via GitHub OIDC. Verify with
-  `npm view adequacy provenance`.
+  `npm view egressa provenance`.
 
 ## Not a security scanner
 
-Adequacy reports data-transfer exposure, not vulnerabilities. It deliberately does not set
+Egressa reports data-transfer exposure, not vulnerabilities. It deliberately does not set
 `security-severity` in SARIF output, because filing a privacy finding in a Security tab dressed as
 a CVE would misrepresent what it found.

@@ -7,7 +7,7 @@ Emit findings per `references/finding-schema.md`. Cite only provisions in `refer
 data-backed, and reimplementing it by grep would be strictly worse than running it. Shell out.
 
 ```bash
-npx -y adequacy@latest scan . --format json
+npx -y egressa@latest scan . --format json
 ```
 
 Add `--assume-adequacy-lapsed US:DPF` when the user asks what breaks if the Data Privacy Framework

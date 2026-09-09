@@ -8,14 +8,14 @@ description: Use when checking where a codebase sends personal data - GDPR data 
 Find which third-party vendors a repository sends data to, where those vendors process it, and what
 the exposure is if EU-US adequacy lapses.
 
-**The claim scope is not negotiable.** Adequacy detects third-party data-egress patterns in source
+**The claim scope is not negotiable.** Egressa detects third-party data-egress patterns in source
 code and their cross-border transfer exposure. It does not assess or certify GDPR compliance. Read
 `references/language-rules.md` before writing any summary.
 
 ## Run the scan
 
 ```bash
-npx -y adequacy@latest scan . --format json
+npx -y egressa@latest scan . --format json
 ```
 
 No install, no configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the
@@ -58,7 +58,7 @@ See `references/interpreting-findings.md` for the full triage procedure and
 
 ## Drafting a suppression
 
-When the user decides a finding is accepted, write the `.adequacy.yml` entry for them rather than
+When the user decides a finding is accepted, write the `.egressa.yml` entry for them rather than
 making them hand-edit YAML:
 
 ```yaml

@@ -1,8 +1,8 @@
 {
-  "$schema": "https://adequacy.dev/schemas/findings-1.0.0.json",
+  "$schema": "https://egressa.dev/schemas/findings-1.0.0.json",
   "schemaVersion": "1.0.0",
-  "disclaimer": "Adequacy detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
-  "tool": { "name": "adequacy", "version": "0.1.0" },
+  "disclaimer": "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  "tool": { "name": "egressa", "version": "0.1.0" },
   "kb": {
     "version": "2026.09.01",
     "entryCount": 5,
@@ -155,7 +155,7 @@
         }
       ],
       "remediation": {
-        "summary": "Determine the destination from your deployment configuration. Adequacy does not guess unresolved hosts.",
+        "summary": "Determine the destination from your deployment configuration. Egressa does not guess unresolved hosts.",
         "links": []
       },
       "suppressed": false,
@@ -203,7 +203,7 @@
         "links": [
           {
             "label": "Request a vendor entry",
-            "url": "https://github.com/adequacy-dev/adequacy/issues/new?template=vendor-request.yml"
+            "url": "https://github.com/egressa-dev/egressa/issues/new?template=vendor-request.yml"
           }
         ]
       },

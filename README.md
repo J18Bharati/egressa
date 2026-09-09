@@ -1,13 +1,13 @@
-# Adequacy
+# Egressa
 
-> Adequacy detects third-party data-egress patterns in source code and their cross-border transfer
+> Egressa detects third-party data-egress patterns in source code and their cross-border transfer
 > exposure. It does not assess or certify GDPR compliance.
 
 Point it at a JavaScript or TypeScript repository. It tells you which third-party vendors your code
 references, where those vendors process data, and what your exposure is if EU-US adequacy lapses.
 
 ```bash
-npx adequacy scan .
+npx egressa scan .
 ```
 
 No account, no API key, no telemetry, no network calls. Runs entirely offline against a knowledge
@@ -21,7 +21,7 @@ Read this before trusting a clean scan.
   vendor, the transfer is invisible unless that backend is in the scanned repository. This is the
   largest structural blind spot and no static scanner can close it.
 - **Runtime-configured destinations.** A host that arrives from an environment variable is reported
-  as `transfer/unresolved-egress`, naming the variable. Adequacy never guesses a host.
+  as `transfer/unresolved-egress`, naming the variable. Egressa never guesses a host.
 - **Vendors not in the knowledge base**, reported as `transfer/unknown-vendor-egress`. The knowledge
   base is a curated seed set, not a census.
 - **Non-JavaScript surfaces** — tag managers, CSP headers, native mobile, infrastructure config.
@@ -35,10 +35,10 @@ One engine. All of these consume the same versioned findings schema.
 
 | | |
 |---|---|
-| **CLI** | `npx adequacy scan .` — human, JSON, SARIF or markdown output |
-| **GitHub Action** | `uses: adequacy-dev/adequacy@v1` — findings appear as PR annotations via code scanning |
-| **MCP server** | `claude mcp add adequacy -- npx -y @adequacy/mcp@latest` — see [docs/mcp.md](docs/mcp.md) |
-| **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/adequacy](skill/adequacy/SKILL.md) |
+| **CLI** | `npx egressa scan .` — human, JSON, SARIF or markdown output |
+| **GitHub Action** | `uses: egressa-dev/egressa@v1` — findings appear as PR annotations via code scanning |
+| **MCP server** | `claude mcp add egressa -- npx -y @egressa/mcp@latest` — see [docs/mcp.md](docs/mcp.md) |
+| **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/egressa](skill/egressa/SKILL.md) |
 | **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
 
 The last one is a different kind of thing from the others and the difference matters. The engine is a
@@ -53,7 +53,7 @@ The EU-US Data Privacy Framework is in force and under legal challenge. To see y
 were withdrawn:
 
 ```bash
-npx adequacy scan . --assume-adequacy-lapsed US:DPF
+npx egressa scan . --assume-adequacy-lapsed US:DPF
 ```
 
 That flag rewrites one decision's status in `kb/adequacy-status.json` and lets the ordinary rule

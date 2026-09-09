@@ -36,7 +36,7 @@ for (const [url, where] of urls) {
     const response = await fetch(url, {
       method: 'GET',
       redirect: 'follow',
-      headers: { 'user-agent': 'adequacy-link-check' },
+      headers: { 'user-agent': 'egressa-link-check' },
       signal: AbortSignal.timeout(20_000),
     });
     // 403 is common for bot-blocking vendors and is not evidence the page moved.

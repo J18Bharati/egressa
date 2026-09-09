@@ -32,7 +32,7 @@ jobs:
       - run: pnpm build
 
   self-scan:
-    # Adequacy scans its own repository. Its fixtures deliberately contain
+    # Egressa scans its own repository. Its fixtures deliberately contain
     # vendor references, so this asserts the scan runs and emits valid SARIF,
     # not that the result is empty.
     runs-on: ubuntu-latest
@@ -48,8 +48,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Scan
-        run: node packages/cli/dist/cli.js scan . --format sarif --out adequacy.sarif
+        run: node packages/cli/dist/cli.js scan . --format sarif --out egressa.sarif
       - uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: adequacy.sarif
-          category: adequacy
+          sarif_file: egressa.sarif
+          category: egressa

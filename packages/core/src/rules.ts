@@ -23,7 +23,7 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
     fullDescription:
       'A dependency or call site refers to a vendor whose processing jurisdiction is outside ' +
       'the EEA and is not covered by an in-force adequacy decision. Under GDPR Chapter V such ' +
-      'processing requires a transfer mechanism. Adequacy reports the vendor, its jurisdiction ' +
+      'processing requires a transfer mechanism. Egressa reports the vendor, its jurisdiction ' +
       'and the mechanisms the vendor publishes; it does not determine whether personal data is ' +
       'actually sent, nor whether your use is lawful.',
     defaultLevel: 'warning',
@@ -38,7 +38,7 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
     shortDescription: 'Vendor processes outside the EEA but publishes an EU-hosted option.',
     fullDescription:
       'Same as third-country egress, except the vendor documents an EU region or EU-hosted ' +
-      'instance. Adequacy cannot tell from source code which region an account is configured ' +
+      'instance. Egressa cannot tell from source code which region an account is configured ' +
       'to use, so this is a prompt to verify configuration, not a finding that you are on the ' +
       'non-EU region.',
     defaultLevel: 'warning',
@@ -83,7 +83,7 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
       'statement about the vendor.',
     defaultLevel: 'note',
     help:
-      'Adequacy has no entry for this vendor. Consider opening a vendor request so the entry ' +
+      'Egressa has no entry for this vendor. Consider opening a vendor request so the entry ' +
       'can be added with primary sources.',
     tags: TAGS,
   },
@@ -93,7 +93,7 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
     shortDescription: 'Outbound call whose host could not be resolved statically.',
     fullDescription:
       'An outbound call was found whose destination is supplied at runtime -- typically from an ' +
-      'environment variable or runtime configuration. Adequacy names the variable and reports ' +
+      'environment variable or runtime configuration. Egressa names the variable and reports ' +
       'the location. It never guesses the host.',
     defaultLevel: 'note',
     help:
@@ -116,7 +116,7 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
   'config/expired-suppression': {
     id: 'config/expired-suppression',
     name: 'expiredSuppression',
-    shortDescription: 'A suppression in .adequacy.yml has passed its expiry date.',
+    shortDescription: 'A suppression in .egressa.yml has passed its expiry date.',
     fullDescription:
       'Suppressions carry a mandatory expiry so accepted risk is revisited rather than ' +
       'permanently silenced. The underlying finding has been reactivated.',

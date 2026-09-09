@@ -56,7 +56,7 @@ describe('toSarif', () => {
   });
 
   it('sets partialFingerprints so alerts survive line shifts', () => {
-    expect(sarif.runs[0].results[0].partialFingerprints['adequacy/vendorRule/v1']).toBe(
+    expect(sarif.runs[0].results[0].partialFingerprints['egressa/vendorRule/v1']).toBe(
       result.findings[0]?.id,
     );
   });

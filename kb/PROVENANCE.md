@@ -31,7 +31,7 @@ of a claim we then verified ourselves at the vendor — never as the origin of t
 
 ## Why this matters
 
-Adequacy publishes a CC-BY-4.0 dataset intended for anyone, including competing tools, to build on.
+Egressa publishes a CC-BY-4.0 dataset intended for anyone, including competing tools, to build on.
 That promise is only real if every field is ours to license. A single copied record would make the
 whole dataset unredistributable, and would be indistinguishable from the conduct this project's
 correction policy exists to avoid.

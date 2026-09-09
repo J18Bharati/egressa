@@ -14,7 +14,7 @@ import type { Finding, ScanResult, Severity } from '../types.js';
 const SARIF_VERSION = '2.1.0';
 const SARIF_SCHEMA =
   'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json';
-const INFORMATION_URI = 'https://github.com/adequacy-dev/adequacy';
+const INFORMATION_URI = 'https://github.com/egressa-dev/egressa';
 
 export interface SarifOptions {
   /** Repo-relative paths are emitted as-is; GitHub resolves them against the checkout. */
@@ -29,7 +29,7 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
       {
         tool: {
           driver: {
-            name: 'adequacy',
+            name: 'egressa',
             version: options.toolVersion,
             semanticVersion: options.toolVersion,
             informationUri: INFORMATION_URI,
@@ -38,7 +38,7 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
             rules: RULE_IDS.map((id) => toReportingDescriptor(id, result)),
           },
         },
-        automationDetails: { id: 'adequacy/scan' },
+        automationDetails: { id: 'egressa/scan' },
         // GitHub shows this in the alert; it makes the KB version auditable.
         properties: {
           kbVersion: result.kb.version,
@@ -122,7 +122,7 @@ function toResult(finding: Finding, result: ScanResult): unknown {
     ...(related.length > 0 ? { relatedLocations: related.map(toSarifLocation) } : {}),
     // Fingerprints keep an alert from closing and reopening every time an
     // unrelated edit shifts its line number.
-    partialFingerprints: { 'adequacy/vendorRule/v1': finding.id },
+    partialFingerprints: { 'egressa/vendorRule/v1': finding.id },
     // GitHub sorts by rank, so severity x confidence produces a sensible order.
     rank: toRank(finding.severity, finding.confidence),
     ...(finding.suppressed && finding.suppression
