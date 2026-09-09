@@ -248,5 +248,9 @@ release pipeline does not exist yet: no `.changeset`, no `.npmrc`, no release wo
 "complementary not better" claim about code-based vendor discovery, why the sub-processor register
 framing was rejected, and the ordered publish steps. Read it before proposing product direction.
 
+`TODOS.md` tracks actionable engineering work, and is deliberately not the roadmap: the roadmap
+records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is that
+no git remote exists, so every documented plugin install path currently resolves to nothing.
+
 `docs/ROADMAP.md` records what v1 deliberately excludes (Python, cross-module constants, HTML
 `<script src>`, tag managers, IaC, PII data-flow) and what is not planned at all.
