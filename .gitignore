@@ -16,3 +16,7 @@ packages/*/kb/
 # Local skill install: a symlink into skill/ so /privacy-review resolves in this
 # checkout. Not committed -- symlinks are unreliable on the Windows CI leg.
 .claude/skills/
+
+# Generated reports (make-pdf output and similar)
+/REPORT.pdf
+/*.pdf
