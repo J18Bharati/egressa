@@ -27,6 +27,18 @@ const validateOverrides = compile('exposure-overrides-1.0.0.json');
 const today = new Date().toISOString().slice(0, 10);
 const daysSince = (iso: string) => Math.floor((Date.parse(today) - Date.parse(iso)) / 86_400_000);
 
+/**
+ * The furthest ahead of UTC a `lastVerified` date may sit before it is wrong.
+ *
+ * `lastVerified` is a plain calendar date with no timezone, written by whoever
+ * verified the entry, in their local calendar. `today` is UTC. An author in any
+ * zone ahead of UTC -- which is most of them -- writes tomorrow's UTC date for
+ * part of every day, and rejecting that is a clock artifact rather than a
+ * finding about the data. One day of tolerance covers every real offset;
+ * anything further ahead is a typo or a fabricated date.
+ */
+const FUTURE_TOLERANCE_DAYS = 1;
+
 // --- vendor entries -------------------------------------------------------
 const vendorDir = join(KB, 'vendors');
 const vendorFiles = readdirSync(vendorDir).filter((f) => f.endsWith('.json'));
@@ -63,7 +75,7 @@ for (const file of vendorFiles) {
   }
 
   // 3. lastVerified sanity and staleness
-  if (entry.lastVerified > today) {
+  if (daysSince(entry.lastVerified) < -FUTURE_TOLERANCE_DAYS) {
     errors.push(`${where}: lastVerified ${entry.lastVerified} is in the future`);
   } else if (daysSince(entry.lastVerified) > STALE_AFTER_DAYS) {
     warnings.push(
