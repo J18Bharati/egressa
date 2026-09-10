@@ -5,6 +5,13 @@ import { schemaCommand } from './commands/schema.js';
 import { vendorsCommand } from './commands/vendors.js';
 import { EXIT } from './exit-codes.js';
 
+const subCommands = {
+  scan: scanCommand,
+  vendors: vendorsCommand,
+  explain: explainCommand,
+  schema: schemaCommand,
+};
+
 const main = defineCommand({
   meta: {
     name: 'egressa',
@@ -12,31 +19,34 @@ const main = defineCommand({
       'Detects third-party data-egress patterns in source code and their cross-border ' +
       'transfer exposure. Does not assess or certify GDPR compliance.',
   },
-  subCommands: {
-    scan: scanCommand,
-    vendors: vendorsCommand,
-    explain: explainCommand,
-    schema: schemaCommand,
-  },
-  // `egressa .` with no subcommand runs a scan, which is what people type.
+  subCommands,
   args: scanCommand.args,
-  async run(context) {
-    if (
-      context.rawArgs.length === 0 ||
-      context.rawArgs[0]?.startsWith('-') ||
-      existsAsPath(context.rawArgs[0])
-    ) {
-      return scanCommand.run?.(context as never);
-    }
-    return undefined;
-  },
 });
 
-function existsAsPath(value: string | undefined): boolean {
-  return value !== undefined && !value.startsWith('-');
+/** Names that must reach citty untouched rather than being read as a path. */
+const PASS_THROUGH = new Set(['--help', '-h', '--version', '-v']);
+
+/**
+ * `egressa .` and `egressa --quiet` mean `egressa scan`.
+ *
+ * citty resolves the first positional against the subcommand table before a
+ * parent's own `run` is reachable, so a bare path exits with "Unknown command"
+ * no matter what the parent does. Rewriting argv is what makes the documented
+ * default work.
+ *
+ * Doing it here also lets the parent command drop its fallback `run`. citty
+ * executes a parent's `run` *in addition to* the matched subcommand, so that
+ * fallback fired a second, spurious scan after every `explain` and `vendors` --
+ * scanning the subcommand's own name as though it were a path.
+ */
+export function withDefaultCommand(argv: string[]): string[] {
+  const first = argv[0];
+  if (first === undefined) return ['scan'];
+  if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv;
+  return ['scan', ...argv];
 }
 
-runMain(main).catch((error: unknown) => {
+runMain(main, { rawArgs: withDefaultCommand(process.argv.slice(2)) }).catch((error: unknown) => {
   process.stderr.write(`egressa: ${(error as Error).message}\n`);
   process.exit(EXIT.INTERNAL);
 });

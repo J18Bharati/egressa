@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { type ScanResult, scan, toSarif } from '@egressa/core';
 import type { Confidence, Severity } from '@egressa/core';
@@ -9,6 +9,14 @@ import { formatHuman } from '../format/human.js';
 import { formatMarkdown } from '../format/markdown.js';
 import { applySuppressions } from '../suppress.js';
 import { TOOL_VERSION } from '../version.js';
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 const SEVERITY_RANK: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
 const FAIL_ON = ['none', 'note', 'warning', 'error'] as const;
@@ -60,10 +68,24 @@ export const scanCommand = defineCommand({
     },
     quiet: { type: 'boolean', default: false },
   },
-  run({ args }) {
+  run({ args, rawArgs }) {
     const root = resolve(String(args.path ?? '.'));
-    const failOn = parseFailOn(String(args['fail-on']));
+
+    // A path that is not a directory is a usage error, not a clean scan. Left
+    // unchecked, a typo produces zero findings and an exit code of 0 -- output
+    // indistinguishable from a repository that genuinely references no vendor.
+    if (!isDirectory(root)) {
+      process.stderr.write(`egressa: ${root} is not a directory\n`);
+      process.exit(EXIT.USAGE);
+    }
+
     const config = loadConfig(root, args.config ? String(args.config) : undefined);
+    // The flag wins over the file, but only when it was actually typed --
+    // `--fail-on` carries a default, so its value alone cannot say which.
+    const failOnGiven = rawArgs.some((a) => a === '--fail-on' || a.startsWith('--fail-on='));
+    const failOn = parseFailOn(
+      failOnGiven ? String(args['fail-on']) : (config.failOn ?? String(args['fail-on'])),
+    );
 
     let result: ScanResult;
     try {

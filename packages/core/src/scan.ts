@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
+import { clientConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -41,6 +42,15 @@ export interface ScanOptions {
  * no console, no network, no process.exit. The CLI, the MCP server and the
  * skill are all consumers of this one function's return value.
  */
+/** Whether `root` is a directory this process can stat. */
+function isReadableDirectory(root: string): boolean {
+  try {
+    return statSync(root).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export function scan(options: ScanOptions): ScanResult {
   const {
     root,
@@ -71,10 +81,31 @@ export function scan(options: ScanOptions): ScanResult {
   const unmatchedPackages = new Set<string>();
   const unmatchedHosts = new Set<string>();
 
-  const { manifests, sources } = walk({
-    root,
-    ...(options.exclude ? { exclude: options.exclude } : {}),
-  });
+  // A root that is not a readable directory must not read as a clean scan. A
+  // typo'd path would otherwise produce zero findings, an empty error list and
+  // the same output as a repository with nothing to report.
+  const rootUsable = isReadableDirectory(root);
+  if (!rootUsable) {
+    errors.push({
+      file: root,
+      message: 'not a readable directory; nothing was scanned',
+      fatal: true,
+    });
+  }
+
+  const { manifests, sources } = rootUsable
+    ? walk({
+        root,
+        ...(options.exclude ? { exclude: options.exclude } : {}),
+      })
+    : { manifests: [], sources: [] };
+
+  // Vendor SDK initialisers, built from the knowledge base rather than a
+  // hardcoded table: `aliases.clientConstructors` names the option carrying the
+  // destination, which is where a configured region actually appears.
+  const vendorSinks = clientConstructorSinks(
+    kb.vendors.flatMap((v) => v.aliases.clientConstructors ?? []),
+  );
 
   let manifestsScanned = 0;
   if (includeManifests) {
@@ -126,7 +157,7 @@ export function scan(options: ScanOptions): ScanResult {
         continue;
       }
 
-      const { hits, error } = analyzeFile(text, file);
+      const { hits, error } = analyzeFile(text, file, vendorSinks);
       if (error) {
         errors.push({ file, message: `${error}; file skipped`, fatal: false });
         continue;
