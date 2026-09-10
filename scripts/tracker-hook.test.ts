@@ -42,6 +42,55 @@ const write = (file: string, content: string, session = Math.random().toString(3
   tool_input: { file_path: file, content },
 });
 
+describe('the strict-necessity exemption is tested against the key, not the edit', () => {
+  it('still reports an attribution write in a file that mentions auth', () => {
+    // Regression: STRICTLY_NECESSARY used to be tested against the whole added
+    // text, so an unrelated `auth` import silenced the write beside it.
+    const { out } = run(
+      write(
+        'src/track.ts',
+        "import { auth } from '@clerk/nextjs/server';\nlocalStorage.setItem('utm_source', src);",
+      ),
+    );
+    expect(out?.additionalContext).toContain('src/track.ts');
+  });
+
+  it('still reports when one key is exempt and another is not', () => {
+    const { out } = run(
+      write(
+        'src/mixed.ts',
+        "localStorage.setItem('csrf_token', t);\nlocalStorage.setItem('utm_campaign', c);",
+      ),
+    );
+    expect(out?.additionalContext).toBeTruthy();
+  });
+
+  it('stays silent when every key is exempt', () => {
+    const { out, code } = run(write('src/session.ts', "localStorage.setItem('session_id', id);"));
+    expect(out).toBeNull();
+    expect(code).toBe(0);
+  });
+
+  it('reports a write whose key is not a literal, because it cannot be cleared', () => {
+    const { out } = run(write('src/dyn.ts', 'localStorage.setItem(keyName, value);'));
+    expect(out?.additionalContext).toBeTruthy();
+  });
+
+  it('reports a server-set cookie through the Next.js cookies() API', () => {
+    const { out } = run(
+      write('src/mw.ts', "cookies().set('_ga_client', id, { maxAge: 60 * 60 * 24 * 365 });"),
+    );
+    expect(out?.additionalContext).toBeTruthy();
+  });
+
+  it('stays silent on a server-set session cookie', () => {
+    const { out } = run(
+      write('src/mw2.ts', "cookies().set('session', token, { httpOnly: true });"),
+    );
+    expect(out).toBeNull();
+  });
+});
+
 describe('the tracker write hook fires on', () => {
   it('a tracker initialised in new code', () => {
     const { out } = run(write('app/layout.tsx', 'mixpanel.init("TOKEN");'));

@@ -53,7 +53,7 @@ const PATTERNS = [
   },
   {
     id: 'client-storage',
-    test: /document\.cookie\s*=|(?:local|session)Storage\.setItem\s*\(/,
+    test: /document\.cookie\s*=|(?:local|session)Storage\.setItem\s*\(|(?:cookies\(\)|cookieStore)\.set\s*\(|\bres(?:ponse)?\.cookies?\.set\s*\(|\bres\.cookie\s*\(|\bsetCookie\s*\(|\breply\.setCookie\s*\(/,
     provision: 'ePrivacy Directive 2002/58/EC Art 5(3)',
     what: 'something is being stored on the user’s device',
     ask: 'Is this strictly necessary for a service the user asked for? If it is, no consent is needed and there is nothing to do. If it is analytics or attribution, it needs a gate.',
@@ -80,6 +80,36 @@ function addedText(toolName, input) {
     return input.edits.map((e) => String(e?.new_string ?? '')).join('\n');
   }
   return '';
+}
+
+/**
+ * Whether every storage key in this edit is exempt under Art 5(3).
+ *
+ * The exemption must be tested against the *key being written*, not the whole
+ * edit. Testing the edit meant one incidental word anywhere in the added text
+ * silenced the report: a file that imports `@clerk/nextjs` matches `auth`, so a
+ * `localStorage.setItem('utm_source', ...)` in the same write was suppressed --
+ * which is the case this pattern exists to catch.
+ *
+ * A write whose key is not a string literal cannot be checked against the list,
+ * so it is not treated as exempt. Reporting a question about an unknown key is
+ * the lesser failure.
+ */
+function everyStorageKeyIsExempt(text) {
+  const writes = text.match(
+    /document\.cookie\s*=|(?:local|session)Storage\.setItem\s*\(|(?:cookies\(\)|cookieStore)\.set\s*\(|\bres(?:ponse)?\.cookies?\.set\s*\(|\bres\.cookie\s*\(|\bsetCookie\s*\(|\breply\.setCookie\s*\(/g,
+  );
+  const keys = [
+    ...text.matchAll(/(?:local|session)Storage\.setItem\s*\(\s*['"`]([^'"`]+)['"`]/g),
+    ...text.matchAll(/document\.cookie\s*=\s*['"`]\s*([A-Za-z0-9_.-]+)\s*=/g),
+    ...text.matchAll(
+      /(?:(?:cookies\(\)|cookieStore)\.set|res(?:ponse)?\.cookies?\.set|res\.cookie|setCookie|reply\.setCookie)\s*\(\s*['"`]([^'"`]+)['"`]/g,
+    ),
+  ].map((m) => m[1]);
+
+  // A key the patterns could not read is a key that cannot be cleared.
+  if (!writes || keys.length !== writes.length) return false;
+  return keys.every((key) => STRICTLY_NECESSARY.test(key));
 }
 
 function alreadyReported(sessionId, filePath, patternId) {
@@ -117,7 +147,7 @@ const main = async () => {
 
   const hit = PATTERNS.find((p) => p.test.test(added));
   if (!hit) return;
-  if (hit.id === 'client-storage' && STRICTLY_NECESSARY.test(added)) return;
+  if (hit.id === 'client-storage' && everyStorageKeyIsExempt(added)) return;
   if (alreadyReported(String(event?.session_id ?? ''), file, hit.id)) return;
 
   const context = [
