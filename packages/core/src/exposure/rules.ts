@@ -13,7 +13,7 @@ import type { Exposure, ExposureLevel, RuleId } from '../types.js';
  * Bump EXPOSURE_RULES_VERSION whenever the mapping below changes, so a stored
  * finding records which version produced it.
  */
-export const EXPOSURE_RULES_VERSION = '1.0.0';
+export const EXPOSURE_RULES_VERSION = '1.1.0';
 
 const EEA_MEMBERS = new Set([
   'AT',
@@ -79,6 +79,7 @@ export function classifyExposure(vendor: VendorEntry, kb: KnowledgeBase): Exposu
         thirdCountryTransfer: false,
         euAlternativeAvailable: euRegion.available,
         adequacyDependent: false,
+        additionalSafeguardsRequired: false,
         level: 'none',
         inputs,
       }),
@@ -101,11 +102,15 @@ export function classifyExposure(vendor: VendorEntry, kb: KnowledgeBase): Exposu
     return {
       ruleId: 'transfer/adequate-country-egress',
       exposure: flags({
-        thirdCountryTransfer: false,
+        // Art 44: a transfer to an adequate country is still a third-country
+        // transfer. Art 45 supplies its legal basis; it does not undo the fact.
+        thirdCountryTransfer: true,
         euAlternativeAvailable: euRegion.available,
         // The whole premise of the tool: this is the population that changes
         // if a decision is withdrawn.
         adequacyDependent: true,
+        // Adequacy is the mechanism, so nothing under Art 46 is added.
+        additionalSafeguardsRequired: false,
         level: 'low',
         inputs,
       }),
@@ -120,7 +125,12 @@ export function classifyExposure(vendor: VendorEntry, kb: KnowledgeBase): Exposu
     exposure: flags({
       thirdCountryTransfer: true,
       euAlternativeAvailable: euAlternative,
-      adequacyDependent: decisions.some((d) => d !== null),
+      // Not `decisions.some(...)`: a decision merely existing for the country
+      // says nothing about this vendor. A US vendor relying on SCCs rather than
+      // DPF is unaffected by DPF being withdrawn, and reporting it as adequacy
+      // dependent puts it in the "what breaks if adequacy falls" list wrongly.
+      adequacyDependent: false,
+      additionalSafeguardsRequired: true,
       // A documented EU alternative means the exposure is addressable by
       // configuration, which is materially different from one that is not.
       level: euAlternative ? 'moderate' : 'elevated',
@@ -160,19 +170,13 @@ function vendorIsDpfCertified(vendor: VendorEntry): boolean {
   );
 }
 
-function flags(input: {
-  thirdCountryTransfer: boolean;
-  euAlternativeAvailable: boolean;
-  adequacyDependent: boolean;
-  level: ExposureLevel;
-  inputs: string[];
-}): Exposure {
-  return {
-    thirdCountryTransfer: input.thirdCountryTransfer,
-    euAlternativeAvailable: input.euAlternativeAvailable,
-    adequacyDependent: input.adequacyDependent,
-    level: input.level,
-    rulesVersion: EXPOSURE_RULES_VERSION,
-    inputs: input.inputs,
-  };
+/**
+ * Stamps the rules version onto a flag set.
+ *
+ * Takes `Omit<Exposure, 'rulesVersion'>` rather than a hand-listed shape so a
+ * new flag cannot be silently dropped on the way out -- an earlier version
+ * listed the fields twice and quietly discarded any field added to only one.
+ */
+function flags(input: Omit<Exposure, 'rulesVersion'>): Exposure {
+  return { ...input, rulesVersion: EXPOSURE_RULES_VERSION };
 }

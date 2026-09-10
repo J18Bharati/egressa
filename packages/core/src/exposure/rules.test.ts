@@ -14,7 +14,10 @@ describe('classifyExposure: DPF is not blanket US adequacy', () => {
   it('treats a DPF-certified US vendor as covered by an adequacy decision today', () => {
     const { ruleId, exposure } = classifyExposure(vendor('stripe'), kb);
     expect(ruleId).toBe('transfer/adequate-country-egress');
-    expect(exposure.thirdCountryTransfer).toBe(false);
+    // Art 44: still a transfer to a third country. Adequacy is its Art 45
+    // basis, which is what additionalSafeguardsRequired records.
+    expect(exposure.thirdCountryTransfer).toBe(true);
+    expect(exposure.additionalSafeguardsRequired).toBe(false);
     // This is the population that moves if the framework falls.
     expect(exposure.adequacyDependent).toBe(true);
   });
@@ -25,6 +28,10 @@ describe('classifyExposure: DPF is not blanket US adequacy', () => {
     const { ruleId, exposure } = classifyExposure(vendor('openai'), kb);
     expect(ruleId).toBe('transfer/third-country-egress-eu-region-available');
     expect(exposure.thirdCountryTransfer).toBe(true);
+    expect(exposure.additionalSafeguardsRequired).toBe(true);
+    // An SCC vendor does not move if DPF is withdrawn, so it does not belong
+    // in the population that adequacyDependent describes.
+    expect(exposure.adequacyDependent).toBe(false);
   });
 
   it('records the certification check in the audit trail', () => {
@@ -75,7 +82,7 @@ describe('classifyExposure: audit trail and versioning', () => {
   });
 
   it('stamps the rules version that produced the rating', () => {
-    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.0.0');
+    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.1.0');
   });
 
   it('treats an under-challenge decision as in force rather than predicting an outcome', () => {

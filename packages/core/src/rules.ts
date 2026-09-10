@@ -58,7 +58,8 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
       'these findings as if the relevant decision were withdrawn.',
     defaultLevel: 'note',
     help:
-      'No transfer mechanism is required while the adequacy decision below remains in force. ' +
+      'The adequacy decision below is itself the Art 45 transfer mechanism, so no additional ' +
+      'safeguard under Art 46 applies while it remains in force. ' +
       'Re-run with --assume-adequacy-lapsed to see the exposure if it is withdrawn.',
     tags: TAGS,
   },

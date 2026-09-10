@@ -2,7 +2,10 @@
   "$schema": "https://egressa.dev/schemas/findings-1.0.0.json",
   "schemaVersion": "1.0.0",
   "disclaimer": "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
-  "tool": { "name": "egressa", "version": "0.1.0" },
+  "tool": {
+    "name": "egressa",
+    "version": "0.1.0"
+  },
   "kb": {
     "version": "2026.09.01",
     "entryCount": 5,
@@ -16,14 +19,27 @@
     "durationMs": 842,
     "filesScanned": 61,
     "manifestsScanned": 2,
-    "engine": { "callsite": "oxc", "degraded": false }
+    "engine": {
+      "callsite": "oxc",
+      "degraded": false
+    }
   },
   "summary": {
     "vendorCount": 1,
     "findingCount": 1,
-    "byRule": { "transfer/third-country-egress": 1 },
-    "bySeverity": { "error": 0, "warning": 1, "note": 0 },
-    "byConfidence": { "high": 1, "medium": 0, "low": 0 },
+    "byRule": {
+      "transfer/third-country-egress": 1
+    },
+    "bySeverity": {
+      "error": 0,
+      "warning": 1,
+      "note": 0
+    },
+    "byConfidence": {
+      "high": 1,
+      "medium": 0,
+      "low": 0
+    },
     "unresolvedEgress": 0,
     "suppressed": 0
   },
@@ -31,10 +47,16 @@
     {
       "id": "b7f1c39a4e2d5081",
       "ruleId": "transfer/third-country-egress",
-      "vendor": { "id": "stripe", "name": "Stripe, Inc.", "category": "payments" },
+      "vendor": {
+        "id": "stripe",
+        "name": "Stripe, Inc.",
+        "category": "payments"
+      },
       "transfer": {
         "jurisdictions": ["US", "IE"],
-        "euRegion": { "available": false },
+        "euRegion": {
+          "available": false
+        },
         "mechanisms": [
           {
             "mechanism": "DPF",
@@ -42,7 +64,11 @@
             "url": "https://www.dataprivacyframework.gov/list",
             "lastChecked": "2026-07-14"
           },
-          { "mechanism": "SCC", "url": "https://stripe.com/legal/dpa", "lastChecked": "2026-07-14" }
+          {
+            "mechanism": "SCC",
+            "url": "https://stripe.com/legal/dpa",
+            "lastChecked": "2026-07-14"
+          }
         ],
         "dpaUrl": "https://stripe.com/legal/dpa",
         "subprocessorsUrl": "https://stripe.com/legal/service-providers",
@@ -67,10 +93,11 @@
       "exposure": {
         "thirdCountryTransfer": true,
         "euAlternativeAvailable": false,
-        "adequacyDependent": true,
+        "adequacyDependent": false,
         "level": "elevated",
-        "rulesVersion": "1.0.0",
-        "inputs": ["jurisdiction:US", "euRegion:none", "mechanism:DPF", "mechanism:SCC"]
+        "rulesVersion": "1.1.0",
+        "inputs": ["jurisdiction:US", "euRegion:none", "mechanism:DPF", "mechanism:SCC"],
+        "additionalSafeguardsRequired": true
       },
       "severity": "warning",
       "confidence": "high",
@@ -131,14 +158,23 @@
       "remediation": {
         "summary": "Confirm whether this integration carries personal data, then check the DPA and sub-processor list and record which transfer mechanism you rely on.",
         "links": [
-          { "label": "Stripe DPA", "url": "https://stripe.com/legal/dpa" },
-          { "label": "Stripe sub-processors", "url": "https://stripe.com/legal/service-providers" }
+          {
+            "label": "Stripe DPA",
+            "url": "https://stripe.com/legal/dpa"
+          },
+          {
+            "label": "Stripe sub-processors",
+            "url": "https://stripe.com/legal/service-providers"
+          }
         ]
       },
       "suppressed": false,
       "suppression": null
     }
   ],
-  "unmatched": { "hosts": [], "packages": [] },
+  "unmatched": {
+    "hosts": [],
+    "packages": []
+  },
   "errors": []
 }

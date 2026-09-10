@@ -21,17 +21,31 @@ is a matter of opinion about the vendor.
 **Flags are primary; `exposure.level` is derived convenience.** Prefer the flags when acting on a
 finding.
 
-### The rule table (v1.0.0)
+### The rule table (v1.1.0)
 
 | Facts | Flags | Rule |
 |---|---|---|
 | All jurisdictions in EEA | none set | `transfer/eu-processing` |
-| Every non-EEA jurisdiction covered by a decision that applies to this vendor | `adequacyDependent` | `transfer/adequate-country-egress` |
-| Not covered, EU region documented | `thirdCountryTransfer`, `euAlternativeAvailable` | `transfer/third-country-egress-eu-region-available` |
-| Not covered, no EU region | `thirdCountryTransfer` | `transfer/third-country-egress` |
+| Every non-EEA jurisdiction covered by a decision that applies to this vendor | `thirdCountryTransfer`, `adequacyDependent` | `transfer/adequate-country-egress` |
+| Not covered, EU region documented | `thirdCountryTransfer`, `additionalSafeguardsRequired`, `euAlternativeAvailable` | `transfer/third-country-egress-eu-region-available` |
+| Not covered, no EU region | `thirdCountryTransfer`, `additionalSafeguardsRequired` | `transfer/third-country-egress` |
+
+**`thirdCountryTransfer` is set for an adequate destination too.** Under Art 44 a transfer to a
+third country is a transfer whether or not the country is adequate; Art 45 supplies the legal basis
+*for* it rather than denying that one occurred. Whether anything further is needed is a separate
+flag, `additionalSafeguardsRequired`, which is set when the transfer would need a safeguard under
+Art 46 — standard contractual clauses or binding corporate rules — and is false where adequacy
+already covers the destination.
+
+Rule table v1.0.0 set `thirdCountryTransfer: false` on the adequate branch, which put the flag in
+direct contradiction with its own rule id. Any finding stored before v1.1.0 carries the old meaning
+and records `rulesVersion: "1.0.0"` saying so.
 
 `adequacyDependent` is set when the *only* thing standing between a vendor and a Chapter V transfer
 question is an adequacy decision — which is exactly the population that changes if adequacy lapses.
+It is therefore **not** set for a vendor that relies on standard contractual clauses: withdrawing an
+adequacy decision does not move a vendor that was never covered by one, and listing it as adequacy
+dependent would pad the "what breaks if adequacy falls" answer with vendors that do not break.
 
 **"Applies to this vendor" is doing real work in that table.** Country-level adequacy decisions
 (Japan, Switzerland, Uruguay, …) cover every recipient in that country. The EU-US Data Privacy

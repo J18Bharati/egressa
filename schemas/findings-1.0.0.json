@@ -225,6 +225,7 @@
         "thirdCountryTransfer",
         "euAlternativeAvailable",
         "adequacyDependent",
+        "additionalSafeguardsRequired",
         "level",
         "rulesVersion",
         "inputs"
@@ -233,6 +234,7 @@
         "thirdCountryTransfer": { "type": "boolean" },
         "euAlternativeAvailable": { "type": "boolean" },
         "adequacyDependent": { "type": "boolean" },
+        "additionalSafeguardsRequired": { "type": "boolean" },
         "level": { "enum": ["none", "low", "moderate", "elevated"] },
         "rulesVersion": { "type": "string" },
         "inputs": { "type": "array", "items": { "type": "string" } }

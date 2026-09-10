@@ -126,11 +126,28 @@ export interface TransferFacts {
 export type ExposureLevel = 'none' | 'low' | 'moderate' | 'elevated';
 
 export interface Exposure {
-  /** Flags are the primary output. A dispute about a flag is settled by a URL. */
+  /**
+   * Flags are the primary output. A dispute about a flag is settled by a URL.
+   *
+   * True whenever processing happens outside the EEA, adequate destination or
+   * not. Under Art 44 a transfer to an adequate country is still a transfer to
+   * a third country; Art 45 is the legal basis *for* it, not a denial that one
+   * occurred. Whether anything further is needed is `additionalSafeguardsRequired`.
+   */
   thirdCountryTransfer: boolean;
   euAlternativeAvailable: boolean;
-  /** True when the only thing standing between this vendor and Chapter V is adequacy. */
+  /**
+   * True when Chapter V is satisfied for this vendor only by an adequacy
+   * decision -- so withdrawing that decision changes this finding. False for a
+   * vendor that relies on SCCs, whose position does not move if adequacy lapses.
+   */
   adequacyDependent: boolean;
+  /**
+   * True when the transfer needs a safeguard under Art 46 (SCCs, BCRs) beyond
+   * an adequacy decision. False for EEA processing, and false where adequacy
+   * covers the destination, because adequacy is itself the Art 45 basis.
+   */
+  additionalSafeguardsRequired: boolean;
   /** Derived convenience ordinal. Disputes about this are unwinnable; prefer the flags. */
   level: ExposureLevel;
   rulesVersion: string;

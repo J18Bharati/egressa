@@ -2,7 +2,10 @@
   "$schema": "https://egressa.dev/schemas/findings-1.0.0.json",
   "schemaVersion": "1.0.0",
   "disclaimer": "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
-  "tool": { "name": "egressa", "version": "0.1.0" },
+  "tool": {
+    "name": "egressa",
+    "version": "0.1.0"
+  },
   "kb": {
     "version": "2026.09.01",
     "entryCount": 5,
@@ -16,7 +19,10 @@
     "durationMs": 1190,
     "filesScanned": 133,
     "manifestsScanned": 3,
-    "engine": { "callsite": "unavailable", "degraded": true },
+    "engine": {
+      "callsite": "unavailable",
+      "degraded": true
+    },
     "assumedAdequacyLapsed": ["US:DPF"]
   },
   "summary": {
@@ -27,8 +33,16 @@
       "transfer/unknown-vendor-egress": 1,
       "transfer/third-country-egress-eu-region-available": 1
     },
-    "bySeverity": { "error": 0, "warning": 1, "note": 2 },
-    "byConfidence": { "high": 0, "medium": 1, "low": 2 },
+    "bySeverity": {
+      "error": 0,
+      "warning": 1,
+      "note": 2
+    },
+    "byConfidence": {
+      "high": 0,
+      "medium": 1,
+      "low": 2
+    },
     "unresolvedEgress": 1,
     "suppressed": 1
   },
@@ -36,7 +50,11 @@
     {
       "id": "0c4a9de71b3f6620",
       "ruleId": "transfer/third-country-egress-eu-region-available",
-      "vendor": { "id": "posthog", "name": "PostHog, Inc.", "category": "analytics" },
+      "vendor": {
+        "id": "posthog",
+        "name": "PostHog, Inc.",
+        "category": "analytics"
+      },
       "transfer": {
         "jurisdictions": ["US", "DE"],
         "euRegion": {
@@ -46,7 +64,11 @@
           "notes": "Separate EU Cloud instance; projects are region-bound at creation."
         },
         "mechanisms": [
-          { "mechanism": "SCC", "url": "https://posthog.com/dpa", "lastChecked": "2026-07-20" }
+          {
+            "mechanism": "SCC",
+            "url": "https://posthog.com/dpa",
+            "lastChecked": "2026-07-20"
+          }
         ],
         "dpaUrl": "https://posthog.com/dpa",
         "subprocessorsUrl": "https://posthog.com/handbook/company/security",
@@ -67,8 +89,9 @@
         "euAlternativeAvailable": true,
         "adequacyDependent": false,
         "level": "moderate",
-        "rulesVersion": "1.0.0",
-        "inputs": ["jurisdiction:US", "euRegion:full", "mechanism:SCC"]
+        "rulesVersion": "1.1.0",
+        "inputs": ["jurisdiction:US", "euRegion:full", "mechanism:SCC"],
+        "additionalSafeguardsRequired": true
       },
       "severity": "warning",
       "confidence": "medium",
@@ -104,7 +127,10 @@
       "remediation": {
         "summary": "Check which region this project is configured to use. EU Cloud coverage is recorded as full.",
         "links": [
-          { "label": "PostHog data regions", "url": "https://posthog.com/docs/data/regions" }
+          {
+            "label": "PostHog data regions",
+            "url": "https://posthog.com/docs/data/regions"
+          }
         ]
       },
       "suppressed": true,
@@ -211,8 +237,15 @@
       "suppression": null
     }
   ],
-  "unmatched": { "hosts": ["telemetry.acme.io"], "packages": ["some-internal-sdk"] },
+  "unmatched": {
+    "hosts": ["telemetry.acme.io"],
+    "packages": ["some-internal-sdk"]
+  },
   "errors": [
-    { "file": "src/legacy.js", "message": "parse error at line 3; file skipped", "fatal": false }
+    {
+      "file": "src/legacy.js",
+      "message": "parse error at line 3; file skipped",
+      "fatal": false
+    }
   ]
 }
