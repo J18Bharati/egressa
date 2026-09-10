@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeFile } from './index.js';
+import { clientConstructorSinks } from './sinks.js';
 
 /**
  * The golden table.
@@ -208,9 +209,32 @@ const DOES_NOT_RESOLVE: Case[] = [
   {
     name: 'identifier reassigned with let',
     code: `let base = 'https://api.stripe.com';\nbase = pickHost();\nfetch(base);`,
-    // Known limitation: reassignment is not tracked. Resolving here would be a
-    // confident wrong answer, which is worse than declining.
-    host: 'api.stripe.com',
+    // The declared value is stale by the time the call runs, so the analyzer
+    // declines rather than reporting the host it was initialised with.
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'name shadowed in a nested scope',
+    code:
+      `const B = 'https://one.example.com/x';\nfetch(B);\n` +
+      `function z() { const B = 'https://two.example.com/x'; return B; }`,
+    // Binding collection is keyed on the name alone. Two declarations of one
+    // name means the analyzer cannot say which the call site reads.
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'identifier used before it is declared',
+    code: `fetch(C);\nconst C = 'https://later.example.com/x';`,
+    host: null,
+    reason: 'used before it is declared',
+  },
+  {
+    name: 'identifier declared only inside an unrelated function',
+    code: `function a() { const D = 'https://inner.example.com/x'; }\nfetch(D);`,
+    host: null,
+    reason: 'not known statically',
   },
   {
     name: 'client created with no base URL',
@@ -258,6 +282,58 @@ const NO_CALL_SITE: Case[] = [
     noHit: true,
   },
 ];
+
+describe('golden table: knowledge base client constructors', () => {
+  // Sinks derived from `aliases.clientConstructors`. A vendor SDK's own
+  // initialiser is the only place a configured region appears in source.
+  const sinks = clientConstructorSinks([
+    { module: 'posthog-js', export: 'default', hostOption: 'api_host' },
+    { module: '@sentry/node', export: 'init', hostOption: 'dsn' },
+    { module: '@supabase/supabase-js', export: 'createClient', hostOption: null },
+  ]);
+
+  const hosts = (code: string) => analyzeFile(code, 'input.ts', sinks).hits.map((h) => h.host);
+
+  it('reads a region from a default-export initialiser', () => {
+    expect(hosts("posthog.init(KEY, { api_host: 'https://eu.i.posthog.com' });")).toEqual([
+      'eu.i.posthog.com',
+    ]);
+  });
+
+  it("does not let one vendor's option name shadow another's", () => {
+    // Both PostHog and Sentry initialise through `init`. Whichever sink sorts
+    // first must not consume the call and resolve nothing.
+    expect(hosts("Sentry.init({ dsn: 'https://abc@o1.ingest.sentry.io/2' });")).toEqual([
+      'o1.ingest.sentry.io',
+    ]);
+  });
+
+  it('reads a positional project URL', () => {
+    expect(hosts("createClient('https://abcdefghij.supabase.co', KEY);")).toEqual([
+      'abcdefghij.supabase.co',
+    ]);
+  });
+
+  it('never reports a credential argument as a destination', () => {
+    // The key sits at argument 0 and resolves to nothing. Reporting it as
+    // "host supplied by environment variable POSTHOG_KEY" would name a secret
+    // as though it were a recipient.
+    const { hits } = analyzeFile(
+      'posthog.init(process.env.POSTHOG_KEY, { autocapture: true });',
+      'input.ts',
+      sinks,
+    );
+    expect(hits).toEqual([]);
+  });
+
+  it('still refuses a bare URL passed to an arbitrary function', () => {
+    // The catch-all sink reads config objects only, so this stays a non-sink
+    // even with knowledge base constructors loaded.
+    expect(
+      analyzeFile("logger.info('https://api.stripe.com/v1');", 'input.ts', sinks).hits,
+    ).toEqual([]);
+  });
+});
 
 describe('golden table: hosts that must resolve', () => {
   for (const testCase of RESOLVES) {

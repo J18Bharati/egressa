@@ -56,19 +56,35 @@ Following imports means resolving the module graph, which wants `node_modules` o
 offline, works-on-a-fresh-clone property is worth more than the recall. A whole-program constant
 table keyed on resolved relative specifiers is the planned fix.
 
-### Reassignment and computed access
+### Reassignment, shadowing and scope
 
-`let` reassignment is not tracked, and neither is computed member access, array `join`, `eval`, or a
-dynamically `import()`ed SDK.
+Binding collection is keyed on the bare name and has no scope chain. Rather than guess which
+declaration a call site reads, the analyzer refuses in four situations, each with its own reason
+string:
 
 ```js
 let base = 'https://api.stripe.com';
 base = pickHost();
-fetch(base);       // resolves to api.stripe.com -- may be wrong
+fetch(base);       // "base is reassigned after it is declared"
+
+const B = 'https://one.example.com/x';
+fetch(B);          // "B is declared more than once in this file"
+function z() { const B = 'https://two.example.com/x'; }
+
+fetch(C);          // "C is used before it is declared"
+const C = 'https://later.example.com/x';
+
+function a() { const D = 'https://inner.example.com/x'; }
+fetch(D);          // "value of D is not known statically"
 ```
 
-This is the one case in the golden table where the analyzer produces a **possibly incorrect**
-answer rather than declining. It is recorded there explicitly so the behaviour is visible.
+Only module-scope declarations are collected, and only those above the call. The cost is recall on
+files that reuse a name; the benefit is that no shadowed or stale binding can produce a confident
+wrong host. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
+also untracked and unresolved.
+
+There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
+answer rather than declining.
 
 ### Constant chains deeper than three steps
 
