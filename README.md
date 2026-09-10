@@ -37,7 +37,9 @@ Read this before trusting a clean scan.
 - **Runtime-configured destinations.** A host that arrives from an environment variable is reported
   as `transfer/unresolved-egress`, naming the variable. Egressa never guesses a host.
 - **Vendors not in the knowledge base**, reported as `transfer/unknown-vendor-egress`. The knowledge
-  base is a curated seed set, not a census.
+  base is a curated seed set of 15 vendors, not a census. The transfer triage skill will research an
+  unknown vendor from primary sources and draft a knowledge base request; it will not research an
+  unresolved *host*, because that answer is in your deployment configuration rather than on the web.
 - **Non-JavaScript surfaces** — tag managers, CSP headers, native mobile, infrastructure config.
 - **Call sites, when the native parser is unavailable** on the platform. The scan falls back to
   dependency manifests alone and says so (`engine.degraded`). A vendor called by URL with no SDK
@@ -55,7 +57,7 @@ One engine. All of these consume the same versioned findings schema.
 | **CLI** | `egressa scan .` — human, JSON, SARIF or markdown output. Not on npm yet; build from a checkout |
 | **GitHub Action** | `uses: egressa-dev/egressa@v1` — findings appear as PR annotations via code scanning |
 | **MCP server** | `claude mcp add egressa -- npx -y @egressa/mcp@latest` — once published; see [docs/mcp.md](docs/mcp.md) |
-| **Transfer triage skill** | Triages the findings a scanner cannot judge alone — see [skill/egressa](skill/egressa/SKILL.md) |
+| **Transfer triage skill** | Triages the findings a scanner cannot judge alone, and researches vendors the knowledge base does not know — see [skill/egressa](skill/egressa/SKILL.md) |
 | **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
 
 | **Plugin** | `/plugin marketplace add egressa-dev/egressa` then `/plugin install egressa@egressa` — installs both skills and the write-time hook in one step |

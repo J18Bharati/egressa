@@ -1,7 +1,7 @@
 ---
 name: egressa
 description: Use when checking where a codebase sends personal data - GDPR data transfer questions, third-party vendors and SDKs, data egress, EU-US adequacy or Data Privacy Framework exposure, sub-processors, DPAs, cross-border transfers, or "what breaks if adequacy falls".
-allowed-tools: [Bash, Read, Grep, Glob, Write, Edit]
+allowed-tools: [Bash, Read, Grep, Glob, Write, Edit, WebSearch, WebFetch]
 ---
 
 # Transfer exposure review
@@ -63,8 +63,14 @@ Work through the findings in this order:
    region this project uses" a concrete next step. Note the `scope` — `partial` means some data
    stays outside the EU regardless.
 
-5. **Read the `unmatched` block.** Hosts and packages there have no knowledge base entry, so no
-   jurisdiction can be reported. Offer to open a vendor request issue (see below).
+5. **Read the `unmatched` block, then research it.** Hosts and packages there have no knowledge
+   base entry, so the scan reports no jurisdiction for them. That is a gap you can close: the host
+   is already resolved, so who operates it and where they process is a researchable fact. Follow
+   `references/researching-an-unknown-vendor.md`, which also says when not to.
+
+   The one case that is never researchable is `transfer/unresolved-egress`. There the destination
+   itself is unknown, and the answer lives in the user's deployment configuration rather than on
+   the web. Ask; do not search.
 
 See `references/interpreting-findings.md` for the full triage procedure and
 `references/rules.md` for what each rule id means.
@@ -90,9 +96,14 @@ reason naming what was checked and by whom; "not applicable" helps nobody in six
 
 ## Growing the knowledge base
 
-If `unmatched.hosts` or `unmatched.packages` is non-empty, offer to file a vendor request with the
-host and the file it appeared in. The project has no telemetry, so this loop is the only way
-coverage improves.
+If `unmatched.hosts` or `unmatched.packages` is non-empty, research it per
+`references/researching-an-unknown-vendor.md`, then offer to file a vendor request carrying the
+sources you found rather than just the host name. The project has no telemetry, so this loop is the
+only way coverage improves.
+
+Research answers the current question; it does not become knowledge base data. Entries in `kb/` are
+clean-room authored and reviewed under `kb/PROVENANCE.md` and `kb/KB_POLICY.md`, and live findings
+from one conversation have not been through either. Never write to `kb/vendors/`.
 
 ## Before you write the summary
 
