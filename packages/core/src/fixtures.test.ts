@@ -87,3 +87,40 @@ describe('determinism and performance guards', () => {
     expect(run('nextjs-analytics-heavy').scan.durationMs).toBeLessThan(10_000);
   });
 });
+
+describe('fixture: modern-solo-stack', () => {
+  const result = run('modern-solo-stack');
+  const find = (id: string) => result.findings.find((f) => f.vendor?.id === id);
+
+  it('reads a configured region out of a vendor SDK initialiser', () => {
+    // posthog.init(KEY, { api_host: 'https://eu.i.posthog.com' }). Without the
+    // knowledge base client constructors this is a dependency signal only, and
+    // which PostHog cloud the project uses is invisible.
+    expect(find('posthog')?.evidence.some((e) => e.matchedOn === 'eu.i.posthog.com')).toBe(true);
+  });
+
+  it('matches a project subdomain through the suffix trie', () => {
+    expect(find('supabase')?.evidence.some((e) => e.matchedOn === 'abcdefghij.supabase.co')).toBe(
+      true,
+    );
+  });
+
+  it('spreads one repository across more than one exposure rule', () => {
+    // A stack that all landed on one rule would not exercise the rule table.
+    const rules = new Set(result.findings.map((f) => f.ruleId));
+    expect(rules.size).toBeGreaterThan(2);
+  });
+
+  it('reports a vendor outside the adequacy list as a third-country transfer', () => {
+    // Supabase Pte. Ltd is Singapore, which has no adequacy decision.
+    expect(find('supabase')?.exposure?.thirdCountryTransfer).toBe(true);
+    expect(find('supabase')?.exposure?.additionalSafeguardsRequired).toBe(true);
+  });
+
+  it('leaves a customer-domain vendor host unattributed rather than guessing', () => {
+    // Clerk's frontend API is served from the customer's own domain, so no host
+    // pattern can match it. The package alias still identifies the vendor.
+    expect(result.unmatched.hosts).toContain('clerk.example.com');
+    expect(find('clerk')).toBeDefined();
+  });
+});
