@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { loadKnowledgeBase } from '@egressa/kb';
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -113,13 +113,19 @@ describe('scan: options', () => {
 
   it('reports the knowledge base version and adequacy date for auditability', () => {
     const result = scan({ ...base, root });
-    expect(result.kb.version).toBe('2026.09.01');
+    // Read from kb/ rather than pinned: the version moves whenever the data
+    // does, and asserting a literal here only ever fails for that reason.
+    expect(result.kb.version).toBe(readFileSync('kb/kb.version', 'utf8').trim());
     expect(result.kb.adequacyStatusAsOf).toBe('2026-09-06');
-    expect(result.kb.entryCount).toBe(5);
+    expect(result.kb.entryCount).toBe(
+      readdirSync('kb/vendors').filter((f) => f.endsWith('.json')).length,
+    );
   });
 
   it('reports no stale entries today and all of them a year on', () => {
     expect(scan({ ...base, root }).kb.staleEntryCount).toBe(0);
-    expect(scan({ ...base, root, now: new Date('2027-09-06') }).kb.staleEntryCount).toBe(5);
+    // A year on, every entry is past the 180-day threshold, whatever the count.
+    const entries = readdirSync('kb/vendors').filter((f) => f.endsWith('.json')).length;
+    expect(scan({ ...base, root, now: new Date('2027-09-06') }).kb.staleEntryCount).toBe(entries);
   });
 });

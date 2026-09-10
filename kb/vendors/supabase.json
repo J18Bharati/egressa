@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "supabase",
+  "name": "Supabase Pte. Ltd",
+  "product": "Supabase platform",
+  "category": "database",
+  "homepage": "https://supabase.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@supabase/supabase-js", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@supabase/auth-js", "kind": "official-sdk", "detectTransitive": true },
+        { "name": "@supabase/postgrest-js", "kind": "official-sdk", "detectTransitive": true },
+        { "name": "@supabase/realtime-js", "kind": "official-sdk", "detectTransitive": true },
+        { "name": "@supabase/ssr", "kind": "framework-integration", "detectTransitive": false },
+        {
+          "name": "@supabase/auth-helpers-nextjs",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "supabase.co",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Each project's API is exposed at https://<project_ref>.supabase.co, documented for the REST API as https://<project_ref>.supabase.co/rest/v1/. The subdomain identifies the project, not the region, so the host alone does not say where the project is hosted."
+      },
+      {
+        "pattern": "api.supabase.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Host of the Supabase Management API, used for account and project administration rather than project data."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@supabase/supabase-js", "export": "createClient", "hostOption": null }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "SG",
+        "role": "primary",
+        "note": "Supabase Pte. Ltd, 65 Chulia Street #38-02/03, OCBC Centre, Singapore 049513, is the contracting entity named in the Data Processing Addendum."
+      },
+      {
+        "country": "EEA",
+        "role": "primary",
+        "note": "A project whose region is set to an EEA AWS region stores its primary project data there. The documented European options include eu-west-1 (Ireland), eu-west-3 (Paris), eu-central-1 (Frankfurt) and eu-north-1 (Stockholm)."
+      },
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "A project whose region is set to a United States AWS region stores its primary project data there. Region is a per-project choice, so one account can hold projects in several countries."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://supabase.com/docs/guides/platform/regions",
+      "notes": "Region is selected per project at project creation, and Supabase states that the region chosen also determines where the project's primary data is stored. The European options documented are eu-west-1 (Ireland), eu-west-2 (London), eu-west-3 (Paris), eu-central-1 (Frankfurt), eu-central-2 (Zurich) and eu-north-1 (Stockholm); of these, London and Zurich are outside the EEA. A general Europe region is also offered, and Supabase states that general regions deploy to an available AWS region within the broader area, which may not match a specific jurisdiction, and are not supported for read replicas or for management through the API, so an exact AWS region is what pins a project to one country. What the region setting does not cover was not established: the pages checked do not state where the dashboard, the account and organisation records, or the platform's own logs and telemetry are held, so this entry records no claim about them, and the region setting is marked partial for that reason rather than because a specific exclusion was documented."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://supabase.com/legal/dpa",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://supabase.com/legal/customer-resources/subprocessor-list",
+      "listType": "pdf",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "dpfCertified": false,
+        "url": "https://supabase.com/legal/dpa",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Whatever the application writes to the project's Postgres database, Storage buckets and Auth user records. Supabase's customers determine what that is."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "Supabase Auth issues a user identifier that appears in the access token and in application tables that reference it."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Stored in the Auth user record when an email-based sign-in method is used."
+    },
+    { "category": "ip_address", "typical": false }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@supabase/supabase-js",
+      "option": "auth.persistSession",
+      "defaultValue": true,
+      "effect": "The session, which carries the access token and the refresh token, is written to the browser's local storage, where it is readable by any script running on the same origin and survives the tab being closed. Supabase states the default behaviour when not using SSR is to store this information in local storage.",
+      "sourceUrl": "https://supabase.com/docs/guides/auth/server-side/advanced-guide",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@supabase/ssr",
+      "option": "auth.flowType",
+      "defaultValue": "pkce",
+      "effect": "Clients created through @supabase/ssr use the PKCE flow and are configured to save and retrieve session information in cookies instead of local storage, which sends the session with every request to the cookie's domain.",
+      "sourceUrl": "https://supabase.com/docs/guides/auth/server-side/advanced-guide",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://supabase.com/legal/dpa",
+      "title": "Supabase Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/legal/customer-resources/subprocessor-list",
+      "title": "Supabase sub-processor list",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/docs/guides/platform/regions",
+      "title": "Supabase project regions",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/docs/guides/api",
+      "title": "Supabase Data API, project REST endpoint format",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/docs/reference/api/introduction",
+      "title": "Supabase Management API reference",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/docs/guides/auth/server-side/advanced-guide",
+      "title": "Supabase server-side auth advanced guide",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://supabase.com/docs/reference/javascript/initializing",
+      "title": "supabase-js createClient reference",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "The contracting entity is Singaporean, which is a separate question from where a project's data sits: the Addendum names Supabase Pte. Ltd of Singapore, while the project region is an AWS region the customer picks. Singapore has no European Commission adequacy decision, and the Addendum accordingly names the 2021 EU Standard Contractual Clauses and the UK Approved Addendum version B.1.0 as the transfer mechanisms, with 30 days' notice before sub-processor changes and an email subscription for those notices. No Data Privacy Framework certification is recorded: a search of the Data Privacy Framework participant registry for Supabase returned no matching record on the date checked, and the Addendum does not mention the framework. The registry admits only organisations subject to the jurisdiction of the FTC or the Department of Transportation, which the Singapore entity would not be. Six npm package names were confirmed individually on the registry; @supabase/auth-js, @supabase/postgrest-js and @supabase/realtime-js are marked detectTransitive because @supabase/supabase-js depends on them, so their presence in a lockfile does not by itself indicate a direct integration. hostOption is null for createClient because the project URL is its first positional argument rather than a named option."
+}

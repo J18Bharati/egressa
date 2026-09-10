@@ -1,0 +1,211 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "vercel",
+  "name": "Vercel Inc.",
+  "product": "Vercel platform, Web Analytics and Speed Insights",
+  "category": "hosting",
+  "homepage": "https://vercel.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "vercel",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vercel/analytics",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vercel/speed-insights",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vercel/functions",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vercel/og",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.vercel.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base host of the Vercel REST API, as written in the REST API reference request examples."
+      },
+      {
+        "pattern": "cdn.vercel-insights.com",
+        "match": "exact",
+        "purpose": "cdn",
+        "note": "Host of the Web Analytics debug script documented for plain HTML pages, https://cdn.vercel-insights.com/v1/script.debug.js. The production script and the view and event endpoints are served from the deployment's own domain."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Vercel Inc., a Delaware corporation, is the contracting entity named in the Data Processing Addendum. Vercel Functions execute in Washington, D.C. (iad1) for all new projects unless another region is configured."
+      },
+      {
+        "country": "EEA",
+        "role": "support",
+        "note": "Function regions can be set per project and per function; the region list includes European identifiers such as fra1 (Frankfurt), cdg1 (Paris), dub1 (Dublin) and arn1 (Stockholm)."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://vercel.com/docs/functions/configuring-functions/region",
+      "notes": "The region setting documented here is a compute-placement setting for Vercel Functions, set through the regions key in vercel.json, the dashboard, or the CLI --regions flag, and overridable per function through the functions property. The documented default for all new projects is iad1, Washington, D.C. The number of regions a project may use is limited by plan: one on Hobby, five on Pro, all on Enterprise. Vercel states that Routing Middleware is deployed to all regions by default regardless of the project's region settings, and that static content is cached in the CDN so that it is served from the region closest to the visitor. The Web Analytics and Speed Insights pages checked describe no region setting for where those data points are stored, so this entry records no claim about them."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://vercel.com/legal/dpa",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://security.vercel.com",
+      "listType": "page",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/6847",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://vercel.com/legal/dpa",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "usage_telemetry",
+      "typical": true
+    },
+    {
+      "category": "location",
+      "typical": true,
+      "note": "Web Analytics stores a geolocation value with each data point, documented with the example US, California, San Francisco; Speed Insights stores an ISO 3166-1 alpha-2 country."
+    },
+    {
+      "category": "cookie_id",
+      "typical": false,
+      "note": "Vercel documents Web Analytics as using no third-party cookies; end users are identified by a hash created from the incoming request."
+    },
+    {
+      "category": "ip_address",
+      "typical": false,
+      "note": "Vercel documents that the recording of Web Analytics data points is not tied to or associated with any individual, customer, or IP address."
+    },
+    {
+      "category": "content",
+      "typical": false,
+      "note": "Request URLs and query parameters are stored with each Web Analytics data point; Vercel documents that these can carry application data and provides beforeSend for redaction."
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@vercel/analytics",
+      "option": "beforeSend",
+      "defaultValue": null,
+      "effect": "Page view URLs, dynamic paths and filtered query parameters are sent as collected; no redaction is applied unless a beforeSend function is supplied, which Vercel documents as the way to modify or drop events.",
+      "sourceUrl": "https://vercel.com/docs/analytics/privacy-policy",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@vercel/analytics",
+      "option": "scriptSrc",
+      "defaultValue": "/<unique-path>/script.js",
+      "effect": "Vercel supplies the script source and the view and event endpoints at build time as paths on the deployment's own domain, so requests are first-party rather than to a separate analytics host.",
+      "appliesFrom": "2.x",
+      "sourceUrl": "https://vercel.com/docs/analytics/package",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@vercel/analytics",
+      "option": "debug",
+      "defaultValue": "enabled when NODE_ENV is development or test",
+      "effect": "Analytics events are written to the browser console in development and test builds unless debug is set to false; VERCEL_WEB_ANALYTICS_DISABLE_LOGS turns off the server-side event logs.",
+      "sourceUrl": "https://vercel.com/docs/analytics/package",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://vercel.com/legal/dpa",
+      "title": "Vercel Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/analytics/privacy-policy",
+      "title": "Vercel Web Analytics privacy and compliance",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/speed-insights/privacy-policy",
+      "title": "Vercel Speed Insights privacy and compliance",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/analytics/package",
+      "title": "Advanced Web Analytics config with @vercel/analytics",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/analytics/troubleshooting",
+      "title": "Vercel Web Analytics troubleshooting",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/functions/configuring-functions/region",
+      "title": "Configuring regions for Vercel Functions",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/docs/rest-api/access-groups/reads-an-access-group",
+      "title": "Vercel REST API reference, request example showing api.vercel.com",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://vercel.com/kb/guide/is-vercel-certified-under-dpf",
+      "title": "Is Vercel certified under DPF?",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/6847",
+      "title": "Data Privacy Framework participant record 6847, Vercel Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Three products sit behind one entry and behave differently. The hosting platform receives every request to a deployment, and its function region is configurable. Vercel Web Analytics is documented as using no third-party cookies: end users are identified by a hash created from the incoming request, and Vercel states the lifespan of a visitor session is not stored permanently and is discarded after 24 hours. The pages checked describe that 24-hour discard rather than a daily rotation of the hash itself, so this entry states what the vendor states and no more. Speed Insights is documented separately and stores a country code rather than a city-level geolocation. From version 2 of @vercel/analytics and @vercel/speed-insights, Vercel generates a random seed at build time and serves the script and the intake endpoints from paths on the deployment's own domain, so ordinary use produces no request to a third-party analytics host and there is no host pattern for detection to match; the documented cdn.vercel-insights.com host appears only in the plain-HTML debug script. Data Privacy Framework participant record 6847 was read from the registry's own participant service: legal name Vercel Inc., Covina, CA, with EU-US Certification, Swiss-US Certification and UK Extension Certification each showing public status Active, EU-US and Swiss-US installed 2019-06-20 and the UK Extension 2024-05-06, all with a usage end date of 2027-04-29. The three are separate certifications. Vercel's own Data Processing Addendum names the 2021 Standard Contractual Clauses and the UK International Data Transfer Addendum and does not mention the Data Privacy Framework; the certification is asserted on Vercel's knowledge base page and confirmed in the registry. The sub-processor list is referenced by the Addendum as security.vercel.com; the notification mechanism was not stated on the pages checked. Five npm package names were confirmed individually on the registry. The same participant record carries an inactive period on the Swiss-US and EU-US certifications with reason Lapse, running 2022-07-08 to 2024-05-06, before the current active status. Pages published during that window, including archived privacyshield.gov copies, therefore describe Vercel as inactive; the registry service read on 2026-09-10 reports all three certifications active. The certification history is recorded here because dpfCertified is a single boolean and cannot express a status that has changed over time."
+}

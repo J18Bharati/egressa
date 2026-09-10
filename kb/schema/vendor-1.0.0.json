@@ -19,10 +19,22 @@
     "lastVerified"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
-    "name": { "type": "string", "minLength": 1, "description": "Legal entity name where known." },
-    "product": { "type": "string" },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Legal entity name where known."
+    },
+    "product": {
+      "type": "string"
+    },
     "category": {
       "enum": [
         "analytics",
@@ -44,7 +56,10 @@
         "other"
       ]
     },
-    "homepage": { "type": "string", "pattern": "^https://" },
+    "homepage": {
+      "type": "string",
+      "pattern": "^https://"
+    },
     "aliases": {
       "type": "object",
       "additionalProperties": false,
@@ -55,11 +70,26 @@
           "additionalProperties": false,
           "description": "Keyed by ecosystem so a new language is a data addition, not a schema change.",
           "properties": {
-            "npm": { "type": "array", "items": { "$ref": "#/$defs/packageAlias" } },
-            "pypi": { "type": "array", "items": { "$ref": "#/$defs/packageAlias" } }
+            "npm": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/packageAlias"
+              }
+            },
+            "pypi": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/packageAlias"
+              }
+            }
           }
         },
-        "hosts": { "type": "array", "items": { "$ref": "#/$defs/hostAlias" } },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hostAlias"
+          }
+        },
         "clientConstructors": {
           "type": "array",
           "items": {
@@ -67,9 +97,22 @@
             "additionalProperties": false,
             "required": ["module"],
             "properties": {
-              "module": { "type": "string" },
-              "export": { "type": "string" },
-              "hostOption": { "oneOf": [{ "type": "null" }, { "type": "string" }] }
+              "module": {
+                "type": "string"
+              },
+              "export": {
+                "type": "string"
+              },
+              "hostOption": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
             }
           }
         }
@@ -88,9 +131,16 @@
             "additionalProperties": false,
             "required": ["country", "role"],
             "properties": {
-              "country": { "type": "string", "pattern": "^([A-Z]{2}|EEA)$" },
-              "role": { "enum": ["primary", "support", "backup", "cdn"] },
-              "note": { "type": "string" }
+              "country": {
+                "type": "string",
+                "pattern": "^([A-Z]{2}|EEA)$"
+              },
+              "role": {
+                "enum": ["primary", "support", "backup", "cdn"]
+              },
+              "note": {
+                "type": "string"
+              }
             }
           }
         },
@@ -99,16 +149,31 @@
           "additionalProperties": false,
           "required": ["available"],
           "properties": {
-            "available": { "type": "boolean" },
+            "available": {
+              "type": "boolean"
+            },
             "scope": {
               "enum": ["full", "partial", "product-specific"],
               "description": "Required when available is true. EU regions are usually partial; a bare boolean overstates coverage."
             },
-            "docUrl": { "type": "string", "pattern": "^https://" },
-            "notes": { "type": "string" }
+            "docUrl": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "notes": {
+              "type": "string"
+            }
           },
-          "if": { "properties": { "available": { "const": true } } },
-          "then": { "required": ["available", "scope", "docUrl"] }
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["available", "scope", "docUrl"]
+          }
         }
       }
     },
@@ -122,24 +187,46 @@
           "additionalProperties": false,
           "required": ["available"],
           "properties": {
-            "available": { "type": "boolean" },
-            "url": { "type": "string", "pattern": "^https://" },
+            "available": {
+              "type": "boolean"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
             "type": {
               "enum": ["click-through", "incorporated-by-reference", "negotiated", "unknown"]
             },
-            "lastChecked": { "$ref": "#/$defs/isoDate" }
+            "lastChecked": {
+              "$ref": "#/$defs/isoDate"
+            }
           },
-          "if": { "properties": { "available": { "const": true } } },
-          "then": { "required": ["available", "url"] }
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["available", "url"]
+          }
         },
         "subprocessors": {
           "type": "object",
           "additionalProperties": false,
           "required": ["url"],
           "properties": {
-            "url": { "type": "string", "pattern": "^https://" },
-            "listType": { "enum": ["page", "pdf", "json", "unknown"] },
-            "notifications": { "enum": ["email-subscribe", "rss", "page-only", "none", "unknown"] }
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "listType": {
+              "enum": ["page", "pdf", "json", "unknown"]
+            },
+            "notifications": {
+              "enum": ["email-subscribe", "rss", "page-only", "none", "unknown"]
+            }
           }
         },
         "transferMechanisms": {
@@ -149,10 +236,19 @@
             "additionalProperties": false,
             "required": ["mechanism"],
             "properties": {
-              "mechanism": { "enum": ["DPF", "SCC", "BCR", "adequacy", "derogation", "none"] },
-              "dpfCertified": { "type": "boolean" },
-              "url": { "type": "string", "pattern": "^https://" },
-              "lastChecked": { "$ref": "#/$defs/isoDate" }
+              "mechanism": {
+                "enum": ["DPF", "SCC", "BCR", "adequacy", "derogation", "none"]
+              },
+              "dpfCertified": {
+                "type": "boolean"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              "lastChecked": {
+                "$ref": "#/$defs/isoDate"
+              }
             }
           }
         }
@@ -184,8 +280,12 @@
               "session_recording"
             ]
           },
-          "typical": { "type": "boolean" },
-          "note": { "type": "string" }
+          "typical": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
@@ -197,42 +297,116 @@
         "additionalProperties": false,
         "required": ["url", "title", "publisher", "accessedAt"],
         "properties": {
-          "url": { "type": "string", "pattern": "^https://" },
-          "title": { "type": "string" },
-          "publisher": { "enum": ["vendor", "regulator", "other"] },
-          "accessedAt": { "$ref": "#/$defs/isoDate" }
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publisher": {
+            "enum": ["vendor", "regulator", "other"]
+          },
+          "accessedAt": {
+            "$ref": "#/$defs/isoDate"
+          }
         }
       }
     },
-    "lastVerified": { "$ref": "#/$defs/isoDate" },
-    "verifiedBy": { "type": "string" },
+    "lastVerified": {
+      "$ref": "#/$defs/isoDate"
+    },
+    "verifiedBy": {
+      "type": "string"
+    },
     "disputed": {
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["issueUrl", "raisedAt", "summary"],
           "properties": {
-            "issueUrl": { "type": "string", "pattern": "^https://" },
-            "raisedAt": { "$ref": "#/$defs/isoDate" },
-            "summary": { "type": "string" }
+            "issueUrl": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "raisedAt": {
+              "$ref": "#/$defs/isoDate"
+            },
+            "summary": {
+              "type": "string"
+            }
           }
         }
       ]
     },
-    "notes": { "type": "string", "description": "Neutral, factual prose only. No adjectives." }
+    "notes": {
+      "type": "string",
+      "description": "Neutral, factual prose only. No adjectives."
+    },
+    "sdkDefaults": {
+      "description": "Privacy-relevant behaviour the SDK applies when the option is not set. Facts about a shipped default, each with the vendor page that documents it. Nothing here is evaluative: whether a default matters is computed elsewhere, and no field records an opinion about it.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["option", "defaultValue", "effect", "sourceUrl", "lastChecked"],
+        "properties": {
+          "package": {
+            "type": "string",
+            "description": "Package the option belongs to, when the vendor ships more than one SDK."
+          },
+          "option": {
+            "type": "string",
+            "description": "Option path as written in the SDK, e.g. dom.inputSanitizer."
+          },
+          "defaultValue": {
+            "type": ["string", "boolean", "number", "null"],
+            "description": "The documented default, verbatim."
+          },
+          "effect": {
+            "type": "string",
+            "description": "What that default does, stated factually and without evaluation."
+          },
+          "appliesFrom": {
+            "type": "string",
+            "description": "SDK version range the default is documented for, when the vendor states one."
+          },
+          "sourceUrl": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "lastChecked": {
+            "$ref": "#/$defs/isoDate"
+          }
+        }
+      }
+    }
   },
   "$defs": {
-    "isoDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "isoDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
     "packageAlias": {
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "kind"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["official-sdk", "wrapper", "plugin", "framework-integration"] },
-        "detectTransitive": { "type": "boolean", "default": false }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": ["official-sdk", "wrapper", "plugin", "framework-integration"]
+        },
+        "detectTransitive": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "hostAlias": {
@@ -240,10 +414,19 @@
       "additionalProperties": false,
       "required": ["pattern", "match", "purpose"],
       "properties": {
-        "pattern": { "type": "string", "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$" },
-        "match": { "enum": ["exact", "suffix"] },
-        "purpose": { "enum": ["api", "browser-sdk", "ingest", "cdn", "auth", "other"] },
-        "note": { "type": "string" }
+        "pattern": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        },
+        "match": {
+          "enum": ["exact", "suffix"]
+        },
+        "purpose": {
+          "enum": ["api", "browser-sdk", "ingest", "cdn", "auth", "other"]
+        },
+        "note": {
+          "type": "string"
+        }
       }
     }
   }

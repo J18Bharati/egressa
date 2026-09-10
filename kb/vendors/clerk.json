@@ -1,0 +1,233 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "clerk",
+  "name": "Clerk, Inc.",
+  "product": "Clerk authentication and user management",
+  "category": "identity",
+  "homepage": "https://clerk.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@clerk/clerk-js", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@clerk/backend", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@clerk/clerk-react",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        { "name": "@clerk/nextjs", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/remix", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/astro", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/nuxt", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/express", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/fastify", "kind": "framework-integration", "detectTransitive": false },
+        {
+          "name": "@clerk/tanstack-react-start",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        { "name": "@clerk/clerk-expo", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@clerk/clerk-sdk-node", "kind": "wrapper", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "clerk.accounts.dev",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Frontend API (FAPI) host for development instances, in the form https://<slug>.clerk.accounts.dev."
+      },
+      {
+        "pattern": "api.clerk.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Backend API (BAPI). Documented as the default value of the createClerkClient apiUrl option."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@clerk/backend", "export": "createClerkClient", "hostOption": "apiUrl" },
+      { "module": "@clerk/nextjs/server", "export": "createClerkClient", "hostOption": "apiUrl" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Clerk, Inc. is registered at 2261 Market Street STE 10607, San Francisco, CA 94114, per its Data Privacy Framework participant record. Clerk's GDPR notice states that Clerk, Inc. is headquartered in the USA and the website is hosted in the USA."
+      },
+      {
+        "country": "US",
+        "role": "support",
+        "note": "Clerk's DPA states that Clerk hosts Personal Data primarily in Google Cloud data centers and Cloudflare, and that Clerk may store and process Customer Personal Data anywhere Clerk or its Sub-processors maintain facilities, subject to clause 5 of that DPA."
+      }
+    ],
+    "euRegion": {
+      "available": false,
+      "notes": "No EU data residency or region-selection option appears on the pages checked on 2026-09-10: clerk.com/legal/dpa, clerk.com/legal/gdpr, clerk.com/legal/subprocessors, and the full Clerk documentation index at clerk.com/docs/llms.txt, which contains no data-residency or region page. This records the absence of a documented option on those pages; it is not a statement by Clerk that no such option exists. The DPA text checked states that Clerk may store and process Customer Personal Data anywhere Clerk or its Sub-processors maintain facilities. Clerk's current sub-processor list is published in its Trust Center at trust.clerk.com rather than on clerk.com/legal/subprocessors, and that Trust Center list was not read during this verification."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://clerk.com/legal/dpa",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://clerk.com/legal/subprocessors",
+      "listType": "page",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/2718",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://clerk.com/legal/dpa",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "email",
+      "typical": true,
+      "note": "Named in Clerk's Data Privacy Framework participant record as data customers store and retrieve through Clerk."
+    },
+    { "category": "name", "typical": true },
+    { "category": "user_id", "typical": true },
+    {
+      "category": "cookie_id",
+      "typical": true,
+      "note": "Clerk sets the __session and __client cookies as part of its session architecture; the documentation states this cannot be disabled."
+    },
+    {
+      "category": "content",
+      "typical": false,
+      "note": "Clerk's Data Privacy Framework participant record describes storage of 'any other arbitrary data our customers wish to collect about their users', which covers user and public metadata written by the application."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": false,
+      "note": "Clerk SDKs send SDK usage telemetry from development instances by default; see sdkDefaults."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://clerk.com/docs/guides/how-clerk-works/overview",
+      "title": "How Clerk works - architecture, Frontend API, client and session tokens",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/docs/guides/how-clerk-works/cookies",
+      "title": "Cookies - how Clerk uses cookies",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/docs/guides/secure/session-options",
+      "title": "Session options - inactivity timeout and maximum lifetime",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/docs/guides/how-clerk-works/security/clerk-telemetry",
+      "title": "Clerk Telemetry",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/docs/reference/backend/overview",
+      "title": "Clerk Backend SDK - createClerkClient options",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/legal/dpa",
+      "title": "Clerk Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/legal/subprocessors",
+      "title": "Clerk Subprocessors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/legal/gdpr",
+      "title": "Clerk supplemental notice for residents of the EEA, Switzerland or the UK",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://clerk.com/legal/dpf",
+      "title": "Clerk Data Privacy Framework Notice",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/2718",
+      "title": "Data Privacy Framework participant record: Clerk, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@clerk/clerk-js",
+      "option": "session token cookie name",
+      "defaultValue": "__session",
+      "effect": "The session token, a Clerk-signed JWT, is stored in a cookie named __session set on the application's own domain. Clerk documents that this cookie is scoped strictly so it cannot be shared across subdomains, and that sending the token across a subdomain boundary requires putting it in a request header instead.",
+      "sourceUrl": "https://clerk.com/docs/guides/how-clerk-works/overview",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@clerk/clerk-js",
+      "option": "client token cookie name",
+      "defaultValue": "__client",
+      "effect": "The long-lived client token is stored in an HttpOnly cookie named __client set on the Frontend API domain (clerk.<your-domain> in production via a CNAME record), not on the application domain. In development instances the equivalent state is carried in a __clerk_db_jwt querystring parameter instead of a cookie.",
+      "sourceUrl": "https://clerk.com/docs/guides/how-clerk-works/overview",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@clerk/clerk-js",
+      "option": "cookie SameSite attribute",
+      "defaultValue": "Lax",
+      "effect": "Clerk documents that it uses the SameSite=Lax setting, so its cookies are sent with top-level navigation but not with other cross-site requests. The cookies page lists __session and __client_uat as the first-party cookies Clerk sets, and states that they are required for Clerk to function and that this cannot be disabled.",
+      "sourceUrl": "https://clerk.com/docs/guides/how-clerk-works/cookies",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "option": "Sessions -> Maximum lifetime (instance setting, not an SDK argument)",
+      "defaultValue": "7 days",
+      "effect": "Enabled with a default value of 7 days for all newly created instances. A session expires after this duration regardless of user activity. Setting a custom maximum lifetime requires a paid plan for production use.",
+      "sourceUrl": "https://clerk.com/docs/guides/secure/session-options",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "option": "Sessions -> Inactivity timeout (instance setting, not an SDK argument)",
+      "defaultValue": false,
+      "effect": "Disabled by default. When disabled, no session expiry is derived from a period of user inactivity; only the maximum lifetime applies.",
+      "sourceUrl": "https://clerk.com/docs/guides/secure/session-options",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@clerk/nextjs",
+      "option": "telemetry",
+      "defaultValue": true,
+      "effect": "Clerk SDKs send usage telemetry unless opted out via CLERK_TELEMETRY_DISABLED=1, NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1, or telemetry={false} on <ClerkProvider>. Clerk documents that this is collected from development instances only, that events carry the SDK name and version, the Clerk version and the instance Publishable Key, and that no information is collected from the application's end users. Server-side SDKs print a one-time notice at development-server start; browser-only SDKs print no runtime notice.",
+      "sourceUrl": "https://clerk.com/docs/guides/how-clerk-works/security/clerk-telemetry",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Legal entity name, address and DPF status come from Clerk, Inc.'s Data Privacy Framework participant record (OrganizationId 2718): Verification Method 'Self-Assessment', with EU-US Certification, UK Extension Certification and SW-US Certification all recorded as PublicStatus 'Active', each installed 2024-02-23 with a UsageEndDate of 2027-06-30. Verification limitation: the participant list at dataprivacyframework.gov renders client-side and returned no readable text to a plain fetch, so the record was read from the JSON API that the published site's own bundle calls (POST https://dpfapi.azurewebsites.net/api/participants and GET .../participants/2718); the human-readable record is at the participant URL cited. In production the Frontend API is served from a subdomain of the customer's own domain (clerk.<your-domain>) set up by CNAME, so no fixed host pattern can match it; only the development host clerk.accounts.dev and the Backend API host api.clerk.com are listed above. The npm scope @clerk/ is not registered as a wildcard alias; twelve package names were confirmed individually on the registry. @clerk/clerk-sdk-node is recorded as a wrapper rather than the current official SDK, whose server-side entry point is @clerk/backend."
+}

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "resend",
+  "name": "Plus Five Five, Inc.",
+  "product": "Resend",
+  "category": "email",
+  "homepage": "https://resend.com",
+  "aliases": {
+    "packages": {
+      "npm": [{ "name": "resend", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      {
+        "pattern": "api.resend.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Sole base URL documented in the Resend API reference. There is no region-specific API host; the sending region is a per-domain setting, not a different endpoint."
+      }
+    ],
+    "clientConstructors": [{ "module": "resend", "export": "Resend", "hostOption": null }]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Registered at 2261 Market Street #5039, San Francisco, CA, per its Data Privacy Framework participant record, which lists the legal name as PLUS FIVE FIVE. Resend's DPA states that 'Customer acknowledges that Company's primary processing operations take place in the United States, and that the transfer of Customer's Personal Data to the United States is necessary for the provision of the Services.'"
+      },
+      {
+        "country": "IE",
+        "role": "support",
+        "note": "Ireland (eu-west-1) is one of four sending regions selectable per domain."
+      },
+      {
+        "country": "BR",
+        "role": "support",
+        "note": "Sao Paulo (sa-east-1) sending region."
+      },
+      {
+        "country": "JP",
+        "role": "support",
+        "note": "Tokyo (ap-northeast-1) sending region."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://resend.com/docs/dashboard/domains/regions",
+      "notes": "The EU option is a sending region, not a storage region, and Resend states the distinction itself. A domain can be added in Ireland (eu-west-1), alongside North Virginia (us-east-1), Sao Paulo (sa-east-1) and Tokyo (ap-northeast-1). Per Resend: the region 'controls where your emails are routed and sent from', while 'All account data, including email metadata, logs, and API records, is stored in the United States'. Resend's GDPR page states that 'Resend stores customer data in the United States, including message content, delivery logs, webhook payloads, and account records', and that the region setting 'does not control where data is stored, and there is no setting today that moves stored data to the EU'. Every sub-processor on Resend's published list is recorded with a USA location."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://resend.com/legal/dpa",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://resend.com/legal/subprocessors",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "url": "https://resend.com/legal/dpa",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/8907",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "email",
+      "typical": true,
+      "note": "Recipient and sender addresses are the primary payload of the send API."
+    },
+    { "category": "name", "typical": true },
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Resend states it stores message content, delivery logs and webhook payloads in the United States."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Delivery events (opens, clicks, bounces) are recorded as logs."
+    },
+    {
+      "category": "ip_address",
+      "typical": false,
+      "note": "Not enumerated on the Resend pages read for this entry; recorded as not typical rather than as absent."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://resend.com/docs/api-reference/introduction",
+      "title": "Resend API Reference - base URL",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://resend.com/docs/dashboard/domains/regions",
+      "title": "Choosing a Region",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://resend.com/security/gdpr",
+      "title": "Resend GDPR - data location, SCCs and sub-processor notice",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://resend.com/legal/dpa",
+      "title": "Resend Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://resend.com/legal/subprocessors",
+      "title": "Resend Subprocessors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/8907",
+      "title": "Data Privacy Framework participant record: PLUS FIVE FIVE (Resend)",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Legal entity: Resend's DPA names the company as Plus Five Five, Inc., operating as Resend; the Data Privacy Framework participant record (OrganizationId 8907) records the legal name as 'PLUS FIVE FIVE' with the public display name 'Resend'. DPF status: Verification Method 'Self-Assessment'; EU-US Certification and UK Extension Certification each carry PublicStatus 'Active - Re-certification under Review', installed 2025-02-20 with a UsageEndDate of 2027-03-03. There is no Swiss-US certification on the record, which matters because the three frameworks are certified separately; a Swiss transfer is not covered by this participation. dpfCertified is recorded true on the strength of the two Active certifications, and Resend's own GDPR page states that 'The SCCs stand on their own and are not conditioned on DPF certification status.' Sub-processors: the list published at resend.com/legal/subprocessors on the access date named 22 sub-processors, every one of them with the location 'USA', including Amazon Web Services (hosting and sending), Vercel (server hosting), PlanetScale and Supabase (database), Cloudflare, Datadog, Stripe, Snowflake, Tinybird and Anthropic. Notification is recorded as email-subscribe because Resend's GDPR page commits to 'at least 14 days' written notice before adding or replacing a sub-processor'; the mechanism by which that notice is delivered is not named on that page. Verification limitation: the dataprivacyframework.gov participant list renders client-side and returned no readable text to a plain fetch, so the record was read from the JSON API that the published site's own bundle calls (POST https://dpfapi.azurewebsites.net/api/participants and GET .../participants/8907); the human-readable record is at the participant URL cited. One npm package, resend, was confirmed on the registry; @resend/node does not exist."
+}

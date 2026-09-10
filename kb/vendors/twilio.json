@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "twilio",
+  "name": "Twilio Inc.",
+  "product": "Twilio Programmable Messaging and Voice",
+  "category": "sms",
+  "homepage": "https://www.twilio.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "twilio", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@twilio/conversations", "kind": "official-sdk", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.twilio.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base URL https://api.twilio.com/2010-04-01 for the Messages resource. Processing takes place in the US1 Region."
+      },
+      {
+        "pattern": "messaging.twilio.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base URL https://messaging.twilio.com/v1 for Messaging Services and related resources."
+      },
+      {
+        "pattern": "pricing.twilio.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base URL https://pricing.twilio.com/v1."
+      },
+      {
+        "pattern": "ie1.twilio.com",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Ireland Region hostnames, of the form api.dublin.ie1.twilio.com. The older api.ie1.twilio.com form is documented as stopping work on 2026-04-28."
+      },
+      {
+        "pattern": "au1.twilio.com",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Australia Region hostnames, of the form api.sydney.au1.twilio.com."
+      }
+    ],
+    "clientConstructors": [{ "module": "twilio", "hostOption": null }]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Twilio Inc., 101 Spear St FL 5, San Francisco, CA 94105, per its Data Privacy Framework participant record. US1 is the default Twilio Region."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "IE1, the Ireland Region, is one of two non-US Regions Twilio documents as having its own data processing location."
+      },
+      {
+        "country": "AU",
+        "role": "primary",
+        "note": "AU1, the Australia Region, is the other."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://www.twilio.com/docs/global-infrastructure/regional-product-and-feature-availability",
+      "notes": "Twilio documents three Regions, US1 (United States, the default), IE1 (Ireland) and AU1 (Australia), and states that Ireland and Australia are the only non-US Regions with their own data processing location; the br1, de1, jp1, sg1 and us2 identifiers that also appear in older hostnames process in US1. It is product-specific rather than account-wide: Twilio states that 'Not all products and features are available in Regions outside of US1' and that 'Regions operate in isolation', so a product not available in IE1 does not work there. On the availability page checked, Programmable Messaging, Programmable Voice (with individual features listed as unsupported), Lookup v2, SendGrid, Studio (marked Private Beta), Conversations (chat only) and Segment are listed for IE1; Verify and Flex are not listed for IE1 on that page. Region selection is expressed in the hostname: api.twilio.com for US1 and api.dublin.ie1.twilio.com for IE1, with the older api.ie1.twilio.com form documented as ceasing to work on 2026-04-28. Twilio also states on the Global Infrastructure page that during the initial phase of the Twilio Regions rollout it does not commit to all data remaining within the selected Region, so region selection and data location are documented as separate questions."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/5394",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "BCR",
+        "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "phone",
+      "typical": true,
+      "note": "The To and From numbers on every Message and Call resource."
+    },
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Message bodies, media attachments and, where recording is enabled, call recordings and transcripts."
+    },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "Twilio's Data Privacy Framework participant record lists 'Device Information and IP Address' among the categories of personal data it processes."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Twilio's Data Privacy Framework participant record lists 'Communications Usage Data' and 'Online Activity Information'."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Reaches Twilio through SendGrid, which is a separate product with its own carve-out in the Data Protection Addendum's BCR clause, rather than through the messaging APIs recorded here."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://www.twilio.com/docs/global-infrastructure",
+      "title": "Twilio Global Infrastructure - Regions US1, IE1 and AU1",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/global-infrastructure/regional-product-and-feature-availability",
+      "title": "Regional product and feature availability",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/global-infrastructure/api-domain-migration-guide",
+      "title": "Twilio API domain migration guide",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/global-infrastructure/edge-locations",
+      "title": "Edge Locations and legacy region-specific API domains",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/messaging/api",
+      "title": "Programmable Messaging API - base URLs",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "title": "Twilio Data Protection Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "title": "Twilio Sub-Processors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5394",
+      "title": "Data Privacy Framework participant record: Twilio Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "notes": "This entry covers Twilio's own communications APIs. Twilio Segment is recorded separately as `segment` because its hosts, SDKs and region model differ. DPF status comes from the Data Privacy Framework participant record for Twilio Inc. (participant 5394): EU-US Certification installed 2016-10-25, Swiss-US Certification installed 2017-08-01 and UK Extension Certification installed 2023-07-31, all with PublicStatus 'Active' and a UsageEndDate of 2027-04-20, Verification Method 'Self-Assessment', with JAMS as the dispute resolution provider and the Federal Trade Commission as the statutory body. The CoveredEntities field of that record names only 'Stytch'. The Data Protection Addendum states an order of precedence across mechanisms rather than a single one: Data Privacy Framework first, then Binding Corporate Rules for what it calls BCR Services (described as all services other than SendGrid and Private Beta services), then Standard Contractual Clauses for EEA, Swiss, Guernsey and Jersey transfers and the UK International Data Transfer Agreement for UK transfers; all three are listed above. On packages: the npm package is `twilio`, published from the twilio/twilio-node repository. The npm name `twilio-node` matches the repository name but is a separate package, self-described as a bug bounty proof-of-concept placeholder, and is deliberately not listed as an alias here. Two things were not confirmed on the pages checked and are recorded as gaps rather than as findings: the availability page did not list Verify or Flex under IE1, which is an absence from that page and not a vendor statement that they are US1-only; and the sub-processor page states that customers may subscribe to notifications of sub-processor changes at twilio.com/en-us/legal/sub-processors/updates without describing the delivery method, so `notifications` is recorded as email-subscribe on the strength of the subscription link alone."
+}

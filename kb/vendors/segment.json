@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "segment",
+  "name": "Twilio Inc.",
+  "product": "Twilio Segment",
+  "category": "analytics",
+  "homepage": "https://segment.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@segment/analytics-next", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@segment/analytics-node", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "analytics-node", "kind": "official-sdk", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "cdn.segment.com",
+        "match": "exact",
+        "purpose": "cdn",
+        "note": "Analytics.js is loaded from https://cdn.segment.com/analytics.js/v1/<write key>/analytics.min.js by the snippet in Segment's quickstart."
+      },
+      {
+        "pattern": "api.segment.io",
+        "match": "exact",
+        "purpose": "ingest",
+        "note": "Default HTTP Tracking API endpoint, https://api.segment.io/v1/ (US West workspaces)."
+      },
+      {
+        "pattern": "events.eu1.segmentapis.com",
+        "match": "exact",
+        "purpose": "ingest",
+        "note": "HTTP Tracking API endpoint for EU West workspaces, https://events.eu1.segmentapis.com/v1/."
+      },
+      {
+        "pattern": "api.segmentapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Segment Public API base URL for US-based workspaces. This is the configuration API, not event ingestion."
+      },
+      {
+        "pattern": "eu1.api.segmentapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Segment Public API base URL for EU-based workspaces."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@segment/analytics-node", "export": "Analytics", "hostOption": "host" },
+      { "module": "analytics-node", "export": "Analytics", "hostOption": "host" },
+      { "module": "@segment/analytics-next", "export": "AnalyticsBrowser", "hostOption": null }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Twilio Inc., 101 Spear St FL 5, San Francisco, CA 94105, per its Data Privacy Framework participant record. Segment states that new workspaces use U.S. infrastructure based in Oregon by default."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "EU West data processing region. Segment states that its EU instance only accepts data through its Dublin-based endpoint."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://www.twilio.com/docs/segment/guides/regional-segment",
+      "notes": "Segment documents a workspace-level data processing region, US West (Oregon) or EU West (Dublin), described as Regional Segment and stated to be available to customers on the Business Tier plan. The region is fixed per workspace and is not a per-call option: Segment states that new workspaces use U.S. infrastructure by default, that 'Only EU workspaces store data exclusively in the EU', that its EU instance only accepts data through its Dublin-based endpoint, and that 'Sources within EU workspaces deliver Segment data to EU-based AWS storage'. Ingestion is region-bound at the hostname level: EU workspaces send to events.eu1.segmentapis.com rather than api.segment.io, and Segment states it rejects data sent to the wrong region as of April 3, 2025. It is partial in three respects recorded on the pages checked. First, Segment states 'Regional Segment is limited to the EU. Expansion of Regional Segment beyond the EU is under evaluation'. Second, the destination catalogue on that page differs between the US and EU regions, so which onward destinations can receive data depends on the region. Third, analytics.js itself is served from cdn.segment.com, which is not region-suffixed on the pages checked. The pages checked do not state where workspace configuration, the Segment app, or Segment's control plane are hosted for an EU workspace, so no claim about them is recorded here."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/5394",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "BCR",
+        "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "cookie_id",
+      "typical": true,
+      "note": "analytics.js persists an anonymousId under the cookie name ajs_anonymous_id, and a userId under ajs_user_id once identify() has been called."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "The userId passed to identify() is the customer's own identifier for the person."
+    },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "Segment states that IP address 'isn't collected by Segment's libraries, but is instead filled in by Segment's servers when it receives a message for client side events only'."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Event names and properties passed to track(), plus context fields analytics.js fills in automatically: page path, referrer, search, title and url, userAgent, locale, timezone, campaign (UTM) parameters and library name and version."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Reaches Segment only when the customer includes it in identify() traits or event properties. Nothing in the default analytics.js configuration collects it."
+    },
+    {
+      "category": "device_id",
+      "typical": false,
+      "note": "The pages checked describe analytics.js persistence in terms of the ajs_anonymous_id and ajs_user_id values only; no separate device identifier is documented for the browser library."
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@segment/analytics-next",
+      "option": "cookie.maxage",
+      "defaultValue": "1 year",
+      "effect": "The ajs_anonymous_id and ajs_user_id cookies are written with a one-year expiry when no cookie options are passed to load().",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "cookie.domain",
+      "defaultValue": "Top-level domain",
+      "effect": "The cookies are set on the top-level domain rather than the exact hostname, so the browser sends them with requests to subdomains of that domain.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "cookie.sameSite",
+      "defaultValue": "Lax",
+      "effect": "The cookies are not sent on cross-site subrequests, and are sent on top-level cross-site navigations.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "cookie.secure",
+      "defaultValue": false,
+      "effect": "The cookies are written without the Secure attribute, so the browser also sends them over plain HTTP requests to the cookie domain.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "cookie.path",
+      "defaultValue": "/",
+      "effect": "The cookies apply to every path on the cookie domain.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "storage.stores",
+      "defaultValue": "['localStorage', 'cookie', 'memory']",
+      "effect": "Segment states that analytics.js uses localStorage as its preferred storage location, with cookies as a fallback when localStorage is not available or not populated. localStorage has no expiry, and Segment states that when a returning visitor's cookie has expired analytics.js looks for an old ID in localStorage and, if one is found, sets it as the user's ID again.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-next",
+      "option": "context.ip",
+      "defaultValue": null,
+      "effect": "Not set by the browser library. Segment states that IP address is filled in by Segment's servers from the request when it receives a client-side event, so an IP address reaches Segment for browser events with no option passed.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/spec/common",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@segment/analytics-node",
+      "option": "host",
+      "defaultValue": "https://api.segment.io",
+      "effect": "Server-side events are sent to the US West ingestion endpoint when host is not set. An EU West workspace requires host to be set explicitly.",
+      "sourceUrl": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/server/node",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://www.twilio.com/docs/segment/guides/regional-segment",
+      "title": "Regional Segment - data processing regions and regional endpoints",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/server/http-api",
+      "title": "Segment HTTP API Source - US and EU tracking endpoints",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/quickstart",
+      "title": "Analytics.js Quickstart - the cdn.segment.com snippet",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/cookie-validity-update",
+      "title": "Client-side persistence in Analytics.js - cookie and storage defaults",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript/identity",
+      "title": "Managing identity in Analytics.js - anonymousId, userId and localStorage recovery",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/spec/common",
+      "title": "Segment Spec: Common Fields - context object and IP address collection",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/server/node",
+      "title": "Analytics for Node.js - host option and EU example",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.segmentapis.com/tag/Getting-Started/",
+      "title": "Segment Public API - base URLs for US and EU workspaces",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "title": "Twilio Data Protection Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "title": "Twilio Sub-Processors (covers Segment; entries name Segment in the Services column)",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5394",
+      "title": "Data Privacy Framework participant record: Twilio Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "notes": "Segment is a Twilio product and shares Twilio's legal surface: the sub-processor list and the Data Protection Addendum are Twilio's, and segment.com/legal/dpa and segment.com/legal/sub-processors both redirect to twilio.com. It is recorded as a separate entry from the `twilio` messaging entry because the hosts, SDKs and region model are different. DPF status is taken from the Data Privacy Framework participant record for Twilio Inc. (participant 5394), which shows EU-US Certification (installed 2016-10-25), Swiss-US Certification (installed 2017-08-01) and UK Extension Certification (installed 2023-07-31), all with PublicStatus 'Active' and a UsageEndDate of 2027-04-20, and Verification Method 'Self-Assessment'. Two gaps are worth stating plainly. First, the CoveredEntities field of that record names only 'Stytch'; Segment.io, Inc. does not appear there, and no separate active DPF participant record for Segment.io, Inc. was located on the pages checked. The basis for recording DPF here is instead the Twilio Data Protection Addendum, which states that Twilio Inc. is self-certified under the EU-US Data Privacy Framework, the UK Extension and the Swiss-US Data Privacy Framework, and which is the addendum that applies to Segment. Second, that addendum also lists Binding Corporate Rules for what it calls BCR Services, described as all services other than SendGrid and Private Beta services, and Standard Contractual Clauses and the UK International Data Transfer Agreement where adequacy does not apply; all three are recorded above because the addendum sets an order of precedence rather than naming a single mechanism. On packages: @segment/analytics-next is the current browser library and @segment/analytics-node the current server library, both published from the segmentio/analytics-next repository. analytics-node is Segment's earlier server library from the segmentio/analytics-node repository; its most recent release, 6.2.0, was published on 2022-08-02, and it carries no npm deprecation marker as of the date checked. Segment's own documentation is internally inconsistent about the EU server endpoint: the HTTP API Source page gives https://events.eu1.segmentapis.com/v1/ for tracking, while the Node.js library page's EU example sets host to https://eu1.api.segmentapis.com, which is the Public API host given in the Segment Public API reference. Both hosts are listed above with the purpose each page documents."
+}

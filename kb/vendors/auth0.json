@@ -1,0 +1,354 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "auth0",
+  "name": "Okta, Inc.",
+  "product": "Auth0 Customer Identity Cloud",
+  "category": "identity",
+  "homepage": "https://auth0.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@auth0/auth0-spa-js", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "auth0", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "auth0-js", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@auth0/auth0-react",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        { "name": "@auth0/auth0-vue", "kind": "framework-integration", "detectTransitive": false },
+        {
+          "name": "@auth0/auth0-angular",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        {
+          "name": "@auth0/nextjs-auth0",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        {
+          "name": "express-openid-connect",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "us.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "United States public-cloud tenant domain, https://{yourAccount}.us.auth0.com."
+      },
+      {
+        "pattern": "eu.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Europe public-cloud tenant domain, https://{yourAccount}.eu.auth0.com."
+      },
+      {
+        "pattern": "au.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Australia public-cloud tenant domain."
+      },
+      {
+        "pattern": "jp.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Japan public-cloud tenant domain."
+      },
+      {
+        "pattern": "ca.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Canada public-cloud tenant domain."
+      },
+      {
+        "pattern": "uk.auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "United Kingdom public-cloud tenant domain."
+      },
+      {
+        "pattern": "cdn.auth0.com",
+        "match": "exact",
+        "purpose": "cdn",
+        "note": "Auth0 documents that tenants created before 11 June 2020 in the United States region use this host; other regions use cdn.[region].auth0.com."
+      },
+      {
+        "pattern": "cdn.eu.auth0.com",
+        "match": "exact",
+        "purpose": "cdn"
+      },
+      {
+        "pattern": "manage.auth0.com",
+        "match": "exact",
+        "purpose": "other",
+        "note": "Auth0 Dashboard, listed as a shared endpoint rather than a per-region one."
+      },
+      {
+        "pattern": "auth0.com",
+        "match": "suffix",
+        "purpose": "auth",
+        "note": "Catch-all for Auth0-hosted tenant and service endpoints. Tenants using an Auth0 custom domain are served from the customer's own domain and are not matched by any pattern here."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@auth0/auth0-spa-js", "export": "createAuth0Client", "hostOption": "domain" },
+      { "module": "@auth0/nextjs-auth0/server", "export": "Auth0Client", "hostOption": "domain" },
+      { "module": "auth0", "export": "ManagementClient", "hostOption": "domain" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Okta, Inc., 100 First Street, 6th Floor, San Francisco, CA, per its Data Privacy Framework participant record. Auth0, LLC and Auth0 International LLC are listed as covered entities on that record."
+      },
+      {
+        "country": "EEA",
+        "role": "support",
+        "note": "Europe is one of the Auth0 Public Cloud localities. Auth0 documents that the locality selected at tenant creation controls the assigned tenant domain and the region where the tenant's data is hosted."
+      },
+      {
+        "country": "AU",
+        "role": "support",
+        "note": "Australia public-cloud locality."
+      },
+      {
+        "country": "JP",
+        "role": "support",
+        "note": "Japan public-cloud locality."
+      },
+      {
+        "country": "CA",
+        "role": "support",
+        "note": "Canada public-cloud locality."
+      },
+      {
+        "country": "GB",
+        "role": "support",
+        "note": "United Kingdom public-cloud locality."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://auth0.com/docs/get-started/auth0-overview/create-tenants",
+      "notes": "The region is chosen once, at tenant creation. Auth0 states that localities 'control the assigned tenant domain and the region where your data will be hosted', so an EU tenant is addressed at {tenant}.eu.auth0.com and its tenant data is hosted in the Europe locality. It is partial in three documented ways. First, Auth0 states that each locality is divided into sub-localities (for example EU-2) and that 'Tenant environments cannot be chosen manually', so the specific sub-region is assigned by Auth0. Second, the public cloud service endpoints page lists per-region hosts (cdn.eu.auth0.com, login.eu.auth0.com, {yourAccount}.guardian.eu.auth0.com) alongside endpoints published without a region segment, including manage.auth0.com, auth0.com and auth0.auth0.com, so the Dashboard is not region-scoped in the way tenant traffic is. Third, which account-level, billing or support data is held outside the selected locality is not stated on any Auth0 page read for this entry; treat that as unverified rather than as a statement that none is. Auth0 also offers a Private Cloud deployment with a separately chosen region, which is a different product from the Public Cloud localities described here."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.okta.com/agreements/",
+      "type": "unknown",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://www.okta.com/trustandcompliance/",
+      "listType": "unknown",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/9734",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "email",
+      "typical": true,
+      "note": "email and email_verified are root fields of the Auth0 user profile."
+    },
+    {
+      "category": "name",
+      "typical": true,
+      "note": "name, given_name, family_name, nickname and username are root fields of the user profile."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "user_id is a root field of the user profile."
+    },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "last_ip is a root field of the Auth0 user profile."
+    },
+    {
+      "category": "phone",
+      "typical": false,
+      "note": "phone_number and phone_verified are root fields of the user profile; they are populated for passwordless and SMS multi-factor connections."
+    },
+    {
+      "category": "content",
+      "typical": false,
+      "note": "user_metadata and app_metadata hold application-supplied attributes. Auth0 documents that metadata is not a secure data store and should not be used for personally identifiable information such as social security or credit card numbers."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://auth0.com/docs/troubleshoot/customer-support/operational-policies/public-cloud-service-endpoints",
+      "title": "Auth0 Public Cloud Service Endpoints",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.com/docs/get-started/auth0-overview/create-tenants",
+      "title": "Create Tenants - localities, sub-localities and tenant domains",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.com/docs/secure/data-privacy-and-compliance/data-processing",
+      "title": "Auth0 Data Processing - data Auth0 possesses, storage and deletion",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.com/docs/secure/data-privacy-and-compliance/gdpr",
+      "title": "Auth0 General Data Protection Regulation documentation",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.com/docs/manage-users/user-accounts/user-profiles/user-profile-structure",
+      "title": "Auth0 User Profile Structure",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.com/legal",
+      "title": "Auth0 legal index, linking to okta.com/agreements and okta.com/trustandcompliance",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://auth0.github.io/auth0-spa-js/interfaces/Auth0ClientOptions.html",
+      "title": "auth0-spa-js Auth0ClientOptions reference",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "title": "@auth0/nextjs-auth0 EXAMPLES.md - session and cookie configuration",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/9734",
+      "title": "Data Privacy Framework participant record: Okta, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.cookie.name",
+      "defaultValue": "__session",
+      "effect": "The encrypted session is stored in a cookie named __session on the application's own domain.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.cookie.sameSite",
+      "defaultValue": "Lax",
+      "effect": "The session cookie is sent with top-level navigation but not with other cross-site requests, unless AUTH0_COOKIE_SAME_SITE sets another value.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.cookie.secure",
+      "defaultValue": false,
+      "effect": "The Secure attribute is not set unless AUTH0_COOKIE_SECURE=true is set, or appBaseUrl is omitted in production, in which case the SDK enforces it.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.cookie.httpOnly",
+      "defaultValue": true,
+      "effect": "The session cookie is not readable from document.cookie. The SDK documents that this attribute is always true and cannot be configured through options or environment variables.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.cookie.domain",
+      "defaultValue": null,
+      "effect": "No Domain attribute is set, so the cookie is sent only to the domain that set it and not to its subdomains. AUTH0_COOKIE_DOMAIN or session.cookie.domain widens it.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.absoluteDuration",
+      "defaultValue": "3 days",
+      "effect": "The session expires 3 days after it is created regardless of activity.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.inactivityDuration",
+      "defaultValue": "1 day",
+      "effect": "The session expires after 1 day without use, within the absolute duration.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/nextjs-auth0",
+      "option": "session.rolling",
+      "defaultValue": true,
+      "effect": "Each request that passes through the SDK middleware extends the session by the inactivity duration, up to the absolute duration, rewriting the session cookie.",
+      "appliesFrom": "4.x",
+      "sourceUrl": "https://raw.githubusercontent.com/auth0/nextjs-auth0/main/EXAMPLES.md",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/auth0-spa-js",
+      "option": "cacheLocation",
+      "defaultValue": "memory",
+      "effect": "Tokens are held in JavaScript memory for the life of the page rather than written to localStorage, so they do not persist across a page reload. The alternative documented value is localstorage.",
+      "sourceUrl": "https://auth0.github.io/auth0-spa-js/interfaces/Auth0ClientOptions.html",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/auth0-spa-js",
+      "option": "useRefreshTokens",
+      "defaultValue": false,
+      "effect": "Refresh tokens are not requested or stored; the SDK renews tokens through iframe-based silent authentication against the tenant domain instead.",
+      "sourceUrl": "https://auth0.github.io/auth0-spa-js/interfaces/Auth0ClientOptions.html",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@auth0/auth0-spa-js",
+      "option": "cookieDomain",
+      "defaultValue": null,
+      "effect": "The SDK's own cookies are scoped to the current domain, including the subdomain, when no value is supplied.",
+      "sourceUrl": "https://auth0.github.io/auth0-spa-js/interfaces/Auth0ClientOptions.html",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Entity: Auth0 is a product of Okta, Inc.; the Data Privacy Framework participant record for Okta, Inc. (OrganizationId 9734) lists 'Auth0, LLC', 'Auth0 International LLC', 'Okta International, LLC' and 'Spera Cybersecurity, Inc.' as covered entities, so Auth0 is covered under Okta's certification and does not hold one of its own. This entry covers the Auth0 Customer Identity Cloud only, not Okta Customer Identity Solutions or Okta Workforce Identity, which are separate products on okta.com domains and are not matched by the host patterns above. DPF status: Verification Method 'Self-Assessment'; EU-US Certification, UK Extension Certification and SW-US Certification each carry PublicStatus 'Active - Re-certification under Review', installed 2025-09-23 with a UsageEndDate of 2027-08-31. dpfCertified is recorded true because all three are Active; the 're-certification under review' qualifier is recorded here verbatim rather than in a boolean. Verification limitations, recorded rather than worked around: (1) the dataprivacyframework.gov participant list renders client-side and returned no readable text to a plain fetch, so the record was read from the JSON API that the published site's own bundle calls (POST https://dpfapi.azurewebsites.net/api/participants and GET .../participants/9734); the human-readable record is at the participant URL cited. (2) okta.com did not resolve from the verification environment, so the DPA at okta.com/agreements and the sub-processor list at okta.com/trustandcompliance were not read. Both URLs are recorded because auth0.com/legal, which was read, links to them; the DPA type, the sub-processor list format and the change-notification method are therefore recorded as unknown, and no transfer mechanism beyond DPF is claimed even though a DPA would be the place SCCs are named. A follow-up verification from a network that resolves okta.com should fill those fields in."
+}
