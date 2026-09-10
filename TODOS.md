@@ -49,24 +49,53 @@ open decision in `docs/ROADMAP.md`; update both files together.
 
 ## Knowledge base
 
-### Grow the seed set from 5 vendors toward ~34
+### Grow the seed set from 15 vendors toward ~34
 
 **What:** Author the remaining entries in batches of five or fewer, so review stays real.
 
 **Why:** Coverage is the difference between a useful scan and a page of
-`transfer/unknown-vendor-egress`. Five entries cover almost nothing a real repository contains, and
-the `unmatched` block is the only recall signal there is, since the project has no telemetry.
+`transfer/unknown-vendor-egress`, and the `unmatched` block is the only recall signal there is,
+since the project has no telemetry.
 
-**Context:** `kb/vendors/` holds google-analytics, mailgun, openai, sentry and stripe. The v1 plan's
-M6 specified roughly 34 and lists the seed set: the analytics, error-tracking, email, payments,
-identity, AI and infrastructure vendors most likely to appear. Entries are clean-room authored from
-vendor and regulator primary sources only; `kb/PROVENANCE.md` lists the sources that must never be
-incorporated, including Bearer Recipes and the CC BY-NC-SA tracker lists. `pnpm kb:validate` gates
-schema, sourcing and alias collisions. Every new entry needs `lastVerified` and at least one source
-with `publisher: vendor` or `regulator`.
+**Context:** `kb/vendors/` holds anthropic, auth0, clerk, datadog, google-analytics, mailgun,
+openai, posthog, resend, segment, sentry, stripe, supabase, twilio and vercel. The v1 plan's M6
+specified roughly 34. Named gaps a real repository hits immediately: SendGrid (already unmatched in
+a fixture), Amplitude, Mixpanel, Intercom, Algolia, Cloudflare, AWS, Google Cloud, Firebase,
+LaunchDarkly, Slack, HubSpot.
 
-**Effort:** XL
+Entries are clean-room authored from vendor and regulator primary sources only; `kb/PROVENANCE.md`
+lists the sources that must never be incorporated. `pnpm kb:validate` gates schema, sourcing and
+alias collisions, and `pnpm kb:coverage` reports the matched fraction over the fixtures.
+
+Two things learned authoring the last ten. The DPF list at `dataprivacyframework.gov` renders
+client-side and returns nothing to a fetch; its participant records are readable through the JSON
+API the published site's own bundle calls, and the participant URL is what belongs in `sources`.
+And `dpfCertified` is a single boolean that cannot express *Active*, *Active — re-certification
+under review*, or *active now but lapsed for two years* — record the distinction in `notes` until
+the field is restructured.
+
+**Effort:** L
 **Priority:** P1
+**Depends on:** None
+
+### Restructure `dpfCertified` from a boolean to a record
+
+**What:** Replace `dpfCertified: boolean` with a structured value carrying framework (EU-US, UK
+Extension, Swiss-US), status, and certification dates.
+
+**Why:** The three frameworks are separate certifications and an organisation may hold one and not
+another — Mailgun has EU-US and the UK Extension but no Swiss-US; Resend the same. A certification
+can also be *Active — re-certification under review* (Okta, Resend today), or active now having
+lapsed for two years (Vercel, 2022-07-08 to 2024-05-06). `exposure/rules.ts` gates the whole DPF
+decision on this one boolean, so everything it cannot express is currently prose in `notes` that no
+rule can read.
+
+**Context:** `vendorIsDpfCertified()` in `packages/core/src/exposure/rules.ts` is the only consumer.
+A certification expiry field would also let staleness fire on a lapse: Mailgun's record carries
+`UsageEndDate 2027-01-26`, which is inside this knowledge base's own lifetime and nothing watches it.
+
+**Effort:** M
+**Priority:** P2
 **Depends on:** None
 
 ## Skills
@@ -166,6 +195,53 @@ KB update can change findings without any code moving.
 **Depends on:** Build the publishing pipeline
 
 ## Completed
+
+### Fix the wrong-host class in call-site analysis
+**Completed:** v1-build (2026-09-10) — binding collection walked every declarator in the file into
+one flat map keyed on the bare name, with no scope chain, so a `const` shadowed inside a function
+resolved the outer call site to the wrong host at `high` confidence. Now module scope only, refusing
+any name declared twice or reassigned. Four golden cases; the one documented *possibly wrong* answer
+in the table was lifted deliberately in both the table and `docs/LIMITATIONS.md`.
+
+### Read `aliases.clientConstructors` instead of ignoring it
+**Completed:** v1-build (2026-09-10) — the field was in the vendor schema, typed in the loader,
+authored in most entries, and read by nothing. It is where a *configured region* appears, so
+`posthog.init(key, { api_host: 'https://eu.i.posthog.com' })` was a dependency signal only.
+`callsites/sinks.ts` now derives sinks from it. Knowledge base sinks emit on a resolved host only,
+so an API key in argument one is never reported as a destination, and `findSinks()` returns every
+match rather than the first, because PostHog and Sentry both export `init`.
+
+### Correct the Chapter V flag semantics
+**Completed:** v1-build (2026-09-10) — `thirdCountryTransfer` was false on the adequate branch,
+contradicting its own rule id: under Art 44 the transfer happens either way and Art 45 supplies its
+basis. Added `additionalSafeguardsRequired` for the Art 46 question, and stopped setting
+`adequacyDependent` for SCC vendors, where a decision existing for the country said nothing about
+the vendor. Rule table v1.1.0; `docs/METHODOLOGY.md` updated.
+
+### Fix the CLI entry point
+**Completed:** v1-build (2026-09-10) — `egressa .` exited `Unknown command .`, every subcommand also
+ran a spurious scan of its own name as a path, a nonexistent path produced a clean scan and exit 0,
+and `.egressa.yml`'s `failOn` was declared and never read. argv is routed before citty sees it, so
+the parent needs no fallback `run`.
+
+### Close the stem gap in the claims contract
+**Completed:** v1-build (2026-09-10) — the forbidden-word matcher took exact words, so "GDPR
+violations: 3", "unlawfully" and "gdpr-violation-report" passed every surface check. Stems plus a
+small inflection set, hyphens no longer a hiding place, and URLs stripped before matching so a
+regulator decision filed under a slug ending "-illegal" stays citable. The knowledge base file list
+in the contract is now computed rather than a hardcoded five ids.
+
+### Scope the write-time hook's exemption to the storage key
+**Completed:** v1-build (2026-09-10) — `STRICTLY_NECESSARY` was tested against the whole added text,
+so a file importing `@clerk/nextjs` matched `auth` and silently suppressed a
+`localStorage.setItem('utm_source', …)` beside it, which is the case the pattern exists to catch.
+Now tested against the extracted key, with non-literal keys reported rather than cleared, and
+server-set cookie APIs (`cookies().set`, `response.cookies.set`, Fastify, Hono) added.
+
+### Write `pnpm kb:coverage`
+**Completed:** v1-build (2026-09-10) — the command was documented in `CLAUDE.md` and wired in
+`package.json`, and the script had never existed in git history. Also fixed the validator rejecting
+any `lastVerified` written east of UTC, since it is a timezone-less date compared to a UTC instant.
 
 ### Rename the project to Egressa
 **Completed:** v1-build (2026-09-09) — `adequacy.app` was an occupied name. Done token by token,

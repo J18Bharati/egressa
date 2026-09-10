@@ -1,0 +1,359 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "datadog",
+  "name": "Datadog, Inc.",
+  "product": "Datadog observability platform",
+  "category": "apm",
+  "homepage": "https://www.datadoghq.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@datadog/browser-rum", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@datadog/browser-rum-slim", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@datadog/browser-logs", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@datadog/browser-rum-react",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        { "name": "dd-trace", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@datadog/datadog-api-client", "kind": "official-sdk", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "app.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "US1 site URL. Site parameter datadoghq.com."
+      },
+      {
+        "pattern": "us3.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "US3 site URL and site parameter."
+      },
+      {
+        "pattern": "us5.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "US5 site URL and site parameter."
+      },
+      {
+        "pattern": "app.datadoghq.eu",
+        "match": "exact",
+        "purpose": "api",
+        "note": "EU1 site URL, located in Germany. Site parameter datadoghq.eu."
+      },
+      {
+        "pattern": "ap1.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "AP1 site URL and site parameter, located in Japan."
+      },
+      {
+        "pattern": "ap2.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "AP2 site URL and site parameter, located in Australia."
+      },
+      {
+        "pattern": "uk1.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "UK1 site URL and site parameter."
+      },
+      {
+        "pattern": "app.ddog-gov.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "US1-FED site URL. Site parameter ddog-gov.com."
+      },
+      {
+        "pattern": "us2.ddog-gov.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "US2-FED site URL and site parameter."
+      },
+      {
+        "pattern": "api.datadoghq.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "REST API host for the US1 site. Datadog's getting-started page documents other sites as a different endpoint URL without listing each host, so only the documented one is claimed here."
+      },
+      {
+        "pattern": "browser-intake-datadoghq.com",
+        "match": "suffix",
+        "purpose": "ingest",
+        "note": "US1 browser SDK intake. Suffix, because Browser Profiling adds a quota. subdomain of the same origin."
+      },
+      { "pattern": "browser-intake-us3-datadoghq.com", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "browser-intake-us5-datadoghq.com", "match": "suffix", "purpose": "ingest" },
+      {
+        "pattern": "browser-intake-datadoghq.eu",
+        "match": "suffix",
+        "purpose": "ingest",
+        "note": "EU1 browser SDK intake."
+      },
+      { "pattern": "browser-intake-ap1-datadoghq.com", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "browser-intake-ap2-datadoghq.com", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "browser-intake-uk1-datadoghq.com", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "browser-intake-ddog-gov.com", "match": "suffix", "purpose": "ingest" },
+      { "pattern": "browser-intake-us2-ddog-gov.com", "match": "suffix", "purpose": "ingest" },
+      {
+        "pattern": "datadoghq-browser-agent.com",
+        "match": "suffix",
+        "purpose": "cdn",
+        "note": "Browser SDK is served from www.datadoghq-browser-agent.com under a per-site path such as /eu1/v7/datadog-rum.js. The host is the same for every site, so it does not indicate which site receives the data."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@datadog/browser-rum", "export": "datadogRum", "hostOption": "site" },
+      { "module": "@datadog/browser-logs", "export": "datadogLogs", "hostOption": "site" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Datadog, Inc., 620 8th Ave Fl 45, New York, NY 10018, is the contracting entity named in the privacy policy and in the Data Privacy Framework registry."
+      },
+      {
+        "country": "DE",
+        "role": "primary",
+        "note": "The EU1 site (app.datadoghq.eu) is documented as located in Germany."
+      },
+      {
+        "country": "IE",
+        "role": "support",
+        "note": "Datadog Ireland Limited is appointed as Datadog's EU representative under Article 27 GDPR, and appears on the subprocessor list as an affiliate."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://docs.datadoghq.com/getting_started/site/",
+      "notes": "Datadog operates nine sites and documents that \"Each site is completely independent, and you cannot share data across sites.\" EU1 is app.datadoghq.eu, site parameter datadoghq.eu, located in Germany; the other sites documented are US1, US3, US5, US1-FED, US2-FED (United States), AP1 (Japan), AP2 (Australia) and UK1 (United Kingdom). The site is a client-side configuration value: the browser SDK derives its intake host from it, so an EU1 organisation ingests through browser-intake-datadoghq.eu and a US1 organisation through browser-intake-datadoghq.com. Two things checked are not bound to the selected site. The browser SDK itself is served from the single host www.datadoghq-browser-agent.com for every site. The published subprocessor list is not scoped per site: it names third-party subprocessors located in the United States, Switzerland and other countries, and Datadog affiliates in fifteen countries including the United States, India, Israel, Brazil and Singapore, without stating which sites each one serves, so the pages checked do not establish which processing activities for an EU1 organisation take place inside the EEA."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.datadoghq.com/legal/data-processing-addendum/",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://www.datadoghq.com/legal/subprocessors/",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/4595",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://www.datadoghq.com/legal/data-processing-addendum/",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "usage_telemetry", "typical": true },
+    {
+      "category": "cookie_id",
+      "typical": true,
+      "note": "The Browser SDK sets the first-party session cookie _dd_s_v2."
+    },
+    { "category": "stack_traces", "typical": true },
+    {
+      "category": "ip_address",
+      "typical": false,
+      "note": "Datadog documents a User Data Collection setting that controls whether IP or geolocation data is included; when it is disabled, IP addresses are dropped at processing time."
+    },
+    {
+      "category": "location",
+      "typical": false,
+      "note": "Governed by the same User Data Collection setting as IP."
+    },
+    {
+      "category": "session_recording",
+      "typical": false,
+      "note": "Session Replay is a separate product feature and is not sampled for recording by default."
+    },
+    { "category": "user_id", "typical": false },
+    { "category": "device_id", "typical": false }
+  ],
+  "sources": [
+    {
+      "url": "https://docs.datadoghq.com/getting_started/site/",
+      "title": "Getting Started with Datadog Sites",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/real_user_monitoring/",
+      "title": "RUM Browser Monitoring, supported endpoints for SDK domains",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/real_user_monitoring/browser/troubleshooting/",
+      "title": "RUM Browser Monitoring troubleshooting, RUM cookies",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/real_user_monitoring/guide/sampling-browser-plans/",
+      "title": "Configure your setup for Browser RUM and Browser RUM & Session Replay sampling",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/real_user_monitoring/session_replay/browser/privacy_options/",
+      "title": "Session Replay browser privacy options",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/data_security/real_user_monitoring/",
+      "title": "RUM data security",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://docs.datadoghq.com/real_user_monitoring/application_monitoring/browser/setup/client/",
+      "title": "Browser monitoring client-side setup",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-rum-core/src/domain/configuration/configuration.ts",
+      "title": "browser-sdk RUM initialization configuration defaults",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-core/src/domain/session/sessionConstants.ts",
+      "title": "browser-sdk session constants",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.datadoghq.com/legal/data-processing-addendum/",
+      "title": "Datadog Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.datadoghq.com/legal/subprocessors/",
+      "title": "Datadog Subprocessors List",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.datadoghq.com/legal/privacy/",
+      "title": "Datadog Privacy Policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/4595",
+      "title": "Data Privacy Framework participant record 4595, Datadog, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@datadog/browser-rum",
+      "option": "site",
+      "defaultValue": "datadoghq.com",
+      "effect": "When site is not set, the SDK sends to the US1 site and derives the intake host browser-intake-datadoghq.com from it.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-core/src/domain/configuration/configuration.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "sessionSampleRate",
+      "defaultValue": 100,
+      "effect": "Every session is tracked when the option is not set.",
+      "sourceUrl": "https://docs.datadoghq.com/real_user_monitoring/guide/sampling-browser-plans/",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "sessionReplaySampleRate",
+      "defaultValue": 0,
+      "effect": "No session is recorded for Session Replay when the option is not set. Datadog states this default applies from Browser SDK v5.0.0; previous versions used 100.",
+      "appliesFrom": "Browser SDK v5.0.0 and later",
+      "sourceUrl": "https://docs.datadoghq.com/real_user_monitoring/guide/sampling-browser-plans/",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "defaultPrivacyLevel",
+      "defaultValue": "mask-user-input",
+      "effect": "Applied to Session Replay recordings when the option is not set. Datadog describes this level as masking most form fields such as inputs, text areas and checkbox values while recording all other text as is. The Session Replay privacy options page states that mask, which replaces all HTML text, user input, images, links and data-* attributes, is the default; the SDK reference documentation and the shipped configuration table state mask-user-input. Both readings are recorded here because the two vendor pages disagree.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-rum-core/src/domain/configuration/configuration.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "trackUserInteractions",
+      "defaultValue": true,
+      "effect": "Click actions are collected without the option being set. Datadog documents a separate enablePrivacyForActionName option, also defaulting to true, that governs whether the action name is taken from masked text.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-rum-core/src/domain/configuration/configuration.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "trackResources",
+      "defaultValue": true,
+      "effect": "Resource events are collected when the option is not set.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-rum-core/src/domain/configuration/configuration.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "trackAnonymousUser",
+      "defaultValue": true,
+      "effect": "An anonymous user identifier is kept in the session cookie. With it enabled the cookie is written with a one-year expiry rather than the four-hour session timeout used when it is off.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-core/src/domain/session/storeStrategies/sessionInCookie.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "_dd_s_v2",
+      "defaultValue": "15 minutes, extended per interaction, up to 4 hours",
+      "effect": "First-party session cookie set on the customer's own domain. Datadog documents that it contains the current session ID, whether the session is excluded due to sampling, and the session expiration date, and that it is extended for an extra 15 minutes on every interaction up to a maximum session duration of 4 hours. Two further cookies, dd_site_test_* and dd_cookie_test_*, test for cookie support and expire instantly. Versions before v7 used _dd_s.",
+      "appliesFrom": "Browser SDK v7 and later",
+      "sourceUrl": "https://docs.datadoghq.com/real_user_monitoring/browser/troubleshooting/",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-rum",
+      "option": "useSecureSessionCookie",
+      "defaultValue": false,
+      "effect": "The session cookie is written without the Secure attribute when the option is not set.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-core/src/domain/configuration/configuration.ts",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "@datadog/browser-logs",
+      "option": "forwardErrorsToLogs",
+      "defaultValue": true,
+      "effect": "Uncaught errors and failed network requests are forwarded to Datadog Log Management when the option is not set. The related forwardConsoleLogs and forwardReports options default to empty lists.",
+      "sourceUrl": "https://github.com/DataDog/browser-sdk/blob/main/packages/browser-logs/src/domain/configuration.ts",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Datadog sells infrastructure monitoring, APM, log management, browser and mobile RUM, Session Replay and security products under one platform; the category field holds one value and apm was selected as the closest. Transfers: the Data Privacy Framework registry was queried on 2026-09-10 and returns one record for Datadog, Inc. (organisation 4595, New York, NY) with all three certifications listed as Active: EU-US, Swiss-US and the UK Extension, covering non-HR data only, with a verification method of Self-Assessment. The privacy policy states the same three frameworks. The DPA additionally incorporates Module Two or Module Three of the Standard Contractual Clauses for EEA transfers, the same clauses with Swiss substitutions for Swiss transfers, and the UK International Data Transfer Addendum, and commits Datadog to updating the subprocessor list at least 30 days before appointing a new subprocessor. Verification limitation: pages on docs.datadoghq.com and the browser SDK API reference render client-side, so the documentation was read through its published Markdown source and, for shipped SDK defaults, through the vendor's own source repository at github.com/DataDog/browser-sdk; the two disagree on the defaultPrivacyLevel default, which is recorded in the sdkDefaults entry for that option. Six npm package names were confirmed individually on the registry; the @datadog/ scope is not claimed as a wildcard."
+}

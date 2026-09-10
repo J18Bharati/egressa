@@ -55,8 +55,9 @@ kb/                 CC-BY-4.0 data, its own LICENSE
 schemas/            published findings + vendor JSON Schemas
 ```
 
-`scan()` in `packages/core/src/scan.ts` is pure — no console, no network, no `process.exit`. All
-I/O and formatting live in the CLI. The MCP server validates arguments and shapes results and
+`scan()` in `packages/core/src/scan.ts` is pure in the ways that matter — no console, no network,
+no `process.exit` — and returns a document rather than printing one. It does read files: the walk,
+the manifests and the source reads all happen inside core. *Formatting* is what lives in the CLI. The MCP server validates arguments and shapes results and
 contains zero analysis logic; behaviour changes go in core so all three surfaces get them at once.
 
 **Pipeline.** `discovery/walk.ts` (honours `.gitignore`/`.egressaignore`) → `manifests/` and
@@ -69,9 +70,10 @@ facts → `output/sarif.ts` or the CLI formatters.
 **Never read `node_modules`.** Scans are offline and must work on a fresh clone. Fixture repos ship
 lockfiles only, which enforces this structurally.
 
-**`jsonc-parser`, not `JSON.parse`, for manifests.** It yields byte offsets. Without them every
-dependency finding degrades to a file-level SARIF location and GitHub cannot render a line
-annotation.
+**`jsonc-parser`, not `JSON.parse`, for manifests.** It yields source offsets (UTF-16 code units,
+not bytes — SARIF distinguishes the two, and `LineIndex` converts them to lines over the same
+string, so the pipeline is self-consistent). Without them every dependency finding degrades to a
+file-level SARIF location and GitHub cannot render a line annotation.
 
 **`oxc-parser`, not the TypeScript compiler API,** for call sites. The analysis is intraprocedural
 constant folding; it must not require a resolved `Program` or installed packages.
@@ -79,6 +81,25 @@ constant folding; it must not require a resolved `Program` or installed packages
 **A wrong host is worse than no host.** `callsites/resolve-host.ts` resolves only when a delimiter
 closes the authority inside a static chunk. Everything else emits `transfer/unresolved-egress`
 naming the variable. Never add a heuristic that guesses.
+
+The same rule governs *which binding* a name refers to. Binding collection has no scope chain, so
+`callsites/index.ts` collects module-scope declarations only and refuses a name that is declared
+twice or reassigned — a shadowed `const` otherwise resolved to the wrong host at `high` confidence.
+Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
+
+**Client constructors come from the knowledge base, not a hardcoded table.**
+`aliases.clientConstructors` names the option carrying the destination, and
+`callsites/sinks.ts` turns those into sinks. This is where a *configured region* appears:
+`posthog.init(key, { api_host: 'https://eu.i.posthog.com' })` is the only line in a repository that
+says which PostHog cloud is in use. Two rules keep it safe — a knowledge base sink emits only on a
+**resolved** host (so an API key in argument one is never reported as a destination), and
+`findSinks()` returns every matching sink rather than the first, because two vendors both export
+`init` and whichever sorted first used to silently shadow the other.
+
+**A transfer to an adequate country is still a third-country transfer.** Art 44 is about where the
+data goes; Art 45 supplies a basis for it. `thirdCountryTransfer` is therefore true on the adequate
+branch, and `additionalSafeguardsRequired` carries the Art 46 question separately. `adequacyDependent`
+means *this vendor moves if a decision is withdrawn*, so it is false for an SCC vendor.
 
 **Severity and confidence are orthogonal.** Severity comes from KB facts; confidence from how the
 signal was obtained. Both are surfaced; do not collapse them.
@@ -104,19 +125,34 @@ required when `available: true`. Every vendor in the KB that has one is partial 
 reaches JSON, the SARIF driver, every rule's `help.markdown`, markdown, human output, the README,
 `skill/egressa/SKILL.md` and the MCP source, and that no generated surface or KB entry contains a
 forbidden claim word. If you reword user-facing output, run `pnpm test` before assuming it is fine.
-The forbidden-word list lives in `claims.ts`; `references/language-rules.md` is the only file
-allowed to quote those words.
+The forbidden-word list lives in `claims.ts`. Entries there are **stems**, not exact words: the
+matcher appends a small suffix set, because a list of exact words let "GDPR violations: 3" and
+"unlawfully" through every surface check in the repository. The boundary class is letters and digits
+only, so a hyphen cannot hide a stem either. URLs are stripped before matching — a citation's
+address is the publisher's wording, and a knowledge base required to cite its sources has to be able
+to link to a regulator decision filed under a slug ending "-illegal".
 
-It also walks `skill/` and asserts every `SKILL.md` carries `NON_ASSESSMENT` and no shipped markdown
-carries a forbidden word. **The file list is computed, not hardcoded** — a hardcoded one would let
-the next specialist checklist ship outside the contract just by nobody remembering to add it. Adding
-a file under `skill/` therefore opts it in automatically, and the `language-rules.md` exemption is
-itself asserted, so a file stops being exempt if it stops being the vocabulary table.
+`references/language-rules.md` is the only file allowed to quote those words.
 
-**`packages/core/src/callsites/golden.test.ts`** is a table of ~45 snippets → `{host|null, reason}`.
+It also walks `skill/` and `kb/vendors/` and asserts every `SKILL.md` carries `NON_ASSESSMENT` and
+no shipped markdown or knowledge base entry carries a forbidden word. **Both file lists are
+computed, not hardcoded** — a hardcoded one would let the next specialist checklist or vendor entry
+ship outside the contract just by nobody remembering to add it. Adding a file under `skill/`, or an
+entry under `kb/vendors/`, therefore opts it in automatically, and the `language-rules.md` exemption
+is itself asserted, so a file stops being exempt if it stops being the vocabulary table.
+
+**`packages/core/src/callsites/golden.test.ts`** is a table of ~55 snippets → `{host|null, reason}`.
 The `null` half is the important half: every entry in `docs/LIMITATIONS.md` has a corresponding
 failing-by-design case. **A limitation starting to resolve is a test failure, not a win** — lift it
 deliberately in both places or fix the regression.
+
+Nothing in the table now records a *wrong* answer. The `let` reassignment case used to, and was
+lifted deliberately in both places when scope handling landed; if a future change reintroduces one,
+that is a regression rather than a documented limitation.
+
+Tests do not pin the size of the knowledge base. Anything asserting "5 vendors" or a literal
+`kb.version` fails on every entry added, for no reason connected to what it tests — read the roster
+from `kb/` instead.
 
 ## The review skills
 
@@ -243,6 +279,14 @@ the failure arrives as a `SyntaxError` at link time before any code runs. `parse
 
 v1 is complete on branch `v1-build` and **unpublished** — nothing on npm, no git remote. The
 release pipeline does not exist yet: no `.changeset`, no `.npmrc`, no release workflow.
+
+Because nothing has ever been published, `schemas/findings-1.0.0.json` was corrected in place when
+the Chapter V flag semantics were fixed, rather than a 2.0.0 being cut for a version no consumer
+has. That option closes at the first release; after it, a meaning change needs a new schema file.
+
+The knowledge base holds 15 vendors. `pnpm kb:coverage` reports the matched fraction over the
+fixture repositories — note that the package denominator counts every declared dependency including
+frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 
 `docs/designs/publish-first-linter-wedge.md` is the approved design record: corrected ICP, the
 "complementary not better" claim about code-based vendor discovery, why the sub-processor register

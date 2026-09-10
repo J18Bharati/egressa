@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "anthropic",
+  "name": "Anthropic PBC",
+  "product": "Claude API",
+  "category": "ai",
+  "homepage": "https://www.anthropic.com/api",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@anthropic-ai/sdk", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@anthropic-ai/claude-agent-sdk",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        { "name": "@anthropic-ai/bedrock-sdk", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@anthropic-ai/vertex-sdk", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@anthropic-ai/aws-sdk", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@anthropic-ai/foundry-sdk", "kind": "official-sdk", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.anthropic.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Anthropic documents the Claude API as a RESTful API at https://api.anthropic.com. No regional variant of this host appears on the pages checked."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "@anthropic-ai/sdk", "export": "default", "hostOption": "baseURL" },
+      {
+        "module": "@anthropic-ai/bedrock-sdk",
+        "export": "AnthropicBedrockMantle",
+        "hostOption": null
+      },
+      { "module": "@anthropic-ai/vertex-sdk", "export": "AnthropicVertex", "hostOption": null }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Anthropic PBC, 548 Market St, PMB 90375, San Francisco, CA 94104, is named in the privacy policy as the controller for users outside the European region."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "Anthropic Ireland, Limited, 6th Floor, South Bank House, Barrow Street, Dublin 4, is named in the privacy policy as the controller for the European region."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://platform.claude.com/docs/en/manage-claude/data-residency",
+      "notes": "The direct Claude API exposes no EU option. Anthropic's data residency page states under Current limitations that for inference geo \"Only \\\"us\\\" and \\\"global\\\" are available\" and that for workspace geo \"Only \\\"us\\\" is currently available\"; the per-request inference_geo parameter accepts \"global\" (the default, where inference may run in any available geography) and \"us\", and workspace geo, which governs storage at rest and endpoint processing such as image transcoding and code execution, is fixed at \"us\" and cannot be changed after workspace creation. EU-region processing of Claude models is documented only through third-party cloud platforms: Anthropic states that on Amazon Bedrock and Google Cloud the inference region is determined by the endpoint URL or inference profile, that the cloud provider is the data processor there, and that Claude in Amazon Bedrock offers regional endpoints and an EU inference profile in eu-central-1 (Frankfurt), eu-central-2 (Zurich), eu-north-1 (Stockholm), eu-south-1 (Milan), eu-south-2 (Spain), eu-west-1 (Ireland), eu-west-2 (London) and eu-west-3 (Paris). Anthropic states that data handling for the Amazon Bedrock offering is governed by Amazon Bedrock, so the Anthropic arrangements recorded in this entry do not describe that path."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.anthropic.com/legal/data-processing-addendum",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-10"
+    },
+    "subprocessors": {
+      "url": "https://www.anthropic.com/subprocessors",
+      "listType": "page",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "dpfCertified": false,
+        "url": "https://www.anthropic.com/legal/data-processing-addendum",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "prompt_content", "typical": true },
+    { "category": "usage_telemetry", "typical": true },
+    {
+      "category": "content",
+      "typical": false,
+      "note": "The Files API and the code execution tool store customer files and container state; both are listed as not eligible for zero data retention."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://platform.claude.com/docs/en/manage-claude/data-residency",
+      "title": "Data residency",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
+      "title": "API and data retention",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://platform.claude.com/docs/en/api/overview",
+      "title": "API overview",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock",
+      "title": "Claude in Amazon Bedrock",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.anthropic.com/legal/data-processing-addendum",
+      "title": "Anthropic Data Processing Addendum",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.anthropic.com/legal/privacy",
+      "title": "Anthropic Privacy Policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://privacy.claude.com/en/articles/7996862-how-do-i-view-and-sign-your-data-processing-addendum-dpa",
+      "title": "How do I view and sign your Data Processing Addendum (DPA)?",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript",
+      "title": "TypeScript SDK",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/list",
+      "title": "Data Privacy Framework participant list",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "@anthropic-ai/sdk",
+      "option": "baseURL",
+      "defaultValue": "https://api.anthropic.com",
+      "effect": "Requests go to api.anthropic.com when the option is not set. Anthropic documents the Claude API as a RESTful API at that address.",
+      "sourceUrl": "https://platform.claude.com/docs/en/api/overview",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "option": "inference_geo",
+      "defaultValue": "global",
+      "effect": "When the parameter is omitted from POST /v1/messages, Anthropic documents that inference may run in any available geography. Setting \"us\" confines inference to US-based infrastructure; the page lists no other accepted value.",
+      "appliesFrom": "Claude 4.6 and later models; earlier models return a 400 error when the parameter is sent",
+      "sourceUrl": "https://platform.claude.com/docs/en/manage-claude/data-residency",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Retention: Anthropic states that conversation content is not retained by default on the Claude API, with the exception of models it designates Covered Models (Claude Fable 5.1, Claude Mythos 5.1, Claude Fable 5 and Claude Mythos 5), which require 30-day data retention and are not available under a zero data retention arrangement unless expressly authorized by Anthropic. Zero data retention is enabled per organisation by the account team rather than self-serve, does not extend automatically to other organisations under the same account, and does not cover stateful features such as the Batch API, the Files API and code execution. Anthropic states that even with a zero data retention or HIPAA arrangement in place it may retain data where required by law or where a chat or session is flagged by its automated trust and safety systems, for up to 2 years. Transfers: the DPA incorporates Module Two or Module Three of the Standard Contractual Clauses, the UK International Data Transfer Addendum version B.1.0, and a Swiss addendum; neither the DPA nor the privacy policy mentions the Data Privacy Framework. The Data Privacy Framework participant registry was searched for \"Anthropic\" on 2026-09-10 against both the active and the inactive participant lists and returned no record, so dpfCertified is recorded as false. The direct Claude API and Claude Platform on AWS are the surfaces where Anthropic is the data processor; on Amazon Bedrock and Google Cloud, Anthropic states the cloud provider is the data processor and that platform's retention and transfer documentation applies instead."
+}

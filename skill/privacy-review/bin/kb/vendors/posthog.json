@@ -1,0 +1,245 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "posthog",
+  "name": "PostHog Inc",
+  "product": "PostHog product analytics",
+  "category": "analytics",
+  "homepage": "https://posthog.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "posthog-js", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "posthog-node", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "posthog-react-native", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@posthog/ai", "kind": "official-sdk", "detectTransitive": false },
+        {
+          "name": "@posthog/nextjs-config",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "us.i.posthog.com",
+        "match": "exact",
+        "purpose": "ingest",
+        "note": "PostHog Cloud US ingestion host, and the documented default value of api_host."
+      },
+      {
+        "pattern": "eu.i.posthog.com",
+        "match": "exact",
+        "purpose": "ingest",
+        "note": "PostHog Cloud EU ingestion host."
+      },
+      {
+        "pattern": "us-assets.i.posthog.com",
+        "match": "exact",
+        "purpose": "cdn",
+        "note": "PostHog Cloud US asset host, used for the recorder and toolbar bundles."
+      },
+      {
+        "pattern": "eu-assets.i.posthog.com",
+        "match": "exact",
+        "purpose": "cdn",
+        "note": "PostHog Cloud EU asset host."
+      },
+      {
+        "pattern": "app.posthog.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Application host cited by PostHog's privacy documentation for the self-serve DPA at app.posthog.com/legal."
+      }
+    ],
+    "clientConstructors": [
+      { "module": "posthog-js", "export": "default", "hostOption": "api_host" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "PostHog Inc is listed in the Data Privacy Framework participant record at 2261 Market Street #4008, San Francisco, CA. PostHog states its websites are hosted in the United States unless the customer has selected EU hosting."
+      },
+      {
+        "country": "DE",
+        "role": "primary",
+        "note": "PostHog Cloud EU is described as a managed version of PostHog hosted on servers based in Frankfurt."
+      },
+      {
+        "country": "GB",
+        "role": "support",
+        "note": "PostHog states it is registered with the Information Commissioner's Office as Hiberly Ltd., the legal name for its UK entity. Its privacy policy also names PostHog GmbH as a German entity."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://posthog.com/docs/privacy/data-storage",
+      "notes": "PostHog Cloud EU is a separate deployment in Frankfurt, selected when the account is created, and it is reached through eu.i.posthog.com and eu-assets.i.posthog.com rather than the us.i.posthog.com default that posthog-js ships with. PostHog's privacy policy states that its websites are hosted in the United States, or in Germany for PostHog Cloud customers who have selected EU hosting, and that the two clouds are separate instances. The pages checked describe the region choice for product data only; they do not state where account, billing or support-interaction records for an EU Cloud customer are held, so this entry records no claim about those. PostHog's security handbook states that transfers from the UK, EU and EEA to United States servers rely on EU Standard Contractual Clauses."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://posthog.com/dpa",
+      "type": "click-through",
+      "lastChecked": "2026-09-10"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/2915",
+        "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://posthog.com/dpa",
+        "lastChecked": "2026-09-10"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "usage_telemetry", "typical": true },
+    {
+      "category": "cookie_id",
+      "typical": true,
+      "note": "The default persistence mode writes a distinct ID and session ID to a cookie named ph_<project_token>_posthog."
+    },
+    { "category": "device_id", "typical": true },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "Events are sent from the end user's browser or from the customer's server to the ingestion host."
+    },
+    {
+      "category": "user_id",
+      "typical": false,
+      "note": "Set when the application calls posthog.identify()."
+    },
+    {
+      "category": "session_recording",
+      "typical": false,
+      "note": "Session replay is a separate product feature with its own project-level setting."
+    }
+  ],
+  "sdkDefaults": [
+    {
+      "package": "posthog-js",
+      "option": "persistence",
+      "defaultValue": "localStorage+cookie",
+      "effect": "The distinct ID and session ID are written to a cookie named ph_<project_token>_posthog with a 365-day expiry; feature flags, super properties and the remaining client state are written to localStorage.",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/persistence",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "cross_subdomain_cookie",
+      "defaultValue": true,
+      "effect": "The persistence cookie is set on the registered domain, so it is sent with requests from subdomains of that domain.",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/config",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "autocapture",
+      "defaultValue": true,
+      "effect": "Clicks, change events and form submissions are captured without per-event instrumentation in the application code.",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/config",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "opt_out_capturing_by_default",
+      "defaultValue": false,
+      "effect": "Capturing starts when posthog.init() runs; no opt-in call is required first, and opting out requires an explicit posthog.opt_out_capturing() call or setting this option.",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/config",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "api_host",
+      "defaultValue": "https://us.i.posthog.com",
+      "effect": "Events are sent to PostHog Cloud US when no other host is passed to init().",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/config",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "disable_session_recording",
+      "defaultValue": false,
+      "effect": "The client does not suppress session recording; whether recording happens also depends on the project's session replay setting.",
+      "sourceUrl": "https://posthog.com/docs/libraries/js/config",
+      "lastChecked": "2026-09-10"
+    },
+    {
+      "package": "posthog-js",
+      "option": "session_recording.maskAllInputs",
+      "defaultValue": true,
+      "effect": "Values typed into input elements are replaced with masking characters in recordings. PostHog documents that general page text is not masked by default.",
+      "sourceUrl": "https://posthog.com/docs/session-replay/privacy",
+      "lastChecked": "2026-09-10"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://posthog.com/dpa",
+      "title": "PostHog Data Processing Agreement",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/privacy",
+      "title": "PostHog privacy policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/handbook/company/security",
+      "title": "PostHog security handbook",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/docs/privacy/data-storage",
+      "title": "PostHog data storage location",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/docs/advanced/proxy",
+      "title": "Deploying a reverse proxy to PostHog",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/docs/libraries/js/config",
+      "title": "posthog-js configuration reference",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/docs/libraries/js/persistence",
+      "title": "posthog-js persistence",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://posthog.com/docs/session-replay/privacy",
+      "title": "Session replay privacy controls",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-10"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/2915",
+      "title": "Data Privacy Framework participant record 2915, PostHog Inc",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-10"
+    }
+  ],
+  "lastVerified": "2026-09-10",
+  "verifiedBy": "egressa-kb",
+  "notes": "Legal entity name is taken from the Data Privacy Framework participant record, which lists PostHog Inc in San Francisco, CA; PostHog's own privacy policy adds that the company was formerly known as Hiberly Inc. and names Hiberly Ltd (UK) and PostHog GmbH (Germany) as further entities. Data Privacy Framework participant record 2915 was read from the registry's own participant service and shows EU-US Certification, UK Extension Certification and Swiss-US Certification each with public status Active, EU-US installed 2024-05-08 with a usage end date of 2027-03-10. The three certifications are separate; all three were Active on the date checked. No subprocessors object is recorded: PostHog's security handbook states the sub-processor list is maintained as part of the DPA, and no standalone sub-processor page was found on the pages checked. Five npm package names were confirmed individually on the registry; the @posthog scope is not registered as a wildcard alias. Only posthog-js is recorded as a client constructor, because api_host is the option name confirmed in the JavaScript configuration reference; the server library's host option name was not verified against a vendor page. Self-hosting PostHog is possible, in which case the ingestion host is the operator's own and none of the host patterns above apply."
+}

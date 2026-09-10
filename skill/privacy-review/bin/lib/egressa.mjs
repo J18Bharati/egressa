@@ -12090,20 +12090,20 @@ async function runCommand(cmd, opts) {
   }
   let result;
   try {
-    const subCommands = await resolveValue(cmd.subCommands);
-    if (subCommands && Object.keys(subCommands).length > 0) {
+    const subCommands2 = await resolveValue(cmd.subCommands);
+    if (subCommands2 && Object.keys(subCommands2).length > 0) {
       const subCommandArgIndex = opts.rawArgs.findIndex(
         (arg) => !arg.startsWith("-")
       );
       const subCommandName = opts.rawArgs[subCommandArgIndex];
       if (subCommandName) {
-        if (!subCommands[subCommandName]) {
+        if (!subCommands2[subCommandName]) {
           throw new CLIError(
             `Unknown command \`${subCommandName}\``,
             "E_UNKNOWN_COMMAND"
           );
         }
-        const subCommand = await resolveValue(subCommands[subCommandName]);
+        const subCommand = await resolveValue(subCommands2[subCommandName]);
         if (subCommand) {
           await runCommand(subCommand, {
             rawArgs: opts.rawArgs.slice(subCommandArgIndex + 1)
@@ -12124,11 +12124,11 @@ async function runCommand(cmd, opts) {
   return { result };
 }
 async function resolveSubCommand(cmd, rawArgs, parent) {
-  const subCommands = await resolveValue(cmd.subCommands);
-  if (subCommands && Object.keys(subCommands).length > 0) {
+  const subCommands2 = await resolveValue(cmd.subCommands);
+  if (subCommands2 && Object.keys(subCommands2).length > 0) {
     const subCommandArgIndex = rawArgs.findIndex((arg) => !arg.startsWith("-"));
     const subCommandName = rawArgs[subCommandArgIndex];
-    const subCommand = await resolveValue(subCommands[subCommandName]);
+    const subCommand = await resolveValue(subCommands2[subCommandName]);
     if (subCommand) {
       return resolveSubCommand(
         subCommand,
@@ -12185,8 +12185,8 @@ async function renderUsage(cmd, parent) {
   }
   if (cmd.subCommands) {
     const commandNames = [];
-    const subCommands = await resolveValue(cmd.subCommands);
-    for (const [name, sub] of Object.entries(subCommands)) {
+    const subCommands2 = await resolveValue(cmd.subCommands);
+    for (const [name, sub] of Object.entries(subCommands2)) {
       const subCmd = await resolveValue(sub);
       const meta = await resolveValue(subCmd?.meta);
       commandsLines.push([`\`${name}\``, meta?.description || ""]);
@@ -13863,13 +13863,13 @@ function buildCrawler(options, patterns) {
   let maxDepth;
   if (options.deep !== void 0) maxDepth = Math.round(options.deep - props.depthOffset);
   const crawler = new Builder({
-    filters: [debug ? (p, isDirectory) => {
-      const path = format2(p, isDirectory);
+    filters: [debug ? (p, isDirectory2) => {
+      const path = format2(p, isDirectory2);
       const matches2 = matcher(path) && !ignore2(path);
       if (matches2) log(`matched ${path}`);
       return matches2;
-    } : (p, isDirectory) => {
-      const path = format2(p, isDirectory);
+    } : (p, isDirectory2) => {
+      const path = format2(p, isDirectory2);
       return matcher(path) && !ignore2(path);
     }],
     exclude: debug ? (_3, p) => {
@@ -13936,7 +13936,7 @@ function globSync(globInput, options) {
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync3 } from "fs";
+import { readFileSync as readFileSync3, statSync as statSync2 } from "fs";
 import { join as join22 } from "path";
 
 // ../kb-loader/dist/index.js
@@ -14099,7 +14099,7 @@ var RULES = {
     shortDescription: "Vendor processes in a country covered by an adequacy decision.",
     fullDescription: "The vendor processes outside the EEA, in a country with an in-force European Commission adequacy decision at the date recorded in the knowledge base. Adequacy decisions are revocable and have been struck down before; the `--assume-adequacy-lapsed` flag re-rates these findings as if the relevant decision were withdrawn.",
     defaultLevel: "note",
-    help: "No transfer mechanism is required while the adequacy decision below remains in force. Re-run with --assume-adequacy-lapsed to see the exposure if it is withdrawn.",
+    help: "The adequacy decision below is itself the Art 45 transfer mechanism, so no additional safeguard under Art 46 applies while it remains in force. Re-run with --assume-adequacy-lapsed to see the exposure if it is withdrawn.",
     tags: TAGS
   },
   "transfer/eu-processing": {
@@ -14622,7 +14622,7 @@ function buildIgnoreFilter(root) {
   }
   return found ? matcher : null;
 }
-var EXPOSURE_RULES_VERSION = "1.0.0";
+var EXPOSURE_RULES_VERSION = "1.1.0";
 var EEA_MEMBERS = /* @__PURE__ */ new Set([
   "AT",
   "BE",
@@ -14672,6 +14672,7 @@ function classifyExposure(vendor, kb) {
         thirdCountryTransfer: false,
         euAlternativeAvailable: euRegion.available,
         adequacyDependent: false,
+        additionalSafeguardsRequired: false,
         level: "none",
         inputs
       })
@@ -14689,11 +14690,15 @@ function classifyExposure(vendor, kb) {
     return {
       ruleId: "transfer/adequate-country-egress",
       exposure: flags({
-        thirdCountryTransfer: false,
+        // Art 44: a transfer to an adequate country is still a third-country
+        // transfer. Art 45 supplies its legal basis; it does not undo the fact.
+        thirdCountryTransfer: true,
         euAlternativeAvailable: euRegion.available,
         // The whole premise of the tool: this is the population that changes
         // if a decision is withdrawn.
         adequacyDependent: true,
+        // Adequacy is the mechanism, so nothing under Art 46 is added.
+        additionalSafeguardsRequired: false,
         level: "low",
         inputs
       })
@@ -14705,7 +14710,12 @@ function classifyExposure(vendor, kb) {
     exposure: flags({
       thirdCountryTransfer: true,
       euAlternativeAvailable: euAlternative,
-      adequacyDependent: decisions.some((d2) => d2 !== null),
+      // Not `decisions.some(...)`: a decision merely existing for the country
+      // says nothing about this vendor. A US vendor relying on SCCs rather than
+      // DPF is unaffected by DPF being withdrawn, and reporting it as adequacy
+      // dependent puts it in the "what breaks if adequacy falls" list wrongly.
+      adequacyDependent: false,
+      additionalSafeguardsRequired: true,
       // A documented EU alternative means the exposure is addressable by
       // configuration, which is materially different from one that is not.
       level: euAlternative ? "moderate" : "elevated",
@@ -14727,14 +14737,7 @@ function vendorIsDpfCertified(vendor) {
   );
 }
 function flags(input) {
-  return {
-    thirdCountryTransfer: input.thirdCountryTransfer,
-    euAlternativeAvailable: input.euAlternativeAvailable,
-    adequacyDependent: input.adequacyDependent,
-    level: input.level,
-    rulesVersion: EXPOSURE_RULES_VERSION,
-    inputs: input.inputs
-  };
+  return { ...input, rulesVersion: EXPOSURE_RULES_VERSION };
 }
 var SARIF_VERSION = "2.1.0";
 var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
@@ -14933,16 +14936,51 @@ SINKS.push(
   { object: "axios", property: "create", argIndex: 0, configKeys: ["baseURL"] },
   { object: "navigator", property: "sendBeacon", argIndex: 0 }
 );
-function findSink(callee, isNew) {
-  for (const sink of SINKS) {
-    if (Boolean(sink.isNew) !== isNew) continue;
-    if (sink.object && sink.property) {
-      if (callee.object === sink.object && callee.property === sink.property) return sink;
+function findSink(callee, isNew, sinks = SINKS) {
+  return findSinks(callee, isNew, sinks)[0] ?? null;
+}
+function findSinks(callee, isNew, sinks = SINKS) {
+  const named = [];
+  const catchAll = [];
+  for (const sink of sinks) {
+    if (sink.matchAny) {
+      catchAll.push(sink);
       continue;
     }
-    if (sink.callee && callee.name === sink.callee) return sink;
+    if (Boolean(sink.isNew) !== isNew) continue;
+    if (sink.object && sink.property) {
+      if (callee.object === sink.object && callee.property === sink.property) named.push(sink);
+      continue;
+    }
+    if (!sink.object && sink.property) {
+      if (callee.property === sink.property) named.push(sink);
+      continue;
+    }
+    if (sink.callee && callee.name === sink.callee) named.push(sink);
   }
-  return null;
+  return [...named, ...catchAll];
+}
+function clientConstructorSinks(specs) {
+  const seen = /* @__PURE__ */ new Set();
+  const anyCallOptions = /* @__PURE__ */ new Set();
+  const sinks = [];
+  for (const spec of specs) {
+    const name = spec.export ?? "default";
+    const configKeys = spec.hostOption ? [spec.hostOption] : [];
+    const key = `${name}|${configKeys.join(",")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (name === "default") {
+      for (const configKey of configKeys) anyCallOptions.add(configKey);
+      continue;
+    }
+    sinks.push({ callee: name, argIndex: 0, anyArg: true, configKeys });
+    sinks.push({ property: name, argIndex: 0, anyArg: true, configKeys });
+  }
+  if (anyCallOptions.size > 0) {
+    sinks.push({ argIndex: 0, anyArg: true, matchAny: true, configKeys: [...anyCallOptions] });
+  }
+  return sinks;
 }
 var parseSync = null;
 try {
@@ -14953,7 +14991,7 @@ try {
 function parserAvailable() {
   return parseSync !== null;
 }
-function analyzeFile(text, filePath) {
+function analyzeFile(text, filePath, extraSinks = []) {
   if (parseSync === null) {
     return { hits: [], error: "native parser unavailable on this platform" };
   }
@@ -14969,26 +15007,29 @@ function analyzeFile(text, filePath) {
   }
   const index = new LineIndex(text);
   const bindings = /* @__PURE__ */ new Map();
+  const unstable = collectUnstableNames(program);
+  const sinks = extraSinks.length > 0 ? [...SINKS, ...extraSinks] : SINKS;
   const hits = [];
-  walk2(program, (node) => {
-    if (node.type !== "VariableDeclarator") return;
+  for (const node of moduleScopeDeclarators(program)) {
     const id = node.id;
     const init2 = node.init;
-    if (!id || id.type !== "Identifier" || !init2) return;
+    if (!id || id.type !== "Identifier" || !init2) continue;
     const name = String(id.name);
-    const client = clientBindingFor(init2, bindings);
+    if (unstable.has(name)) continue;
+    const context = { unstable, callStart: node.start };
+    const client = clientBindingFor(init2, bindings, context);
     if (client) {
-      bindings.set(name, client);
-      return;
+      bindings.set(name, { ...client, declaredAt: node.start });
+      continue;
     }
     if (init2.type === "Identifier") {
       const aliased = bindings.get(String(init2.name));
-      if (aliased) bindings.set(name, aliased);
-      return;
+      if (aliased) bindings.set(name, { ...aliased, declaredAt: node.start });
+      continue;
     }
     const literal = literalBindingFor(init2);
-    if (literal) bindings.set(name, literal);
-  });
+    if (literal) bindings.set(name, { ...literal, declaredAt: node.start });
+  }
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
     if (node.type !== "CallExpression" && !isNew) return;
@@ -14997,7 +15038,7 @@ function analyzeFile(text, filePath) {
     const shape = calleeShape(callee);
     const args = node.arguments ?? [];
     if (callee.type === "MemberExpression" && shape.object) {
-      const binding = bindings.get(shape.object);
+      const binding = readable(bindings, shape.object, unstable, node.start);
       if (binding?.kind === "client") {
         hits.push(
           toHit(
@@ -15012,13 +15053,27 @@ function analyzeFile(text, filePath) {
         return;
       }
     }
-    const sink = findSink(shape, isNew);
-    if (!sink) return;
-    const argument = args[sink.argIndex];
-    if (!argument) return;
-    const resolution = resolveArgument(argument, sink.configKeys ?? [], bindings, 0);
-    if (resolution.kind === "not-a-url") return;
-    hits.push(toHit(resolution, node, index, filePath, "high"));
+    const context = { unstable, callStart: node.start };
+    for (const sink of findSinks(shape, isNew, sinks)) {
+      const configKeys = sink.configKeys ?? [];
+      if (sink.anyArg) {
+        for (const argument2 of args) {
+          if (!argument2) continue;
+          if (sink.matchAny && argument2.type !== "ObjectExpression") continue;
+          const resolution2 = resolveArgument(argument2, configKeys, bindings, 0, context);
+          if (resolution2.kind !== "resolved") continue;
+          hits.push(toHit(resolution2, node, index, filePath, "high"));
+          return;
+        }
+        continue;
+      }
+      const argument = args[sink.argIndex];
+      if (!argument) continue;
+      const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
+      if (resolution.kind === "not-a-url") continue;
+      hits.push(toHit(resolution, node, index, filePath, "high"));
+      return;
+    }
   });
   return { hits };
 }
@@ -15039,7 +15094,7 @@ function toHit(resolution, node, index, filePath, confidence) {
     matchedOn: reason
   };
 }
-function resolveArgument(node, configKeys, bindings, depth) {
+function resolveArgument(node, configKeys, bindings, depth, context) {
   if (depth > MAX_DEPTH) {
     return { kind: "unresolved", reason: "constant chain too deep to resolve" };
   }
@@ -15051,7 +15106,7 @@ function resolveArgument(node, configKeys, bindings, depth) {
     case "TSInstantiationExpression":
     case "ParenthesizedExpression": {
       const inner = node.expression;
-      return inner ? resolveArgument(inner, configKeys, bindings, depth + 1) : { kind: "not-a-url" };
+      return inner ? resolveArgument(inner, configKeys, bindings, depth + 1, context) : { kind: "not-a-url" };
     }
     case "Literal": {
       const value = node.value;
@@ -15068,11 +15123,18 @@ function resolveArgument(node, configKeys, bindings, depth) {
       return hostFromUrlPrefix(prefix, quasis.length > 1);
     }
     case "Identifier": {
-      const binding = bindings.get(String(node.name));
+      const name = String(node.name);
+      if (context.unstable.has(name)) {
+        return { kind: "unresolved", reason: context.unstable.get(name) ?? "not resolvable" };
+      }
+      const binding = bindings.get(name);
+      if (binding && binding.declaredAt > context.callStart) {
+        return { kind: "unresolved", reason: `${name} is used before it is declared` };
+      }
       if (!binding) {
         return {
           kind: "unresolved",
-          reason: `value of ${String(node.name)} is not known statically`
+          reason: `value of ${name} is not known statically`
         };
       }
       if (binding.kind === "env") {
@@ -15093,7 +15155,7 @@ function resolveArgument(node, configKeys, bindings, depth) {
     case "BinaryExpression": {
       if (node.operator !== "+") return { kind: "not-a-url" };
       const left = node.left;
-      return left ? resolveArgument(left, configKeys, bindings, depth + 1) : { kind: "not-a-url" };
+      return left ? resolveArgument(left, configKeys, bindings, depth + 1, context) : { kind: "not-a-url" };
     }
     case "ObjectExpression": {
       for (const property of node.properties ?? []) {
@@ -15101,7 +15163,7 @@ function resolveArgument(node, configKeys, bindings, depth) {
         const value = property.value;
         const name = key ? String(key.name ?? key.value ?? "") : "";
         if (value && configKeys.includes(name)) {
-          return resolveArgument(value, configKeys, bindings, depth + 1);
+          return resolveArgument(value, configKeys, bindings, depth + 1, context);
         }
       }
       return { kind: "not-a-url" };
@@ -15128,7 +15190,7 @@ function literalBindingFor(init2) {
   }
   return null;
 }
-function clientBindingFor(init2, bindings) {
+function clientBindingFor(init2, bindings, context) {
   if (init2.type !== "CallExpression") return null;
   const callee = init2.callee;
   if (!callee) return null;
@@ -15138,7 +15200,7 @@ function clientBindingFor(init2, bindings) {
   const args = init2.arguments ?? [];
   const argument = args[sink.argIndex];
   if (!argument) return { kind: "client", host: null, reason: "client created with no base URL" };
-  const resolution = resolveArgument(argument, sink.configKeys, bindings, 0);
+  const resolution = resolveArgument(argument, sink.configKeys, bindings, 0, context);
   if (resolution.kind === "resolved") return { kind: "client", host: resolution.host };
   return {
     kind: "client",
@@ -15173,6 +15235,44 @@ function calleeShape(callee) {
     };
   }
   return {};
+}
+function collectUnstableNames(program) {
+  const seen = /* @__PURE__ */ new Set();
+  const unstable = /* @__PURE__ */ new Map();
+  walk2(program, (node) => {
+    if (node.type === "VariableDeclarator") {
+      const id = node.id;
+      if (!id || id.type !== "Identifier") return;
+      const name = String(id.name);
+      if (seen.has(name)) unstable.set(name, `${name} is declared more than once in this file`);
+      seen.add(name);
+      return;
+    }
+    if (node.type === "AssignmentExpression") {
+      const left = node.left;
+      if (left?.type !== "Identifier") return;
+      const name = String(left.name);
+      unstable.set(name, `${name} is reassigned after it is declared`);
+    }
+  });
+  return unstable;
+}
+function moduleScopeDeclarators(program) {
+  const out = [];
+  for (const statement of program.body ?? []) {
+    const declaration = statement.type === "ExportNamedDeclaration" ? statement.declaration ?? null : statement;
+    if (declaration?.type !== "VariableDeclaration") continue;
+    for (const declarator of declaration.declarations ?? []) {
+      if (declarator.type === "VariableDeclarator") out.push(declarator);
+    }
+  }
+  return out;
+}
+function readable(bindings, name, unstable, callStart) {
+  if (unstable.has(name)) return null;
+  const binding = bindings.get(name);
+  if (!binding || binding.declaredAt > callStart) return null;
+  return binding;
 }
 function walk2(node, visit2) {
   if (!node || typeof node !== "object") return;
@@ -15310,6 +15410,13 @@ var SEVERITY_ORDER = { error: 3, warning: 2, note: 1 };
 var CONFIDENCE_ORDER = { high: 3, medium: 2, low: 1 };
 var severityOrder = (f3) => SEVERITY_ORDER[f3.severity];
 var confidenceOrder = (f3) => CONFIDENCE_ORDER[f3.confidence];
+function isReadableDirectory(root) {
+  try {
+    return statSync2(root).isDirectory();
+  } catch {
+    return false;
+  }
+}
 function scan(options) {
   const {
     root,
@@ -15332,10 +15439,21 @@ function scan(options) {
   const signals = [];
   const unmatchedPackages = /* @__PURE__ */ new Set();
   const unmatchedHosts = /* @__PURE__ */ new Set();
-  const { manifests, sources } = walk({
+  const rootUsable = isReadableDirectory(root);
+  if (!rootUsable) {
+    errors.push({
+      file: root,
+      message: "not a readable directory; nothing was scanned",
+      fatal: true
+    });
+  }
+  const { manifests, sources } = rootUsable ? walk({
     root,
     ...options.exclude ? { exclude: options.exclude } : {}
-  });
+  }) : { manifests: [], sources: [] };
+  const vendorSinks = clientConstructorSinks(
+    kb.vendors.flatMap((v2) => v2.aliases.clientConstructors ?? [])
+  );
   let manifestsScanned = 0;
   if (includeManifests) {
     const analysis = analyzeManifests({
@@ -15376,7 +15494,7 @@ function scan(options) {
         errors.push({ file, message: `unreadable: ${error2.message}`, fatal: false });
         continue;
       }
-      const { hits, error } = analyzeFile(text, file);
+      const { hits, error } = analyzeFile(text, file, vendorSinks);
       if (error) {
         errors.push({ file, message: `${error}; file skipped`, fatal: false });
         continue;
@@ -15516,7 +15634,7 @@ var explainCommand = defineCommand({
 });
 
 // src/commands/scan.ts
-import { writeFileSync } from "fs";
+import { statSync as statSync3, writeFileSync } from "fs";
 import { resolve as resolve4 } from "path";
 
 // src/config.ts
@@ -15785,6 +15903,13 @@ function expiredNote(finding, rule) {
 var TOOL_VERSION = "0.1.0";
 
 // src/commands/scan.ts
+function isDirectory(path) {
+  try {
+    return statSync3(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
 var SEVERITY_RANK2 = { note: 1, warning: 2, error: 3 };
 var FAIL_ON = ["none", "note", "warning", "error"];
 var scanCommand = defineCommand({
@@ -15833,10 +15958,18 @@ var scanCommand = defineCommand({
     },
     quiet: { type: "boolean", default: false }
   },
-  run({ args }) {
+  run({ args, rawArgs }) {
     const root = resolve4(String(args.path ?? "."));
-    const failOn = parseFailOn(String(args["fail-on"]));
+    if (!isDirectory(root)) {
+      process.stderr.write(`egressa: ${root} is not a directory
+`);
+      process.exit(EXIT.USAGE);
+    }
     const config = loadConfig(root, args.config ? String(args.config) : void 0);
+    const failOnGiven = rawArgs.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
+    const failOn = parseFailOn(
+      failOnGiven ? String(args["fail-on"]) : config.failOn ?? String(args["fail-on"])
+    );
     let result;
     try {
       result = scan({
@@ -15990,32 +16123,33 @@ var vendorsCommand = defineCommand({
 });
 
 // src/cli.ts
+var subCommands = {
+  scan: scanCommand,
+  vendors: vendorsCommand,
+  explain: explainCommand,
+  schema: schemaCommand
+};
 var main = defineCommand({
   meta: {
     name: "egressa",
     description: "Detects third-party data-egress patterns in source code and their cross-border transfer exposure. Does not assess or certify GDPR compliance."
   },
-  subCommands: {
-    scan: scanCommand,
-    vendors: vendorsCommand,
-    explain: explainCommand,
-    schema: schemaCommand
-  },
-  // `egressa .` with no subcommand runs a scan, which is what people type.
-  args: scanCommand.args,
-  async run(context) {
-    if (context.rawArgs.length === 0 || context.rawArgs[0]?.startsWith("-") || existsAsPath(context.rawArgs[0])) {
-      return scanCommand.run?.(context);
-    }
-    return void 0;
-  }
+  subCommands,
+  args: scanCommand.args
 });
-function existsAsPath(value) {
-  return value !== void 0 && !value.startsWith("-");
+var PASS_THROUGH = /* @__PURE__ */ new Set(["--help", "-h", "--version", "-v"]);
+function withDefaultCommand(argv2) {
+  const first = argv2[0];
+  if (first === void 0) return ["scan"];
+  if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv2;
+  return ["scan", ...argv2];
 }
-runMain(main).catch((error) => {
+runMain(main, { rawArgs: withDefaultCommand(process.argv.slice(2)) }).catch((error) => {
   process.stderr.write(`egressa: ${error.message}
 `);
   process.exit(EXIT.INTERNAL);
 });
+export {
+  withDefaultCommand
+};
 //# sourceMappingURL=cli.js.map
