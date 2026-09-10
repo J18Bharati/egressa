@@ -103,12 +103,24 @@ describe('no generated output can claim compliance', () => {
   });
 
   it('knowledge base entries contain no evaluative language', () => {
-    for (const id of ['stripe', 'sentry', 'openai', 'mailgun', 'google-analytics']) {
+    // Computed for the same reason the skill list below is: a hardcoded set of
+    // ids lets the next vendor entry ship outside the contract just by nobody
+    // remembering to add it.
+    const ids = vendorIds();
+    expect(ids.length).toBeGreaterThan(4);
+    for (const id of ids) {
       const entry = read(`kb/vendors/${id}.json`);
       expect({ id, forbidden: findForbiddenClaims(entry) }).toEqual({ id, forbidden: [] });
     }
   });
 });
+
+/** Every vendor entry in the knowledge base, by id, found by reading kb/. */
+const vendorIds = (): string[] =>
+  readdirSync('kb/vendors')
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.replace(/\.json$/, ''))
+    .sort();
 
 /**
  * Every markdown file shipped under `skill/`, found by walking the tree rather

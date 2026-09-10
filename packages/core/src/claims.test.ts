@@ -27,7 +27,7 @@ describe('claims contract', () => {
   it('flags claims that leap from "references a vendor" to "broke the law"', () => {
     expect(findForbiddenClaims('This is a violation of GDPR.')).toContain('violation');
     expect(findForbiddenClaims('Your project is fully compliant.')).toContain('compliant');
-    expect(findForbiddenClaims('This guarantees lawful processing.')).toContain('guarantees');
+    expect(findForbiddenClaims('This guarantees lawful processing.')).toContain('guarantee');
   });
 
   it('does not flag ordinary finding prose', () => {
@@ -38,8 +38,13 @@ describe('claims contract', () => {
   });
 
   it('matches on word boundaries, not substrings', () => {
-    // "compliant" must not fire inside an unrelated longer word.
-    expect(findForbiddenClaims('the compliantly-named module')).toEqual([]);
+    // A stem must not fire when it is buried inside a longer word.
+    expect(findForbiddenClaims('an inviolate boundary')).toEqual([]);
+    expect(findForbiddenClaims('a compliance assessment')).toEqual([]);
+    // ...but a hyphen is punctuation, not part of a word, so it cannot hide one.
+    expect(findForbiddenClaims('gdpr-violation-report')).toContain('violation');
+    // A citation URL carries the publisher's wording, not ours.
+    expect(findForbiddenClaims('see https://noyb.eu/en/google-analytics-illegal')).toEqual([]);
   });
 
   it('every forbidden word is actually detected', () => {

@@ -37,28 +37,42 @@ export const DISCLAIMER =
 export const DISCLAIMER_SHORT = 'Detection only - not a compliance assessment.';
 
 /**
- * Words that must never appear in generated output.
+ * Stems that must never appear in generated output.
  *
  * Each entry is a claim Egressa is not entitled to make from static analysis:
  * it observes that code references a vendor, not that any personal data was
- * actually sent, nor that sending it was unlawful. Matching is case-insensitive
- * and word-boundary anchored, so "compliance" as part of the disclaimer itself
- * is excluded by DISCLAIMER_ALLOWLIST rather than by loose matching.
+ * actually sent, nor that sending it was unlawful.
+ *
+ * These are stems, not exact words. The matcher appends INFLECTIONS, so
+ * "violation" also catches "violations" and "illegal" also catches "illegally".
+ * Listing exact words instead left the obvious plurals through -- "GDPR
+ * violations: 3" passed every surface check in the repository -- which is the
+ * failure mode a vocabulary list is supposed to prevent.
+ *
+ * "compliance" on its own is deliberately absent: it is legitimate in the
+ * disclaimer and in prose describing what the tool does not do.
  */
 export const FORBIDDEN_CLAIM_WORDS: readonly string[] = [
   'compliant',
   'non-compliant',
+  'fully compliant',
   'compliance certified',
   'certified compliant',
+  'violate',
   'violation',
-  'violates',
   'illegal',
   'unlawful',
-  'guarantees',
-  'guaranteed',
+  'guarantee',
   'audit-ready',
-  'fully compliant',
 ];
+
+/**
+ * Suffixes appended to every stem when matching.
+ *
+ * Deliberately small. A stemmer would catch more and misfire more; this covers
+ * the inflections that actually appear in claim-shaped prose.
+ */
+const INFLECTIONS = '(?:s|es|d|ed|ing|ly|ions?)?';
 
 /**
  * Strings permitted to contain otherwise-forbidden words, because they are the
@@ -76,9 +90,22 @@ export function findForbiddenClaims(text: string): string[] {
   for (const allowed of DISCLAIMER_ALLOWLIST) {
     haystack = haystack.split(allowed).join(' ');
   }
+  // URLs are removed before matching. A citation's address is the publisher's
+  // wording, not a claim Egressa makes -- the Austrian DSB decision is filed by
+  // noyb under a slug ending "-illegal", and a knowledge base that is required
+  // to cite its sources must be able to link to it. Prose around the link is
+  // still scanned.
+  haystack = haystack.replace(/https?:\/\/\S+/gi, ' ');
   const lower = haystack.toLowerCase();
+  // The boundary class excludes only letters and digits, so a hyphenated
+  // compound such as "gdpr-violation-report" is caught rather than hidden by
+  // its own punctuation. A stem inside a longer forbidden phrase matches too,
+  // and both are reported; callers only ask whether the list is empty.
   return FORBIDDEN_CLAIM_WORDS.filter((word) => {
-    const pattern = new RegExp(`(^|[^a-z0-9-])${escapeRegExp(word)}([^a-z0-9-]|$)`, 'i');
+    const pattern = new RegExp(
+      `(^|[^a-z0-9])${escapeRegExp(word)}${INFLECTIONS}([^a-z0-9]|$)`,
+      'i',
+    );
     return pattern.test(lower);
   });
 }
