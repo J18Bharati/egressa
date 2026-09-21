@@ -143,6 +143,37 @@ same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
 
 ## Engine
 
+### Carry a jurisdiction's role through to output
+
+**What:** Change `TransferFacts.jurisdictions` from `CountryCode[]` to a shape carrying the KB's
+`role`, and render it. `merge/index.ts:161` is the single line that flattens it:
+`vendor.processing.jurisdictions.map((j) => j.country)`.
+
+**Why:** AWS renders as `processing: US, EEA, US, LU`, which reads as a deduplication bug and is
+not one. `kb/vendors/aws.json` records US twice with distinct roles — Amazon Web Services, Inc. is
+the contracting entity for customers outside EMEA and is *not* selected by the Region setting,
+while the primary entry is. That distinction is exactly what the knowledge base exists to carry,
+and the renderer throws it away, so the output invites a reader to "fix" it by deduplicating.
+Deduplicating would destroy real information. `human.ts:108` already does
+`[...new Set(finding.transfer.jurisdictions)]`, which is that mistake, shipped.
+
+**Context:** The KB schema already requires `{country, role}` on every entry, so the data exists
+and only the finding type discards it. Touches `packages/core/src/types.ts`,
+`schemas/findings-1.1.0.json`, `merge/index.ts:161`, and five render sites —
+`sarif.ts:90`, `sarif.ts:163`, `markdown.ts:34`, `markdown.ts:48`, `human.ts:106-109`.
+
+The schema edit is only free until the first release: nothing has ever been published, so
+`findings-1.1.0.json` can change in place today, and after a release a meaning change needs a new
+schema file. That makes this cheaper now than it will ever be again.
+
+Raised as T5.3 in `docs/reviews/2026-09-21-external-run-triage.md`, where it was recorded as
+renderer-only. It is not — the engineering review caught that SARIF flattens it too, and the type
+turns out to discard `role` before any renderer sees it.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ### Cover `--no-color` with a real assertion
 
 **What:** Assert that colour is actually suppressed, from a context where it would otherwise be on.
