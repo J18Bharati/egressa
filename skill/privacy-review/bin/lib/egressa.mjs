@@ -8005,7 +8005,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument3(source, options = {}) {
+    function parseDocument4(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -8031,7 +8031,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument3(src2, options);
+      const doc = parseDocument4(src2, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log2.warn(doc.options.logLevel, warning));
@@ -8067,7 +8067,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse3;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument3;
+    exports.parseDocument = parseDocument4;
     exports.stringify = stringify;
   }
 });
@@ -13936,8 +13936,8 @@ function globSync(globInput, options) {
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync3, statSync as statSync2 } from "fs";
-import { join as join22 } from "path";
+import { readFileSync as readFileSync4, statSync as statSync2 } from "fs";
+import { join as join3 } from "path";
 
 // ../kb-loader/dist/index.js
 import { readFileSync, readdirSync as readdirSync2 } from "fs";
@@ -14071,8 +14071,11 @@ function defaultKbPath() {
 }
 
 // ../core/dist/index.js
+import { readFileSync as readFileSync3 } from "fs";
+import { basename as basename22, join as join22 } from "path";
+var import_yaml3 = __toESM(require_dist(), 1);
 import { createHash } from "crypto";
-var FINDINGS_SCHEMA_VERSION = "1.0.0";
+var FINDINGS_SCHEMA_VERSION = "1.1.0";
 var TAGS = ["gdpr", "data-transfer", "third-party"];
 var RULES = {
   "transfer/third-country-egress": {
@@ -14603,12 +14606,22 @@ var MANIFEST_PATTERNS = [
   "**/yarn.lock"
 ];
 var SOURCE_PATTERNS = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
+var INFRA_PATTERNS = [
+  "**/vercel.json",
+  "**/serverless.{yml,yaml}",
+  "**/fly.toml",
+  "**/*.tf"
+];
 function walk(options) {
   const { root, exclude = [], respectIgnoreFiles = true } = options;
   const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude];
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
   const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
-  return { manifests: collect(MANIFEST_PATTERNS), sources: collect(SOURCE_PATTERNS) };
+  return {
+    manifests: collect(MANIFEST_PATTERNS),
+    sources: collect(SOURCE_PATTERNS),
+    infrastructure: collect(INFRA_PATTERNS)
+  };
 }
 function buildIgnoreFilter(root) {
   const matcher = (0, import_ignore.default)();
@@ -14622,7 +14635,17 @@ function buildIgnoreFilter(root) {
   }
   return found ? matcher : null;
 }
-var EXPOSURE_RULES_VERSION = "1.1.0";
+function resolveRegion(vendor, raw) {
+  const code = raw.trim().toLowerCase();
+  if (code === "") return null;
+  const hit = (vendor.regions ?? []).find((r3) => r3.code.toLowerCase() === code);
+  if (!hit) return null;
+  return { code: hit.code, country: hit.country.toUpperCase(), sourceUrl: hit.sourceUrl };
+}
+function declaresRegionNarrowing(vendor) {
+  return vendor.processing.jurisdictions.some((j) => j.regionSelected === true);
+}
+var EXPOSURE_RULES_VERSION = "1.2.0";
 var EEA_MEMBERS = /* @__PURE__ */ new Set([
   "AT",
   "BE",
@@ -14656,11 +14679,26 @@ var EEA_MEMBERS = /* @__PURE__ */ new Set([
   "NO",
   "EEA"
 ]);
-function classifyExposure(vendor, kb) {
-  const countries = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
-  const nonEea = countries.filter((c3) => !EEA_MEMBERS.has(c3));
+function classifyExposure(vendor, kb, context = {}) {
+  const known = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
   const euRegion = vendor.processing.euRegion;
-  const inputs = countries.map((c3) => `jurisdiction:${c3}`);
+  const inputs = known.map((c3) => `jurisdiction:${c3}`);
+  const region = context.region ?? null;
+  const narrows = region !== null && declaresRegionNarrowing(vendor);
+  const countries = narrows ? [
+    region.country,
+    ...vendor.processing.jurisdictions.filter((j) => j.regionSelected !== true).map((j) => j.country.toUpperCase())
+  ] : known;
+  if (region) {
+    inputs.push(`region:${region.code}`, `regionCountry:${region.country}`, "regionSource:kb");
+    if (narrows) inputs.push(`narrowedTo:${[...new Set(countries)].sort().join(",")}`);
+    else inputs.push("narrowing:not-declared");
+  } else if (context.unmappedRegion) {
+    inputs.push(`region:${context.unmappedRegion}`, "regionSource:unmapped");
+  } else {
+    inputs.push("regionSource:none");
+  }
+  const nonEea = countries.filter((c3) => !EEA_MEMBERS.has(c3));
   inputs.push(`euRegion:${euRegion.available ? euRegion.scope ?? "unscoped" : "none"}`);
   for (const mechanism of vendor.legal.transferMechanisms) {
     inputs.push(`mechanism:${mechanism.mechanism}`);
@@ -14947,7 +14985,7 @@ function findSinks(callee, isNew, sinks = SINKS) {
       catchAll.push(sink);
       continue;
     }
-    if (Boolean(sink.isNew) !== isNew) continue;
+    if (!sink.eitherForm && Boolean(sink.isNew) !== isNew) continue;
     if (sink.object && sink.property) {
       if (callee.object === sink.object && callee.property === sink.property) named.push(sink);
       continue;
@@ -14959,6 +14997,21 @@ function findSinks(callee, isNew, sinks = SINKS) {
     if (sink.callee && callee.name === sink.callee) named.push(sink);
   }
   return [...named, ...catchAll];
+}
+function vendorConstructorSinks(vendors) {
+  const sinks = [];
+  for (const { vendorId, constructors } of vendors) {
+    for (const sink of clientConstructorSinks(constructors)) {
+      sinks.push(sink.matchAny ? sink : { ...sink, vendorId });
+    }
+  }
+  return dedupeCatchAll(sinks);
+}
+function dedupeCatchAll(sinks) {
+  const named = sinks.filter((s2) => !s2.matchAny);
+  const options = new Set(sinks.filter((s2) => s2.matchAny).flatMap((s2) => s2.configKeys ?? []));
+  if (options.size === 0) return named;
+  return [...named, { argIndex: 0, anyArg: true, matchAny: true, configKeys: [...options] }];
 }
 function clientConstructorSinks(specs) {
   const seen = /* @__PURE__ */ new Set();
@@ -14974,8 +15027,10 @@ function clientConstructorSinks(specs) {
       for (const configKey of configKeys) anyCallOptions.add(configKey);
       continue;
     }
-    sinks.push({ callee: name, argIndex: 0, anyArg: true, configKeys });
-    sinks.push({ property: name, argIndex: 0, anyArg: true, configKeys });
+    const regionKeys = spec.regionOption ? [spec.regionOption] : [];
+    const shape = { argIndex: 0, anyArg: true, eitherForm: true, configKeys, regionKeys };
+    sinks.push({ callee: name, ...shape });
+    sinks.push({ property: name, ...shape });
   }
   if (anyCallOptions.size > 0) {
     sinks.push({ argIndex: 0, anyArg: true, matchAny: true, configKeys: [...anyCallOptions] });
@@ -15062,7 +15117,25 @@ function analyzeFile(text, filePath, extraSinks = []) {
           if (sink.matchAny && argument2.type !== "ObjectExpression") continue;
           const resolution2 = resolveArgument(argument2, configKeys, bindings, 0, context);
           if (resolution2.kind !== "resolved") continue;
-          hits.push(toHit(resolution2, node, index, filePath, "high"));
+          const hit = toHit(resolution2, node, index, filePath, "high");
+          const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
+          if (withRegion) hit.region = withRegion;
+          if (sink.vendorId) hit.vendorId = sink.vendorId;
+          hits.push(hit);
+          return;
+        }
+        const regionOnly = sink.vendorId ? regionFromArguments(args, sink.regionKeys ?? [], bindings, context) : null;
+        if (regionOnly && sink.vendorId) {
+          const location = index.locationAt(filePath, node.start, node.end - node.start);
+          hits.push({
+            host: null,
+            region: regionOnly,
+            vendorId: sink.vendorId,
+            location,
+            snippet: index.snippetAt(node.start),
+            confidence: "high",
+            matchedOn: regionOnly
+          });
           return;
         }
         continue;
@@ -15076,6 +15149,29 @@ function analyzeFile(text, filePath, extraSinks = []) {
     }
   });
   return { hits };
+}
+function regionFromArguments(args, regionKeys, bindings, context) {
+  if (regionKeys.length === 0) return null;
+  for (const argument of args) {
+    if (!argument || argument.type !== "ObjectExpression") continue;
+    for (const property of argument.properties ?? []) {
+      const key = property.key;
+      const value = property.value;
+      const name = key ? String(key.name ?? key.value ?? "") : "";
+      if (!value || !regionKeys.includes(name)) continue;
+      if (value.type === "Literal" && typeof value.value === "string") return value.value;
+      if (value.type === "Identifier") {
+        const bindingName = String(value.name);
+        if (context.unstable.has(bindingName)) return null;
+        const binding = bindings.get(bindingName);
+        if (!binding || binding.kind !== "string") return null;
+        if (binding.declaredAt > context.callStart) return null;
+        return binding.value;
+      }
+      return null;
+    }
+  }
+  return null;
 }
 function toHit(resolution, node, index, filePath, confidence) {
   const location = index.locationAt(filePath, node.start, node.end - node.start);
@@ -15287,6 +15383,121 @@ function walk2(node, visit2) {
     walk2(candidate[key], visit2);
   }
 }
+function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed) {
+  const index = new LineIndex(text);
+  const out = [];
+  let offset = 0;
+  let depth = 0;
+  let inBlock = insideBlockNamed === void 0;
+  let blockDepth = -1;
+  for (const line of text.split("\n")) {
+    const lineOffset = offset;
+    offset += line.length + 1;
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+    if (insideBlockNamed !== void 0 && !inBlock) {
+      const header = trimmed.match(/^([a-z_]+)\s+"([^"]+)"\s*\{/);
+      if (header && header[1] === insideBlockNamed && header[2] === provider) {
+        inBlock = true;
+        blockDepth = depth;
+      }
+    }
+    if (inBlock) {
+      for (const key of keys) {
+        const at = line.indexOf(key);
+        if (at === -1) continue;
+        const assignment = line.slice(at).match(new RegExp(`^${key}\\s*=\\s*"([^"\\\\$]+)"`));
+        if (!assignment?.[1]) continue;
+        out.push({
+          provider,
+          region: assignment[1],
+          loc: index.locationAt(filePath, lineOffset + at, key.length),
+          snippet: index.snippetAt(lineOffset + at)
+        });
+      }
+    }
+    depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+    if (insideBlockNamed !== void 0 && inBlock && depth <= blockDepth) {
+      inBlock = false;
+      blockDepth = -1;
+    }
+  }
+  return out;
+}
+function analyzeInfrastructure(options) {
+  const { root, configPaths } = options;
+  const regions = [];
+  const errors = [];
+  for (const path of configPaths) {
+    let text;
+    try {
+      text = readFileSync3(join22(root, path), "utf8");
+    } catch (error) {
+      errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
+      continue;
+    }
+    const name = basename22(path);
+    try {
+      if (name === "vercel.json") regions.push(...parseVercelJson(text, path));
+      else if (name === "serverless.yml" || name === "serverless.yaml") {
+        regions.push(...parseServerlessYaml(text, path));
+      } else if (name === "fly.toml") {
+        regions.push(...regionsFromKeyLiterals(text, path, ["primary_region"], "fly"));
+      } else if (name.endsWith(".tf")) {
+        for (const provider of ["aws", "gcp", "azure"]) {
+          regions.push(...regionsFromKeyLiterals(text, path, ["region"], provider, "provider"));
+        }
+      }
+    } catch (error) {
+      errors.push({
+        file: path,
+        message: `${error.message}; file skipped`,
+        fatal: false
+      });
+    }
+  }
+  return { regions, errors, filesScanned: configPaths.length };
+}
+function parseVercelJson(text, path) {
+  const root = parseTree2(text, [], { allowTrailingComma: true });
+  if (!root) return [];
+  const regionsNode = root.children?.find((c3) => c3.children?.[0]?.value === "regions");
+  const values = regionsNode?.children?.[1];
+  if (!values || values.type !== "array") return [];
+  if (root.children?.some((c3) => c3.children?.[0]?.value === "schemaVersion")) return [];
+  const index = new LineIndex(text);
+  const out = [];
+  for (const item of values.children ?? []) {
+    if (typeof item.value !== "string") continue;
+    out.push({
+      provider: "vercel",
+      region: item.value,
+      loc: index.locationAt(path, item.offset, item.length),
+      snippet: index.snippetAt(item.offset)
+    });
+  }
+  return out;
+}
+function parseServerlessYaml(text, path) {
+  const doc = (0, import_yaml3.parseDocument)(text, { keepSourceTokens: true });
+  if (doc.errors.length > 0) return [];
+  const provider = doc.get("provider");
+  if (!provider?.get) return [];
+  const name = provider.get("name");
+  const region = provider.get("region");
+  if (typeof name !== "string" || typeof region !== "string") return [];
+  const index = new LineIndex(text);
+  const at = text.indexOf("region", text.indexOf("provider"));
+  const offset = at === -1 ? 0 : at;
+  return [
+    {
+      provider: name,
+      region,
+      loc: index.locationAt(path, offset, "region".length),
+      snippet: index.snippetAt(offset)
+    }
+  ];
+}
 function confidenceForDependency(record, alias) {
   if (!record.direct) return "low";
   if (record.dev) return "medium";
@@ -15301,34 +15512,51 @@ function mergeSignals(signals, options) {
   const groups = /* @__PURE__ */ new Map();
   for (const signal of signals) {
     const vendor = signal.vendorId ? kb.byId.get(signal.vendorId) ?? null : null;
-    const ruleId = ruleForSignal(signal, vendor, kb);
-    const key = `${signal.vendorId ?? `unknown:${signal.matchedOn}`}|${ruleId}`;
+    const region = vendor && signal.region ? resolveRegion(vendor, signal.region) : null;
+    const classified = vendor ? classifyExposure(vendor, kb, {
+      region,
+      ...signal.region && !region ? { unmappedRegion: signal.region } : {}
+    }) : null;
+    const ruleId = classified?.ruleId ?? unmatchedRule(signal);
+    const narrowedTo = classified?.exposure.inputs.some((i2) => i2.startsWith("narrowedTo:")) ? region?.country : void 0;
+    const key = `${signal.vendorId ?? `unknown:${signal.matchedOn}`}|${ruleId}|${narrowedTo ?? ""}`;
     const existing = groups.get(key);
     if (existing) existing.signals.push(signal);
-    else groups.set(key, { ruleId, vendor, signals: [signal] });
+    else groups.set(key, { ruleId, vendor, signals: [signal], classified, region: region ?? null });
   }
   const findings = [];
   for (const group of groups.values()) {
-    findings.push(buildFinding(group.ruleId, group.vendor, group.signals, kb, staleVendorIds));
+    findings.push(
+      buildFinding(
+        group.ruleId,
+        group.vendor,
+        group.signals,
+        group.classified,
+        group.region,
+        staleVendorIds
+      )
+    );
   }
   return findings.sort(
     (a2, b2) => severityOrder(b2) - severityOrder(a2) || confidenceOrder(b2) - confidenceOrder(a2) || (a2.vendor?.name ?? a2.ruleId).localeCompare(b2.vendor?.name ?? b2.ruleId)
   );
 }
-function ruleForSignal(signal, vendor, kb) {
-  if (!vendor) {
-    return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
-  }
-  return classifyExposure(vendor, kb).ruleId;
+function unmatchedRule(signal) {
+  return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
 }
-function buildFinding(ruleId, vendor, signals, kb, staleVendorIds) {
+function buildFinding(ruleId, vendor, signals, classified, region, staleVendorIds) {
   const evidence = signals.map(toEvidence).sort(byStrength);
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
   const transfer = vendor ? toTransferFacts(vendor) : null;
-  const exposure = vendor ? classifyExposure(vendor, kb).exposure : null;
+  const exposure = classified?.exposure ?? null;
   return {
-    id: fingerprint(vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ""}`, ruleId, primary),
+    id: fingerprint(
+      vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ""}`,
+      ruleId,
+      primary,
+      exposure?.inputs.some((i2) => i2.startsWith("narrowedTo:")) ? region?.country ?? null : null
+    ),
     ruleId,
     vendor: vendor ? { id: vendor.id, name: vendor.name, category: vendor.category } : null,
     transfer,
@@ -15350,7 +15578,10 @@ function toEvidence(signal) {
     snippet: signal.snippet,
     confidence: signal.confidence,
     ...signal.devOnly ? { devOnly: true } : {},
-    ...signal.transitiveVia ? { transitiveVia: signal.transitiveVia } : {}
+    ...signal.transitiveVia ? { transitiveVia: signal.transitiveVia } : {},
+    // This list is a whitelist: a field not named here is dropped from the
+    // finding even though the signal carried it.
+    ...signal.region ? { region: signal.region } : {}
   };
 }
 function byStrength(a2, b2) {
@@ -15401,10 +15632,10 @@ function buildRemediation(ruleId, vendor, staleVendorIds) {
   const summary = stale ? `${RULES[ruleId].help} This entry has not been re-verified recently; check the sources before relying on it.` : RULES[ruleId].help;
   return { summary, links };
 }
-function fingerprint(vendorKey, ruleId, primary) {
-  const hash = createHash("sha256");
-  hash.update(`${vendorKey}\0${ruleId}\0${primary?.file ?? ""}\0${primary?.matchedOn ?? ""}`);
-  return hash.digest("hex").slice(0, 16);
+function fingerprint(vendorKey, ruleId, primary, narrowedCountry) {
+  const parts = [vendorKey, ruleId, primary?.file ?? "", primary?.matchedOn ?? ""];
+  if (narrowedCountry) parts.push(`region:${narrowedCountry}`);
+  return createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 16);
 }
 var SEVERITY_ORDER = { error: 3, warning: 2, note: 1 };
 var CONFIDENCE_ORDER = { high: 3, medium: 2, low: 1 };
@@ -15425,6 +15656,7 @@ function scan(options) {
     includeDev = true,
     includeManifests = true,
     includeCallsites = false,
+    includeInfrastructure = true,
     minConfidence = "low",
     onlyVendor,
     now = /* @__PURE__ */ new Date()
@@ -15447,12 +15679,15 @@ function scan(options) {
       fatal: true
     });
   }
-  const { manifests, sources } = rootUsable ? walk({
+  const { manifests, sources, infrastructure } = rootUsable ? walk({
     root,
     ...options.exclude ? { exclude: options.exclude } : {}
-  }) : { manifests: [], sources: [] };
-  const vendorSinks = clientConstructorSinks(
-    kb.vendors.flatMap((v2) => v2.aliases.clientConstructors ?? [])
+  }) : { manifests: [], sources: [], infrastructure: [] };
+  const vendorSinks = vendorConstructorSinks(
+    kb.vendors.map((v2) => ({
+      vendorId: v2.id,
+      constructors: v2.aliases.clientConstructors ?? []
+    }))
   );
   let manifestsScanned = 0;
   if (includeManifests) {
@@ -15489,7 +15724,7 @@ function scan(options) {
     for (const file of sources) {
       let text;
       try {
-        text = readFileSync3(join22(root, file), "utf8");
+        text = readFileSync4(join3(root, file), "utf8");
       } catch (error2) {
         errors.push({ file, message: `unreadable: ${error2.message}`, fatal: false });
         continue;
@@ -15502,6 +15737,18 @@ function scan(options) {
       filesAnalysed += 1;
       for (const hit of hits) {
         if (hit.host === null) {
+          if (hit.vendorId) {
+            signals.push({
+              kind: "callsite",
+              vendorId: hit.vendorId,
+              matchedOn: hit.matchedOn,
+              confidence: hit.confidence,
+              location: hit.location,
+              snippet: hit.snippet,
+              ...hit.region ? { region: hit.region } : {}
+            });
+            continue;
+          }
           signals.push({
             kind: "callsite",
             vendorId: null,
@@ -15519,13 +15766,31 @@ function scan(options) {
         }
         signals.push({
           kind: "callsite",
-          vendorId: match?.vendor.id ?? null,
+          vendorId: hit.vendorId ?? match?.vendor.id ?? null,
           matchedOn: hit.host,
           confidence: hit.confidence,
           location: hit.location,
-          snippet: hit.snippet
+          snippet: hit.snippet,
+          ...hit.region ? { region: hit.region } : {}
         });
       }
+    }
+  }
+  if (includeInfrastructure) {
+    const infra = analyzeInfrastructure({ root, configPaths: infrastructure });
+    errors.push(...infra.errors);
+    for (const record of infra.regions) {
+      const vendor = kb.byId.get(record.provider);
+      if (!vendor) unmatchedHosts.add(record.provider);
+      signals.push({
+        kind: "infrastructure",
+        vendorId: vendor?.id ?? null,
+        matchedOn: record.region,
+        confidence: "high",
+        location: record.loc,
+        snippet: record.snippet,
+        region: record.region
+      });
     }
   }
   const engine = includeCallsites ? { callsite: degraded ? "unavailable" : "oxc", degraded } : { callsite: "disabled", degraded: false };
@@ -15638,13 +15903,13 @@ import { statSync as statSync3, writeFileSync } from "fs";
 import { resolve as resolve4 } from "path";
 
 // src/config.ts
-var import_yaml3 = __toESM(require_dist(), 1);
-import { existsSync, readFileSync as readFileSync4 } from "fs";
-import { join as join3 } from "path";
+var import_yaml4 = __toESM(require_dist(), 1);
+import { existsSync, readFileSync as readFileSync5 } from "fs";
+import { join as join4 } from "path";
 function loadConfig(root, explicitPath) {
-  const path = explicitPath ?? join3(root, ".egressa.yml");
+  const path = explicitPath ?? join4(root, ".egressa.yml");
   if (!existsSync(path)) return {};
-  const parsed = (0, import_yaml3.parse)(readFileSync4(path, "utf8"));
+  const parsed = (0, import_yaml4.parse)(readFileSync5(path, "utf8"));
   if (!parsed || typeof parsed !== "object") return {};
   for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
     if (!suppression.reason || suppression.reason.trim() === "") {
@@ -15654,6 +15919,17 @@ function loadConfig(root, explicitPath) {
     }
   }
   return parsed;
+}
+
+// src/emit.ts
+function writeOut(text) {
+  return new Promise((resolve5, reject) => {
+    process.stdout.write(text, (error) => error ? reject(error) : resolve5());
+  });
+}
+async function writeOutAndExit(text, code) {
+  await writeOut(text);
+  process.exit(code);
 }
 
 // src/exit-codes.ts
@@ -15728,13 +16004,17 @@ function formatHuman(result, options) {
 }
 function formatFinding(finding, c3) {
   const marker = finding.severity === "warning" ? c3("yellow", "!") : finding.severity === "error" ? c3("red", "x") : c3("blue", "i");
-  const name = finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? "unknown destination";
+  const vendorName = finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? "unknown destination";
+  const regions = [...new Set(finding.evidence.map((e2) => e2.region).filter(Boolean))];
+  const name = regions.length > 0 ? `${vendorName} (${regions.join(", ")})` : vendorName;
   const suppressed = finding.suppressed ? c3("dim", " (suppressed)") : "";
   const confidence = finding.confidence === "high" ? "" : c3("dim", ` [${finding.confidence} confidence]`);
   const lines = [`${marker} ${c3("bold", name)}${confidence}${suppressed}`];
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
-    lines.push(`    processing: ${finding.transfer.jurisdictions.join(", ")}`);
+    const narrowed = finding.exposure?.inputs.find((i2) => i2.startsWith("narrowedTo:"))?.slice("narrowedTo:".length);
+    const jurisdictions = narrowed ? narrowed.split(",") : [...new Set(finding.transfer.jurisdictions)];
+    lines.push(`    processing: ${jurisdictions.join(", ")}`);
     lines.push(
       `    EU region:  ${eu.available ? `available (${eu.scope ?? "scope not recorded"})` : "not documented"}`
     );
@@ -15943,6 +16223,11 @@ var scanCommand = defineCommand({
       default: true,
       description: "Analyse dependency manifests (--no-manifests skips)"
     },
+    infrastructure: {
+      type: "boolean",
+      default: true,
+      description: "Read deployment config for your own regions (--no-infrastructure skips)"
+    },
     "min-confidence": { type: "string", default: "low", description: "low | medium | high" },
     "only-vendor": { type: "string", description: "Comma-separated vendor ids" },
     "assume-adequacy-lapsed": {
@@ -15958,7 +16243,7 @@ var scanCommand = defineCommand({
     },
     quiet: { type: "boolean", default: false }
   },
-  run({ args, rawArgs }) {
+  async run({ args, rawArgs }) {
     const root = resolve4(String(args.path ?? "."));
     if (!isDirectory(root)) {
       process.stderr.write(`egressa: ${root} is not a directory
@@ -15980,6 +16265,7 @@ var scanCommand = defineCommand({
         includeTransitive: Boolean(args["include-transitive"]) || config.includeTransitive === true,
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,
+        includeInfrastructure: args.infrastructure !== false,
         includeCallsites: args.callsites !== false,
         minConfidence: parseConfidence(String(args["min-confidence"])),
         ...args["only-vendor"] ? { onlyVendor: String(args["only-vendor"]).split(",") } : {},
@@ -15996,7 +16282,7 @@ var scanCommand = defineCommand({
     const output = render(suppressed, String(args.format), args.color !== false);
     if (args.out) writeFileSync(String(args.out), `${output}
 `);
-    else if (!args.quiet) process.stdout.write(`${output}
+    else if (!args.quiet) await writeOut(`${output}
 `);
     process.exit(exitCodeFor(suppressed, failOn));
   }
@@ -16038,7 +16324,7 @@ function parseConfidence(value) {
 }
 
 // src/commands/schema.ts
-import { readFileSync as readFileSync5 } from "fs";
+import { readFileSync as readFileSync6 } from "fs";
 var schemaCommand = defineCommand({
   meta: { name: "schema", description: "Print a published JSON schema" },
   args: {
@@ -16051,9 +16337,9 @@ var schemaCommand = defineCommand({
   },
   run({ args }) {
     const which = String(args.which);
-    const path = which === "vendor" ? "kb/schema/vendor-1.0.0.json" : "schemas/findings-1.0.0.json";
+    const path = which === "vendor" ? "kb/schema/vendor-1.0.0.json" : `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
     try {
-      process.stdout.write(readFileSync5(path, "utf8"));
+      process.stdout.write(readFileSync6(path, "utf8"));
     } catch {
       process.stderr.write(`egressa: schema "${which}" not found
 `);
@@ -16076,7 +16362,7 @@ var vendorsCommand = defineCommand({
     kb: { type: "string", description: "Path to a knowledge base directory" },
     json: { type: "boolean", default: false }
   },
-  run({ args }) {
+  async run({ args }) {
     const kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
     const action = String(args.action);
     const query = args.query ? String(args.query) : void 0;
@@ -16113,9 +16399,8 @@ var vendorsCommand = defineCommand({
     }
     const entry = kb.byId.get(query) ?? kb.lookupPackage("npm", query)?.vendor ?? kb.lookupHost(query)?.vendor ?? null;
     if (!entry) {
-      process.stdout.write(`No knowledge base entry matches "${query}".
-`);
-      process.exit(0);
+      await writeOutAndExit(`No knowledge base entry matches "${query}".
+`, 0);
     }
     process.stdout.write(`${JSON.stringify(entry, null, 2)}
 `);

@@ -23,13 +23,19 @@ it would ship as a distinct low-confidence signal kind.
 - **Tag manager containers and CSP headers.** A GTM container can load vendors that appear nowhere
   in source; a CSP `connect-src` list is a declaration of intended destinations and a useful
   cross-check against what the scanner found.
-- **Infrastructure as code.** A US-region database or bucket is itself a processing location. This
-  is a different analyzer over Terraform, CDK and `vercel.json`.
 - **PII data-flow analysis.** Determining that *personal data specifically* reaches a sink, rather
   than that a vendor is referenced. This is the largest single step up in both value and difficulty,
   and it is what would let the tool say something about Article 30 records.
 - **Article 30 processing register generation.** Only meaningful once data-flow analysis exists;
   generating one from vendor references alone would overstate what the scan knows.
+
+## Done since v1
+
+**Infrastructure as code.** Shipped. `packages/core/src/infrastructure/` reads Terraform,
+Serverless and Vercel configuration, and vendor SDK clients supply a region directly. A region is
+resolved through the vendor's own map in `kb/`, never from its prefix, and narrows which
+jurisdiction applies. Still open: TOML beyond `fly.toml`, CDK stacks, and regions under
+dot-directories, which the walker does not collect.
 
 ## Covered by the review skills rather than the engine
 

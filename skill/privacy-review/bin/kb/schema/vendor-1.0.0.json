@@ -112,6 +112,10 @@
                     "type": "string"
                   }
                 ]
+              },
+              "regionOption": {
+                "type": "string",
+                "description": "Option carrying a region identifier rather than a host, e.g. `region` on an AWS SDK client. Resolved against this vendor's regions[] map; a region is never inferred from the identifier's prefix."
               }
             }
           }
@@ -140,6 +144,10 @@
               },
               "note": {
                 "type": "string"
+              },
+              "regionSelected": {
+                "type": "boolean",
+                "description": "True when this jurisdiction is the one a customer's region setting selects. Defaults to false, so a jurisdiction is never narrowed away unless an author has asserted, with a source, that the region setting governs it. A contracting entity's jurisdiction is not region selected: a project hosted in Frankfurt is still contracted with the entity named in the data processing addendum."
               }
             }
           }
@@ -374,6 +382,41 @@
           "appliesFrom": {
             "type": "string",
             "description": "SDK version range the default is documented for, when the vendor states one."
+          },
+          "sourceUrl": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "lastChecked": {
+            "$ref": "#/$defs/isoDate"
+          }
+        }
+      }
+    },
+    "regions": {
+      "description": "Region identifiers this vendor accepts in configuration, and the country each one places processing in. A fact the vendor publishes, cited like any other, and never inferred from the identifier: eu-west-2 is London and eu-central-2 is Zurich.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "country", "sourceUrl", "lastChecked"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Region identifier exactly as written in configuration, e.g. eu-west-2."
+          },
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "ISO 3166-1 alpha-2. Not EEA: a region resolves to one country or it is not a region entry."
+          },
+          "label": {
+            "type": "string",
+            "description": "The vendor's own name for the region, e.g. Europe (London)."
+          },
+          "note": {
+            "type": "string"
           },
           "sourceUrl": {
             "type": "string",

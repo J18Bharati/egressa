@@ -155,3 +155,31 @@ limits live in three places instead:
 What the two surfaces share is the third axis on every review finding: whether the source settles
 the question at all. Anything that does not ends in a question rather than a fix, which is the same
 rule that makes the engine name an unresolved variable instead of guessing a host.
+
+### Regions declared outside the repository, and regions that are not literals
+
+A region is read only where it is written down as a string: an SDK client's `region` option, a
+Terraform `provider` block, a Serverless `provider.region`, a Vercel `regions` array.
+
+```hcl
+provider "aws" { region = "eu-west-1" }      # read
+provider "gcp" { region = var.deploy_region } # not read, and not guessed
+```
+
+```js
+new S3Client({ region: 'us-east-1' });               // read
+new S3Client({ region: process.env.AWS_REGION });    // not read
+```
+
+The engine also does not default to a provider's documented default. `us-east-1` is an AWS SDK
+fallback that applies only when `AWS_REGION`, `AWS_DEFAULT_REGION` and the shared config file are
+all absent -- three things a scanner cannot see -- so assuming it would give a confident United
+States answer for a repository deployed to Frankfurt.
+
+Where no region is found the finding reports `regionSource:none` and the vendor's full jurisdiction
+set, unnarrowed. That is the honest answer, and
+`skill/egressa/references/reconciling-a-cloud-region.md` is how to settle it against a live account.
+
+Not collected at all: files under dot-directories such as `.github/` and `.terraform/`, because the
+walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an
+ordinary constructor argument the call-site analyzer does not yet attribute to a provider.

@@ -8,8 +8,9 @@ That sentence is the whole contract. It lives in exactly one place in the codeba
 
 ## What a finding means
 
-A finding says: **this repository contains code that references a vendor, and here is what our
-sourced knowledge base records about where that vendor processes data.**
+A finding says: **this repository contains code that references a vendor, or configuration
+declaring a region for infrastructure it controls, and here is what our sourced knowledge base
+records about where that vendor processes data.**
 
 It does not say, and cannot say:
 
@@ -31,8 +32,10 @@ real and documented:
   `transfer/unresolved-egress` and never guessed.
 - **Vendors not in the knowledge base.** Reported as `transfer/unknown-vendor-egress`. The
   knowledge base is a seed set, not a census.
-- **Non-JavaScript surfaces.** Tag managers, CSP headers, native mobile code, and infrastructure
-  configuration are out of scope in v1.
+- **Non-JavaScript surfaces.** Tag managers, CSP headers and native mobile code are out of scope.
+  Infrastructure configuration is read for the regions it declares -- Terraform, Serverless,
+  Vercel -- but only where a region is a literal; one supplied by a variable at deploy time is
+  reported as absent rather than guessed.
 
 ## Surfaces whose scope is wider than transfers
 

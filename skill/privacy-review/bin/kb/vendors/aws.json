@@ -1,0 +1,463 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "aws",
+  "name": "Amazon Web Services, Inc.",
+  "product": "Amazon Web Services",
+  "category": "hosting",
+  "homepage": "https://aws.amazon.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "@aws-sdk/client-s3",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-dynamodb",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-rds",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-lambda",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-sqs",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-ses",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-cognito-identity-provider",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "aws-sdk",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "aws-cdk-lib",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "amazonaws.com",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Service endpoints are region qualified, e.g. s3.eu-west-1.amazonaws.com."
+      },
+      {
+        "pattern": "aws.amazon.com",
+        "match": "exact",
+        "purpose": "other"
+      }
+    ],
+    "clientConstructors": [
+      {
+        "module": "@aws-sdk/client-s3",
+        "export": "S3Client",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-dynamodb",
+        "export": "DynamoDBClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-lambda",
+        "export": "LambdaClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-ses",
+        "export": "SESClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-sqs",
+        "export": "SQSClient",
+        "hostOption": null,
+        "regionOption": "region"
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "regionSelected": true,
+        "note": "Customer content is stored in the AWS Region the customer selects. A United States Region places that content in the United States."
+      },
+      {
+        "country": "EEA",
+        "role": "primary",
+        "regionSelected": true,
+        "note": "An EEA Region places customer content in that Region. Note that of the Regions whose identifier begins eu-, London (eu-west-2) is in the United Kingdom and Zurich (eu-central-2) is in Switzerland; neither is in the EEA."
+      },
+      {
+        "country": "US",
+        "role": "support",
+        "note": "Amazon Web Services, Inc. is the contracting entity for customers outside Europe, the Middle East and Africa, and is not selected by the Region setting."
+      },
+      {
+        "country": "LU",
+        "role": "support",
+        "note": "Amazon Web Services EMEA SARL, Luxembourg, is the contracting entity for customers in Europe, the Middle East and Africa. It is not selected by the Region setting."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "full",
+      "docUrl": "https://aws.amazon.com/compliance/data-privacy-faq/",
+      "notes": "AWS publishes Regions in Ireland, Frankfurt, Paris, Stockholm, Milan, Spain and the AWS European Sovereign Cloud in Germany, and states that customer content is not moved out of the selected Region except as the customer directs. Scope is recorded as full because the Region setting governs where customer content is stored for the services that offer it; it does not follow that every operational record, account record or support interaction stays in the Region, and the pages checked do not state that they do."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://aws.amazon.com/compliance/gdpr-center/",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-09-21"
+    },
+    "subprocessors": {
+      "url": "https://aws.amazon.com/compliance/sub-processors/",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/5776",
+        "lastChecked": "2026-09-21"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://aws.amazon.com/compliance/gdpr-center/",
+        "lastChecked": "2026-09-21"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Whatever the customer stores. AWS describes customer content as data the customer transfers to AWS for processing."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Account and service usage records used for billing and operations."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "title": "AWS Regions and Availability Zones",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-21"
+    },
+    {
+      "url": "https://aws.amazon.com/compliance/eu-us-data-privacy-framework/",
+      "title": "The EU-U.S. Data Privacy Framework - AWS",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-21"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5776",
+      "title": "Data Privacy Framework participant record 5776",
+      "publisher": "regulator",
+      "accessedAt": "2026-09-21"
+    },
+    {
+      "url": "https://aws.amazon.com/compliance/sub-processors/",
+      "title": "AWS Sub-processors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-21"
+    }
+  ],
+  "lastVerified": "2026-09-21",
+  "regions": [
+    {
+      "code": "af-south-1",
+      "country": "ZA",
+      "label": "Africa (Cape Town)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-east-1",
+      "country": "HK",
+      "label": "Asia Pacific (Hong Kong)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-east-2",
+      "country": "TW",
+      "label": "Asia Pacific (Taipei)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-northeast-1",
+      "country": "JP",
+      "label": "Asia Pacific (Tokyo)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-northeast-2",
+      "country": "KR",
+      "label": "Asia Pacific (Seoul)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-northeast-3",
+      "country": "JP",
+      "label": "Asia Pacific (Osaka)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-south-1",
+      "country": "IN",
+      "label": "Asia Pacific (Mumbai)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-south-2",
+      "country": "IN",
+      "label": "Asia Pacific (Hyderabad)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-1",
+      "country": "SG",
+      "label": "Asia Pacific (Singapore)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-2",
+      "country": "AU",
+      "label": "Asia Pacific (Sydney)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-3",
+      "country": "ID",
+      "label": "Asia Pacific (Jakarta)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-4",
+      "country": "AU",
+      "label": "Asia Pacific (Melbourne)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-5",
+      "country": "MY",
+      "label": "Asia Pacific (Malaysia)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-6",
+      "country": "NZ",
+      "label": "Asia Pacific (New Zealand)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ap-southeast-7",
+      "country": "TH",
+      "label": "Asia Pacific (Thailand)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ca-central-1",
+      "country": "CA",
+      "label": "Canada (Central)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "ca-west-1",
+      "country": "CA",
+      "label": "Canada West (Calgary)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-central-1",
+      "country": "DE",
+      "label": "Europe (Frankfurt)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-central-2",
+      "country": "CH",
+      "label": "Europe (Zurich)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-north-1",
+      "country": "SE",
+      "label": "Europe (Stockholm)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-south-1",
+      "country": "IT",
+      "label": "Europe (Milan)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-south-2",
+      "country": "ES",
+      "label": "Europe (Spain)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-west-1",
+      "country": "IE",
+      "label": "Europe (Ireland)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-west-2",
+      "country": "GB",
+      "label": "Europe (London)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eu-west-3",
+      "country": "FR",
+      "label": "Europe (Paris)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "eusc-de-east-1",
+      "country": "DE",
+      "label": "AWS European Sovereign Cloud (Germany)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "il-central-1",
+      "country": "IL",
+      "label": "Israel (Tel Aviv)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "me-central-1",
+      "country": "AE",
+      "label": "Middle East (UAE)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "me-south-1",
+      "country": "BH",
+      "label": "Middle East (Bahrain)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "mx-central-1",
+      "country": "MX",
+      "label": "Mexico (Central)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "sa-east-1",
+      "country": "BR",
+      "label": "South America (Sao Paulo)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-east-1",
+      "country": "US",
+      "label": "US East (N. Virginia)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-east-2",
+      "country": "US",
+      "label": "US East (Ohio)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-gov-east-1",
+      "country": "US",
+      "label": "AWS GovCloud (US-East)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-gov-west-1",
+      "country": "US",
+      "label": "AWS GovCloud (US-West)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-west-1",
+      "country": "US",
+      "label": "US West (N. California)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    },
+    {
+      "code": "us-west-2",
+      "country": "US",
+      "label": "US West (Oregon)",
+      "sourceUrl": "https://docs.aws.amazon.com/global-infrastructure/latest/regions/aws-regions.html",
+      "lastChecked": "2026-09-21"
+    }
+  ],
+  "notes": "The Data Privacy Framework certification is held by Amazon.com, Inc., participant record 5776, with Amazon Web Services listed among its covered entities rather than certified under its own name. This follows the same shape as Okta and Auth0, and Twilio and Segment, already recorded in this knowledge base. AWS states on its own EU-US Data Privacy Framework page that it adheres to the Framework principles. Region identifiers are recorded from the AWS Regions documentation and are never derived from the identifier itself: three Regions whose identifier begins eu- are outside the EEA, namely London in the United Kingdom and Zurich in Switzerland, and the GovCloud Regions are in the United States despite their distinct identifiers. A Region is a customer configuration setting and the scanner can only report one when it appears in the repository; where it does not, the jurisdictions above are reported unnarrowed."
+}

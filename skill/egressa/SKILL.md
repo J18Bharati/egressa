@@ -58,10 +58,17 @@ Work through the findings in this order:
    comes from configuration, and `unresolvedReason` names the variable. Say which variable, and
    that the user must check their deployment configuration. Never guess the host.
 
-4. **Point at the EU-region question.** When `euRegion.available` is true, the scanner cannot tell
-   which region the account is actually on. Say so, link `euRegion.docUrl`, and make "check which
-   region this project uses" a concrete next step. Note the `scope` — `partial` means some data
-   stays outside the EU regardless.
+4. **Settle the EU-region question rather than restating it.** When a region appears in the
+   repository — an SDK client, a Terraform provider, `serverless.yml`, `vercel.json` — the scan
+   already resolved it through the vendor's own map and narrowed the finding, so read
+   `exposure.inputs` for `regionCountry` rather than asking again. Note that `eu-west-2` is London
+   and `eu-central-2` is Zurich; neither is in the EEA.
+
+   When no region appears, it is set outside the repository and the scan says so with
+   `regionSource:none`. That is the point to ask, link `euRegion.docUrl`, and — if the user has an
+   AWS account and asks for it — reconcile against what is actually running, per
+   `references/reconciling-a-cloud-region.md`. Note the `scope`: `partial` means some data stays
+   outside the EU whichever region is chosen.
 
 5. **Read the `unmatched` block, then research it.** Hosts and packages there have no knowledge
    base entry, so the scan reports no jurisdiction for them. That is a gap you can close: the host

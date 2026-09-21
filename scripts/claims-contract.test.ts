@@ -115,6 +115,33 @@ describe('no generated output can claim compliance', () => {
   });
 });
 
+describe('shipped shell scripts are inside the claim scope', () => {
+  // The markdown walk above covers `.md` only, so a script under skill/ used to
+  // ship with no claim-scope enforcement at all. The hook block below is the
+  // precedent for extending the contract to a non-markdown surface.
+  const scripts = skillFiles('.sh');
+
+  it('finds shell scripts to check at all', () => {
+    expect(scripts.length).toBeGreaterThan(1);
+  });
+
+  for (const file of scripts) {
+    it(`${file} makes no forbidden claim`, () => {
+      expect(findForbiddenClaims(read(file))).toEqual([]);
+    });
+  }
+
+  it('the live AWS script refuses to run unless it is opted into', () => {
+    // It is the only thing here that reaches the network, so the default has
+    // to be off and the refusal has to be loud.
+    const script = read('skill/egressa/scripts/reconcile-aws.sh');
+    expect(script).toContain('EGRESSA_ALLOW_AWS');
+    expect(script).toContain('DID NOT RUN');
+    // Read-only: nothing that changes state in someone's account.
+    expect(script).not.toMatch(/aws [a-z0-9-]+ (create|delete|put|update|modify|terminate)/);
+  });
+});
+
 /** Every vendor entry in the knowledge base, by id, found by reading kb/. */
 const vendorIds = (): string[] =>
   readdirSync('kb/vendors')
@@ -130,18 +157,20 @@ const vendorIds = (): string[] =>
  * checklist ship outside the contract simply by nobody remembering to add it,
  * which is the same drift this file exists to prevent -- one directory down.
  */
-const skillMarkdown = (): string[] => {
+const skillFiles = (extension: string): string[] => {
   const out: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) walk(path);
-      else if (entry.name.endsWith('.md')) out.push(path);
+      else if (entry.name.endsWith(extension)) out.push(path);
     }
   };
   walk('skill');
   return out.sort();
 };
+
+const skillMarkdown = (): string[] => skillFiles('.md');
 
 describe('every shipped skill is inside the claim scope', () => {
   const files = skillMarkdown();

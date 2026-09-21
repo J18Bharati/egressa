@@ -96,6 +96,18 @@ says which PostHog cloud is in use. Two rules keep it safe — a knowledge base 
 `findSinks()` returns every matching sink rather than the first, because two vendors both export
 `init` and whichever sorted first used to silently shadow the other.
 
+**A region is resolved from data, never from its prefix.** `kb/vendors/<id>.json` carries a
+`regions[]` map with a citation per entry, and `exposure/regions.ts` matches it exactly. Three AWS
+regions whose identifier begins `eu-` are outside the EEA — London is in the United Kingdom,
+Zurich is in Switzerland — so a prefix rule would place both inside it at high confidence. The
+validator deliberately has no "that looks wrong" check on the map either: the next contributor
+would silence it by writing `IE`.
+
+**Narrowing by region is opt-in per jurisdiction,** through `regionSelected`. The naive rule —
+replace a vendor's jurisdictions with the region's country — deletes Supabase's Singapore
+contracting entity and reports EU processing for a Singaporean processor on SCCs. A contracting
+entity is not selected by a region setting, and neither is support access.
+
 **A transfer to an adequate country is still a third-country transfer.** Art 44 is about where the
 data goes; Art 45 supplies a basis for it. `thirdCountryTransfer` is therefore true on the adequate
 branch, and `additionalSafeguardsRequired` carries the Art 46 question separately. `adequacyDependent`
@@ -297,4 +309,12 @@ records product scope decisions, `TODOS.md` records work someone could pick up. 
 no git remote exists, so every documented plugin install path currently resolves to nothing.
 
 `docs/ROADMAP.md` records what v1 deliberately excludes (Python, cross-module constants, HTML
-`<script src>`, tag managers, IaC, PII data-flow) and what is not planned at all.
+`<script src>`, tag managers, PII data-flow) and what is not planned at all. Infrastructure as code
+has moved out of that list: `packages/core/src/infrastructure/` reads Terraform, Serverless and
+Vercel configuration for the regions a repository declares.
+
+`skill/egressa/scripts/reconcile-aws.sh` is the only thing in the project that reaches the network
+during an ordinary run. It is opt-in through `EGRESSA_ALLOW_AWS=1`, read-only, never invoked by a
+scan, and emits region strings only — resolving one to a country stays the knowledge base's job.
+The claims contract now walks `skill/**/*.sh` as well as the markdown, because a script used to
+ship with no claim-scope enforcement at all.
