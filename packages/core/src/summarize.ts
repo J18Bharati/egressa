@@ -1,3 +1,4 @@
+import { isReferenceOnly } from './output/display.js';
 import type { Finding, ScanResult } from './types.js';
 
 /**
@@ -28,6 +29,16 @@ export interface SummarisedFinding {
   exposure: Finding['exposure'];
   evidence: { file: string; line: number; matchedOn: string; kind: string }[];
   evidenceTotal: number;
+  /**
+   * True when every piece of evidence for this finding is a `reference` --
+   * a vendor named in source, never a resolved call site -- computed over the
+   * FULL evidence array via `isReferenceOnly()`, before the `evidence` field
+   * above is truncated to `maxEvidencePerFinding`. A finding can carry several
+   * `dependency` and `reference` entries with the distinguishing signal cut by
+   * truncation; this flag survives that cut so a consumer never renders a
+   * `reference` as though it were a `callsite`.
+   */
+  referenceOnly: boolean;
   dpaUrl?: string;
   subprocessorsUrl?: string;
   lastVerified?: string;
@@ -94,6 +105,7 @@ function toSummarised(finding: Finding, maxEvidence: number): SummarisedFinding 
       kind: e.kind,
     })),
     evidenceTotal: finding.evidence.length,
+    referenceOnly: isReferenceOnly(finding),
     ...(finding.transfer?.dpaUrl ? { dpaUrl: finding.transfer.dpaUrl } : {}),
     ...(finding.transfer?.subprocessorsUrl
       ? { subprocessorsUrl: finding.transfer.subprocessorsUrl }

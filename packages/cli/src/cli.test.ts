@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
@@ -114,19 +114,74 @@ describe('human output', () => {
     });
     expect(formatHuman(lapsed, { color: false })).toContain('hypothetical');
   });
+
+  it('does not render the unresolved reason as though it were a vendor name', () => {
+    // Every finding here has vendor: null and evidence[].matchedOn equal to
+    // the diagnostic sentence explaining why (see toHit() in
+    // callsites/index.ts). Promoting that sentence into the header used to
+    // make it read like a company. The reason must still survive somewhere.
+    const unresolved = scan({
+      root: 'fixtures/repos/unresolvable-hosts',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    const text = formatHuman(unresolved, { color: false });
+    const headerLines = text.split('\n').filter((line) => /^[!xi] /.test(line));
+    expect(headerLines.length).toBeGreaterThan(0);
+    for (const line of headerLines) {
+      expect(line).toContain('Unrecognised destination');
+      expect(line).not.toContain('interpolated value');
+      expect(line).not.toContain('declared more than once');
+      expect(line).not.toContain('environment variable');
+    }
+    // The reason is still present, just in the evidence line rather than the header.
+    expect(text).toContain(
+      'host is completed by an interpolated value and cannot be resolved statically',
+    );
+  });
 });
 
 describe('markdown output', () => {
   it('carries the full disclaimer and a per-vendor table', () => {
     const md = formatMarkdown(result());
     expect(md).toContain('does not assess or certify GDPR compliance');
-    expect(md).toContain('| Vendor | Processing | EU region | Rule | Confidence |');
+    expect(md).toContain('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
     expect(md).toContain('Stripe, LLC');
   });
 
   it('says how many findings it withheld when truncating', () => {
     const md = formatMarkdown(result(), { maxFindings: 0 });
     expect(md).toContain('1 further finding(s) not shown');
+  });
+
+  it('keeps the unresolved reason out of the Vendor column but visible in its own column', () => {
+    const unresolved = scan({
+      root: 'fixtures/repos/unresolvable-hosts',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    const md = formatMarkdown(unresolved);
+    const tableLines = md
+      .split('\n')
+      .filter(
+        (line) =>
+          line.startsWith('| ') && !line.startsWith('| Vendor') && !line.startsWith('| ---'),
+      );
+    expect(tableLines.length).toBe(3);
+    for (const line of tableLines) {
+      const vendorCell = line.split('|')[1]?.trim();
+      expect(vendorCell).toBe('Unrecognised destination');
+    }
+    // The reason is still present -- it moved to its own column, not to the heading.
+    expect(md).toContain(
+      '| Unrecognised destination | host is completed by an interpolated value and cannot be resolved statically |',
+    );
+    expect(md).not.toContain('### host is completed by an interpolated value');
+    expect(md).toContain('### Unrecognised destination');
   });
 });
 
@@ -269,6 +324,90 @@ describe('negated flags actually change the scan', () => {
   });
 });
 
+describe('--exclude scopes discovery', () => {
+  const json = (args: string[]) => {
+    const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return JSON.parse(stdout) as ReturnType<typeof scan>;
+  };
+
+  // fixtures/repos/nextjs-analytics-heavy has a google-analytics finding backed
+  // by exactly one signal: the fetch() call in src/analytics.ts. It has no
+  // dependency entry, so excluding that file is the one way to make it
+  // disappear entirely rather than merely lose a signal.
+  const base = ['scan', 'fixtures/repos/nextjs-analytics-heavy', '--format', 'json', '--kb', 'kb'];
+
+  it('drops findings sourced only from the excluded path', () => {
+    const on = json(base);
+    expect(on.summary.findingCount).toBe(3);
+    expect(on.findings.some((f) => f.vendor?.id === 'google-analytics')).toBe(true);
+    // An unexcluded scan must not carry the field at all -- a document that
+    // always has `scan.exclude: []` gives a reader nothing to grep for.
+    expect(on.scan.exclude).toBeUndefined();
+
+    const off = json([...base, '--exclude', 'src/analytics.ts']);
+    expect(off.summary.findingCount).toBe(2);
+    expect(off.findings.some((f) => f.vendor?.id === 'google-analytics')).toBe(false);
+    // openai and sentry are still declared in package.json, so their manifest
+    // signal survives losing the call site -- --exclude removes what it
+    // names, not the vendor everywhere it's mentioned.
+    expect(off.findings.some((f) => f.vendor?.id === 'openai')).toBe(true);
+    expect(off.findings.some((f) => f.vendor?.id === 'sentry')).toBe(true);
+    // A narrowed scan says so in the document itself -- that is the whole
+    // point of this task, not just what it excluded.
+    expect(off.scan.exclude).toEqual(['src/analytics.ts']);
+  });
+
+  it('accepts the flag more than once and applies every glob', () => {
+    // Repeating --exclude has to collect into an array rather than the second
+    // occurrence silently overwriting the first (citty's own array handling
+    // for a repeated string flag, exercised end to end here).
+    const off = json([...base, '--exclude', 'src/analytics.ts', '--exclude', 'package.json']);
+    // Losing package.json as well removes the dependency signal that kept
+    // openai and sentry alive in the single-flag case above.
+    expect(off.summary.findingCount).toBe(0);
+    expect(off.scan.exclude).toEqual(['src/analytics.ts', 'package.json']);
+  });
+
+  it('unions the flag with .egressa.yml rather than one replacing the other', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-exclude-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      readFileSync('fixtures/repos/nextjs-analytics-heavy/package.json', 'utf8'),
+    );
+    writeFileSync(
+      join(dir, 'src', 'analytics.ts'),
+      readFileSync('fixtures/repos/nextjs-analytics-heavy/src/analytics.ts', 'utf8'),
+    );
+    // The config excludes the source file (dropping google-analytics, which
+    // has no other signal); the flag separately excludes the manifest
+    // (dropping the dependency signal that keeps openai and sentry alive).
+    // If either exclude silently replaced the other, one vendor would remain.
+    writeFileSync(join(dir, '.egressa.yml'), 'version: 1\nexclude: ["src/analytics.ts"]\n');
+
+    const withConfigOnly = json(['scan', dir, '--format', 'json', '--kb', 'kb']);
+    expect(withConfigOnly.summary.findingCount).toBe(2);
+
+    const withBoth = json([
+      'scan',
+      dir,
+      '--format',
+      'json',
+      '--kb',
+      'kb',
+      '--exclude',
+      'package.json',
+    ]);
+    expect(withBoth.summary.findingCount).toBe(0);
+    // The recorded list is the union actually applied -- the config's glob
+    // and the flag's, not just one of the two sources.
+    expect(withBoth.scan.exclude).toEqual(['src/analytics.ts', 'package.json']);
+  });
+});
+
 describe('output survives a pipe', () => {
   // The bug was that process.exit() does not flush a pipe, so a document
   // larger than the 64 KB buffer arrived truncated and, for json, unparseable.
@@ -321,5 +460,97 @@ describe('the infrastructure flag changes the scan', () => {
       r.findings.flatMap((f) => f.signals).filter((s) => s.kind === 'infrastructure').length;
     expect(infraSignals(withInfra)).toBeGreaterThan(0);
     expect(infraSignals(without)).toBe(0);
+  });
+});
+
+describe('a reference is not rendered like a call site', () => {
+  // `new URL(...)` and `new Request(...)` name a vendor without proving a
+  // call happened (docs/LIMITATIONS.md, "A constructed URL is a reference,
+  // not a call"). No fixture repo has one, so build a minimal one here: a
+  // single `new URL()` naming Stripe, with no `fetch`/client-constructor
+  // call site and no dependency on the `stripe` package, so the finding's
+  // evidence is entirely `reference`.
+  const referenceOnlyResult = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-reference-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'reference-only', version: '1.0.0', private: true }),
+    );
+    writeFileSync(
+      join(dir, 'src', 'index.ts'),
+      "const u = new URL('https://api.stripe.com/v1');\n",
+    );
+    return scan({
+      root: dir,
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+  };
+
+  /**
+   * The case `isReferenceOnly` exists for. A dependency signal outranks a
+   * reference in `byStrength`, so it sorts first -- and checking `evidence[0]`
+   * would then call this finding a call site when nothing observed a call.
+   * The single-signal case above would pass either way, so it does not cover
+   * the reason the function reads the whole array.
+   */
+  it('is still reference-only when a dependency signal sorts ahead of the reference', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-reference-mixed-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'mixed', version: '1.0.0', dependencies: { stripe: '^14.0.0' } }),
+    );
+    // Names the vendor twice, calls it never.
+    writeFileSync(
+      join(dir, 'src', 'index.ts'),
+      "const u = new URL('https://api.stripe.com/v1');\n",
+    );
+    const result = scan({
+      root: dir,
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+
+    const finding = result.findings.find((f) => f.vendor?.id === 'stripe');
+    const kinds = finding?.evidence.map((e) => e.kind) ?? [];
+    expect(kinds).toContain('dependency');
+    expect(kinds).toContain('reference');
+    expect(kinds).not.toContain('callsite');
+    // The dependency sorts first, which is exactly what evidence[0] would trip on.
+    expect(finding?.evidence[0]?.kind).toBe('dependency');
+    expect(formatHuman(result, { color: false })).toContain('named, not called');
+  });
+
+  it('has evidence of kind reference and only reference', () => {
+    const r = referenceOnlyResult();
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]?.vendor?.id).toBe('stripe');
+    expect(r.findings[0]?.evidence.map((e) => e.kind)).toEqual(['reference']);
+  });
+
+  it('is marked distinctly from a call-site finding in human output', () => {
+    const referenceText = formatHuman(referenceOnlyResult(), { color: false });
+    // express-stripe-sendgrid has an actual `fetch()` call site for Stripe
+    // (src/pay.ts), so its evidence is not reference-only.
+    const callsiteResult = scan({
+      root: 'fixtures/repos/express-stripe-sendgrid',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    expect(callsiteResult.findings[0]?.evidence.some((e) => e.kind === 'callsite')).toBe(true);
+    const callsiteText = formatHuman(callsiteResult, { color: false });
+
+    expect(referenceText).toContain('[reference]');
+    expect(referenceText).toContain('[named, not called]');
+    expect(callsiteText).not.toContain('[reference]');
+    expect(callsiteText).not.toContain('[named, not called]');
   });
 });

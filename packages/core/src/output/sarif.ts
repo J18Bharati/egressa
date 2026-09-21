@@ -1,6 +1,7 @@
 import { DISCLAIMER } from '../claims.js';
 import { RULES, RULE_IDS } from '../rules.js';
 import type { Finding, ScanResult, Severity } from '../types.js';
+import { displayName, isReferenceOnly } from './display.js';
 
 /**
  * SARIF 2.1.0 emitter.
@@ -40,6 +41,10 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
         },
         automationDetails: { id: 'egressa/scan' },
         // GitHub shows this in the alert; it makes the KB version auditable.
+        // `exclude` lives here rather than on individual results: it describes
+        // the run, not any one finding, and a SARIF narrowed by --exclude must
+        // not be byte-indistinguishable from a genuinely clean scan -- this is
+        // the one place in the document that provenance can hide.
         properties: {
           kbVersion: result.kb.version,
           kbLicense: result.kb.license,
@@ -47,6 +52,7 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
           ...(result.scan.assumedAdequacyLapsed
             ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }
             : {}),
+          ...(result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}),
         },
         results: result.findings.map((finding) => toResult(finding, result)),
       },
@@ -158,13 +164,18 @@ function confidencePrefix(finding: Finding): string {
 }
 
 function buildMessageText(finding: Finding): string {
-  const vendor = finding.vendor?.name ?? 'Unrecognised destination';
+  const vendor = displayName(finding);
   const where = finding.transfer
     ? ` (processing: ${finding.transfer.jurisdictions.join(', ')})`
     : '';
   const count =
     finding.evidence.length > 1 ? ` ${finding.evidence.length} references in this repository.` : '';
-  return `${confidencePrefix(finding)}${vendor}${where}.${count}`;
+  // A finding resting only on `reference` evidence -- a vendor named, never a
+  // resolved call site -- is a materially weaker claim than one with a call
+  // site, and GitHub's alert view has no other field to carry that. A short
+  // note, not a sentence: see docs/LIMITATIONS.md.
+  const referenceOnly = isReferenceOnly(finding) ? ' Named, not called.' : '';
+  return `${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}`;
 }
 
 function buildMessage(finding: Finding): string {

@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -87,6 +90,85 @@ describe('scan_repository', () => {
     expect(result.assumedAdequacyLapsed).toEqual(['US:DPF']);
     const sentry = result.findings.find((f: { vendorId: string }) => f.vendorId === 'sentry');
     expect(sentry.ruleId).toBe('transfer/third-country-egress-eu-region-available');
+  });
+
+  it('narrows the scan when exclude globs are given', async () => {
+    // fixtures/repos/nextjs-analytics-heavy has a google-analytics finding
+    // backed by exactly one signal: the fetch() call in src/analytics.ts. It
+    // has no dependency entry, so excluding that file is the one way to make
+    // it disappear entirely rather than merely lose a signal (same fixture
+    // and reasoning as the CLI's own --exclude tests).
+    const withAll = await call('scan_repository', {
+      path: 'fixtures/repos/nextjs-analytics-heavy',
+    });
+    expect(
+      withAll.findings.some((f: { vendorId: string }) => f.vendorId === 'google-analytics'),
+    ).toBe(true);
+
+    const excluded = await call('scan_repository', {
+      path: 'fixtures/repos/nextjs-analytics-heavy',
+      exclude: ['src/analytics.ts'],
+    });
+    expect(
+      excluded.findings.some((f: { vendorId: string }) => f.vendorId === 'google-analytics'),
+    ).toBe(false);
+    expect(excluded.summary.findingCount).toBeLessThan(withAll.summary.findingCount);
+    // openai and sentry are still declared in package.json, so their manifest
+    // signal survives losing the call site -- exclude removes what it names,
+    // not the vendor everywhere it's mentioned.
+    expect(excluded.findings.some((f: { vendorId: string }) => f.vendorId === 'openai')).toBe(true);
+    expect(excluded.findings.some((f: { vendorId: string }) => f.vendorId === 'sentry')).toBe(true);
+  });
+});
+
+describe('reference-only findings are flagged, even after evidence truncation', () => {
+  // A dependency entry plus several `new URL(...)` references to the same
+  // vendor and no call site at all: `referenceOnly` has to come from the full
+  // evidence array, computed before the summariser slices it down to
+  // `maxEvidencePerFinding` (3 by default). Five entries forces the slice to
+  // actually drop evidence, so this proves the flag survives truncation
+  // rather than merely happening to be right on a two-entry fixture.
+  const buildFixture = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-mcp-reference-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'reference-only',
+        version: '1.0.0',
+        dependencies: { stripe: '^14.0.0' },
+      }),
+    );
+    writeFileSync(
+      join(dir, 'src', 'index.ts'),
+      [
+        "const a = new URL('https://api.stripe.com/v1/a');",
+        "const b = new URL('https://api.stripe.com/v1/b');",
+        "const c = new URL('https://api.stripe.com/v1/c');",
+        "const d = new URL('https://api.stripe.com/v1/d');",
+        'export { a, b, c, d };',
+        '',
+      ].join('\n'),
+    );
+    return dir;
+  };
+
+  it('flags referenceOnly and reports truncation for the same finding', async () => {
+    const path = buildFixture();
+    const result = await call('scan_repository', { path });
+
+    const stripe = result.findings.find((f: { vendorId: string }) => f.vendorId === 'stripe');
+    expect(stripe).toBeDefined();
+
+    // The fixture proves the point only if truncation actually happened.
+    expect(stripe.evidenceTotal).toBe(5);
+    expect(stripe.evidence.length).toBeLessThan(stripe.evidenceTotal);
+    expect(stripe.evidence.some((e: { kind: string }) => e.kind === 'callsite')).toBe(false);
+
+    // The flag is true even though the truncated evidence array alone -- had
+    // a callsite been present and sorted out of the first three -- could not
+    // have proven it either way.
+    expect(stripe.referenceOnly).toBe(true);
   });
 });
 

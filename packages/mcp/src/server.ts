@@ -20,7 +20,7 @@ import { z } from 'zod';
  * supplies.
  */
 
-const TOOL_VERSION = '0.1.0';
+const TOOL_VERSION = '0.2.0';
 
 const server = new McpServer({ name: 'egressa', version: TOOL_VERSION });
 
@@ -53,6 +53,10 @@ server.tool(
       .array(z.string())
       .optional()
       .describe('Treat these decisions as withdrawn, e.g. ["US:DPF"], to model an adequacy lapse'),
+    exclude: z
+      .array(z.string())
+      .optional()
+      .describe('Globs to skip during discovery, e.g. ["vendor/**", "**/legacy/**"]'),
   },
   async (args) => {
     const result = scan({
@@ -65,6 +69,7 @@ server.tool(
       ...(args.includeDev !== undefined ? { includeDev: args.includeDev } : {}),
       ...(args.minConfidence ? { minConfidence: args.minConfidence } : {}),
       ...(args.assumeAdequacyLapsed ? { assumeAdequacyLapsed: args.assumeAdequacyLapsed } : {}),
+      ...(args.exclude ? { exclude: args.exclude } : {}),
     });
 
     if (args.full === true) return json(result);

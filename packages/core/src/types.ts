@@ -30,7 +30,35 @@ export type Severity = 'error' | 'warning' | 'note';
  */
 export type Confidence = 'high' | 'medium' | 'low';
 
-export type SignalKind = 'dependency' | 'callsite' | 'html-script' | 'infrastructure';
+/**
+ * What kind of observation produced a signal.
+ *
+ * `callsite` and `reference` are deliberately distinct, and the distinction is
+ * load-bearing:
+ *
+ * - `callsite` means **data left here**. `fetch`, `axios`, `got`, `ky`,
+ *   `$fetch`, `WebSocket`, `EventSource`, `navigator.sendBeacon`, an HTTP
+ *   client member call, and a knowledge base `clientConstructors` entry all
+ *   open, or configure, a connection to the destination.
+ * - `reference` means **a vendor is named here**. It is NOT evidence that a
+ *   call happened. `new URL(...)` and `new Request(...)` construct a parsed
+ *   object and open no socket: the same expression appears in an HTTPS-redirect
+ *   middleware parsing an *inbound* request, and in a database DSN rewritten
+ *   only to set a query parameter. The vendor attribution can still be right --
+ *   `new URL(`${GMAIL_API_BASE}/messages`)` on the line before a `fetch` names
+ *   the right vendor -- which is why these are demoted rather than dropped.
+ *
+ * Consumers must not render a `reference` as though it were a `callsite`.
+ */
+export const SIGNAL_KINDS = [
+  'dependency',
+  'callsite',
+  'reference',
+  'html-script',
+  'infrastructure',
+] as const;
+
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
 export type Ecosystem = 'npm' | 'pypi';
 
@@ -249,6 +277,20 @@ export interface ScanMeta {
   engine: EngineInfo;
   /** Set when --assume-adequacy-lapsed was used, naming the lapsed decisions. */
   assumedAdequacyLapsed?: string[];
+  /**
+   * Globs actually applied to narrow discovery: the union of `exclude:` in
+   * `.egressa.yml` and any `--exclude` flags, merged the same way
+   * `assumedAdequacyLapsed` records a run-changing option -- so a scan that
+   * was narrowed says so in the document itself, not only in the CLI
+   * invocation that produced it. Does not include `.gitignore` or
+   * `.egressaignore`, which are already committed and readable in the
+   * repository. Flat list, not tagged by source (config vs flag): the two
+   * are unioned before this point and a wrong host is worse than no host,
+   * but a merged glob list is not a wrong fact, so the simpler shape was
+   * kept, matching `assumedAdequacyLapsed`. Omitted entirely when nothing
+   * was excluded.
+   */
+  exclude?: string[];
 }
 
 export interface KbMeta {

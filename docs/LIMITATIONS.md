@@ -33,7 +33,8 @@ fetch(process.env.ANALYTICS_URL);        // transfer/unresolved-egress, names AN
 fetch(`https://${region}.example.com`);  // transfer/unresolved-egress, authority interpolated
 ```
 
-Egressa names the variable and the location. It never guesses the host.
+Egressa names the variable and the location. It never guesses the host. That applies to call
+sinks; a `reference` sink stays silent instead, for the reason below.
 
 ### Vendors absent from the knowledge base
 
@@ -85,6 +86,78 @@ also untracked and unresolved.
 
 There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
 answer rather than declining.
+
+### A constructed URL is a reference, not a call
+
+`new URL(...)` and `new Request(...)` parse a string into an object. No socket is opened, and the
+same two expressions appear on data arriving *inbound*:
+
+```js
+const u = new URL(request.url);              // HTTPS-redirect middleware: nothing left
+const url = new URL(connectionString);       // a DSN rewritten to set sslmode
+url.searchParams.set('sslmode', 'verify-full');
+app.handle(new Request('https://x/openapi')); // an in-process dispatch, not a transfer
+```
+
+These carry `kind: "reference"` rather than `kind: "callsite"`, and their confidence is capped at
+`medium`. A reference means *a vendor is named here*; it is not evidence that a call happened. The
+rows stay in the sink table because the attribution is often right -- a `new URL` on the line
+before a `fetch` names the correct vendor -- and deleting them would lose that.
+
+**A construction that a call does consume is a call site, at `high`, reported once.** The demotion
+applies to the construction *on its own*, never to a transfer that happens to be written in two
+expressions. The analyzer therefore resolves through the forms that hand the constructed object to
+the call -- directly, through `.toString()`, `.toJSON()` or `.href`, and through a module-scope
+binding:
+
+```js
+fetch(new URL('https://api.stripe.com/v1'));                  // callsite, high
+fetch(new URL('https://api.stripe.com/v1').toString());       // callsite, high
+fetch(new URL('https://api.stripe.com/v1').href);             // callsite, high
+const u = new URL('https://api.stripe.com/v1');
+fetch(u.toString());                                          // callsite, high -- one finding
+const req = new Request('https://api.stripe.com/v1');
+await fetch(req);                                             // callsite, high -- one finding
+```
+
+Each of those is **one** finding, not two: the construction the call read is recorded as consumed
+and the reference it would otherwise have emitted is dropped. That bookkeeping cannot be a skip
+during the walk, because through a binding the construction is emitted several statements before
+the call that consumes it; the suppression happens once the file is finished.
+
+The recall this recovers is not optional decoration. A resolved third-country call site that is
+reported at `medium` disappears from a `--min-confidence high` CI gate, and a scanner that stops
+failing a gate it used to fail is worse than one that reports a reference nobody wanted. The golden
+table pins the kind, the confidence and the count on every one of these shapes.
+
+What still declines, deliberately:
+
+- **Only `href`, `toString()` and `toJSON()` are read through.** `pathname`, `origin` and
+  `searchParams` are parts of a destination, not the destination, and `Request#url` is left out
+  because `request.url` on an *inbound* request is the commonest shape in this whole area.
+- **A bound construction obeys the same refusal every other binding does.** Module scope only, and
+  never a name declared twice or reassigned -- there is no scope chain to say which declaration a
+  call reads. A construction inside a function, or one whose name is shadowed, does not resolve.
+- **Reading through does not invent an argument the constructor never had.**
+  `fetch(new URL(request.url).toString())` reports a call site with **no** host, exactly as
+  `fetch(new URL(request.url))` does: the call is real, the destination is not knowable.
+
+Two consequences are deliberate false negatives:
+
+- **A reference emits only on a resolved host.** Where the argument does not resolve, nothing is
+  reported at all. A call sink in the same position emits `transfer/unresolved-egress` naming the
+  variable; a reference sink stays silent, because "a variable was passed to `new URL()`" is not
+  evidence that anything left. So `new URL(request.url)` and `new URL(connectionString)` above
+  produce no finding, and neither does `` new URL(`${API_BASE}/messages`) `` whose base is
+  interpolated.
+- **An in-process dispatcher is indistinguishable from a transfer.** Nothing in the source says
+  whether `app.handle(new Request(host))` crosses a network. The analyzer reports the weaker claim
+  rather than guessing either way, so a genuinely local dispatch still appears as a reference to
+  whatever host the literal names -- including `localhost`. Scope those out with `--exclude` or
+  `.egressaignore` rather than expecting the engine to recognise a test.
+
+A consumer that renders a `reference` the way it renders a `callsite` re-creates the whole defect.
+The distinction is carried by the type, not by the wording.
 
 ### Constant chains deeper than three steps
 

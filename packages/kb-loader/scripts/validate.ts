@@ -78,6 +78,7 @@ const vendorDir = join(KB, 'vendors');
 const vendorFiles = readdirSync(vendorDir).filter((f) => f.endsWith('.json'));
 const vendorIds = new Set<string>();
 const packageOwners = new Map<string, string>(); // "npm:name" -> vendorId
+const scopeOwners = new Map<string, string>(); // "npm:@scope/" -> vendorId
 const hostOwners = new Map<string, string>(); // "pattern|match" -> vendorId
 
 for (const file of vendorFiles) {
@@ -119,13 +120,29 @@ for (const file of vendorFiles) {
 
   // 4. cross-vendor alias collisions -- silent misattribution bugs if allowed
   for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
-    for (const alias of list as { name: string }[]) {
+    for (const alias of list as { name: string; kind?: string }[]) {
       const key = `${ecosystem}:${alias.name}`;
       const owner = packageOwners.get(key);
       if (owner && owner !== entry.id) {
         errors.push(`${where}: package alias "${key}" already claimed by "${owner}"`);
       }
       packageOwners.set(key, entry.id);
+      // `kind` decides the confidence an alias emits, and nothing else checked
+      // that it agrees with the name. `{"name": "@sentry/*", "kind":
+      // "official-sdk"}` is the dangerous direction: it validates, and then a
+      // build-time plugin matched only by its namespace is reported at high
+      // confidence, which is exactly what `scope` exists to prevent.
+      if (alias.name.endsWith('/*') !== (alias.kind === 'scope')) {
+        errors.push(
+          `${where}: package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`,
+        );
+      }
+      // A wildcard alias claims a whole registry namespace. Recorded here and
+      // cross-checked once every entry is read, because an overlap is a
+      // property of the set and the file that introduces it may be read first.
+      if (alias.name.endsWith('/*')) {
+        scopeOwners.set(`${ecosystem}:${alias.name.slice(0, -1)}`, entry.id);
+      }
     }
   }
   for (const host of entry.aliases.hosts as { pattern: string; match: string }[]) {
@@ -204,6 +221,39 @@ for (const file of vendorFiles) {
   }
 }
 
+// --- 4b. wildcard scope overlap across vendors -----------------------------
+//
+// `lookupPackage` refuses to attribute a name two vendors' scopes both match,
+// so an overlap costs recall silently rather than producing a wrong vendor.
+// Catching it in the data is better: the contributor who writes the swallowing
+// scope is the one who can say which vendor owns the namespace, and by the
+// time a scan is running nobody is looking.
+//
+// An npm scope is a registry-enforced namespace, which is the whole
+// justification for prefix matching here -- `@sentry/*` is Sentry by
+// construction, where `eu-*` is not the EEA by construction. Two vendors
+// claiming one namespace means that justification has stopped holding for at
+// least one of them, so it is an error rather than a warning.
+const fileFor = (vendorId: string) => `kb/vendors/${vendorId}.json`;
+for (const [scope, owner] of scopeOwners) {
+  for (const [other, otherOwner] of scopeOwners) {
+    if (other === scope || otherOwner === owner) continue;
+    if (other.startsWith(scope)) {
+      errors.push(
+        `${fileFor(owner)}: package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`,
+      );
+    }
+  }
+  for (const [pkg, pkgOwner] of packageOwners) {
+    if (pkgOwner === owner || pkg.endsWith('/*')) continue;
+    if (pkg.startsWith(scope)) {
+      errors.push(
+        `${fileFor(owner)}: package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`,
+      );
+    }
+  }
+}
+
 // --- adequacy status ------------------------------------------------------
 const adequacy = load(join(KB, 'adequacy-status.json'));
 if (!validateAdequacy(adequacy)) {
@@ -235,7 +285,8 @@ if (errors.length > 0) {
   process.exit(1);
 }
 console.log(
-  `Knowledge base OK: ${vendorFiles.length} vendor(s), ${packageOwners.size} package alias(es), ` +
+  `Knowledge base OK: ${vendorFiles.length} vendor(s), ${packageOwners.size} package alias(es) ` +
+    `including ${scopeOwners.size} scope(s), ` +
     `${hostOwners.size} host pattern(s), ${adequacy.decisions.length} adequacy decision(s), ` +
     `${warnings.length} warning(s).`,
 );

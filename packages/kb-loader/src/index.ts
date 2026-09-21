@@ -82,14 +82,35 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
     byId,
     adequacy,
 
+    /**
+     * Exact aliases win over wildcard scopes, and a name matched by more than
+     * one vendor's scope is refused rather than attributed.
+     *
+     * Returning the first matching scope is the same bug `findSinks()` already
+     * had: whichever entry happened to sort first silently shadowed the other.
+     * A package index is worse than a sink table to get wrong, because the
+     * output names a company. A wrong vendor is worse than no vendor, so the
+     * ambiguous case degrades to "unmatched" -- which is visible in
+     * `unmatched.packages` -- rather than to a confident misattribution.
+     *
+     * The validator rejects overlapping scopes outright, so this branch should
+     * be unreachable on the shipped knowledge base; it exists because a caller
+     * may pass its own `kbPath`.
+     */
     lookupPackage(ecosystem, name) {
-      const exact = packageIndex.get(`${ecosystem}:${name}`);
-      if (exact) return exact;
       const key = `${ecosystem}:${name}`;
-      for (const { scope, match } of scopeIndex) {
-        if (key.startsWith(scope)) return match;
-      }
-      return null;
+      const exact = packageIndex.get(key);
+      if (exact) return exact;
+
+      const matched = scopeIndex.filter((entry) => key.startsWith(entry.scope));
+      if (matched.length === 0) return null;
+      if (new Set(matched.map((entry) => entry.match.vendor.id)).size > 1) return null;
+
+      // One vendor, possibly several of its own scopes: the longest prefix is
+      // the most specific statement that vendor makes about the name.
+      return matched.reduce((best, entry) =>
+        entry.scope.length > best.scope.length ? entry : best,
+      ).match;
     },
 
     lookupHost(host) {

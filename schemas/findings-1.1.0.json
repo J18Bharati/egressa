@@ -106,6 +106,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -230,7 +236,7 @@
       "enum": ["high", "medium", "low"]
     },
     "signalKind": {
-      "enum": ["dependency", "callsite", "html-script", "infrastructure"]
+      "enum": ["dependency", "callsite", "reference", "html-script", "infrastructure"]
     },
     "location": {
       "type": "object",

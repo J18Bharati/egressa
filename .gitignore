@@ -17,6 +17,11 @@ packages/*/kb/
 # checkout. Not committed -- symlinks are unreliable on the Windows CI leg.
 .claude/skills/
 
+# Agent worktrees: a throwaway checkout per subagent run, each on its own branch.
+# They hold a full copy of the tree, so an unguarded `git add -A` from the repo
+# root would otherwise commit the repository into itself.
+.claude/worktrees/
+
 # Generated reports (make-pdf output and similar)
 /REPORT.pdf
 /*.pdf

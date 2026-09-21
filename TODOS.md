@@ -143,6 +143,37 @@ same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
 
 ## Engine
 
+### Carry a jurisdiction's role through to output
+
+**What:** Change `TransferFacts.jurisdictions` from `CountryCode[]` to a shape carrying the KB's
+`role`, and render it. `merge/index.ts:161` is the single line that flattens it:
+`vendor.processing.jurisdictions.map((j) => j.country)`.
+
+**Why:** AWS renders as `processing: US, EEA, US, LU`, which reads as a deduplication bug and is
+not one. `kb/vendors/aws.json` records US twice with distinct roles — Amazon Web Services, Inc. is
+the contracting entity for customers outside EMEA and is *not* selected by the Region setting,
+while the primary entry is. That distinction is exactly what the knowledge base exists to carry,
+and the renderer throws it away, so the output invites a reader to "fix" it by deduplicating.
+Deduplicating would destroy real information. `human.ts:108` already does
+`[...new Set(finding.transfer.jurisdictions)]`, which is that mistake, shipped.
+
+**Context:** The KB schema already requires `{country, role}` on every entry, so the data exists
+and only the finding type discards it. Touches `packages/core/src/types.ts`,
+`schemas/findings-1.1.0.json`, `merge/index.ts:161`, and five render sites —
+`sarif.ts:90`, `sarif.ts:163`, `markdown.ts:34`, `markdown.ts:48`, `human.ts:106-109`.
+
+The schema edit is only free until the first release: nothing has ever been published, so
+`findings-1.1.0.json` can change in place today, and after a release a meaning change needs a new
+schema file. That makes this cheaper now than it will ever be again.
+
+Raised as T5.3 in `docs/reviews/2026-09-21-external-run-triage.md`, where it was recorded as
+renderer-only. It is not — the engineering review caught that SARIF flattens it too, and the type
+turns out to discard `role` before any renderer sees it.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ### Cover `--no-color` with a real assertion
 
 **What:** Assert that colour is actually suppressed, from a context where it would otherwise be on.
@@ -179,22 +210,99 @@ test from a clean container, since the bundle's shape has changed twice.
 **Priority:** P2
 **Depends on:** Create the GitHub repository and push
 
-### Start a CHANGELOG
+## Testing
 
-**What:** A `CHANGELOG.md`, written from the point the first tag exists.
+### Teach the transfers specialist that a reference is not a call
 
-**Why:** The knowledge base is versioned data that people will pin and diff. Changes to vendor facts
-matter to anyone who acted on a previous scan, and a rename has already happened once.
+**What:** Add a rule to `skill/privacy-review/specialists/transfers.md`: a finding whose evidence
+contains no `kind: "callsite"` entry is at most `decidability: "config"` and must emit a `question`,
+never a `fix`, whatever its rule id — and must say "named, not called" in its summary. Mirror it in
+`references/finding-schema.md` and in `skill/egressa/references/interpreting-findings.md`, which
+still describes confidence without mentioning the kind axis.
 
-**Context:** No changelog exists. Commit messages are currently the only record, and they are
-detailed but not user-facing. Should distinguish engine changes from knowledge-base changes, since a
-KB update can change findings without any code moving.
+**Why:** The `reference` kind does not survive the CLI-to-skill boundary, and the skill converts it
+back into an accusation. `transfers.md` derives `decidability` from `ruleId` alone —
+"`transfer/third-country-egress` → `code`. The vendor and its jurisdiction are both settled facts" —
+and its mapping table reads only `ruleId`, `severity`, `confidence` and `evidence[0]`. But a
+reference-only finding carries exactly those rule ids: `const u = new URL('https://api.stripe.com/v1')`
+alone produces `transfer/adequate-country-egress` with `evidence: [{kind: "reference"}]`. The
+specialist therefore emits `decidability: "code"`, which under the skill's own rule licenses a
+remediation instruction for `new URL(request.url)` in redirect middleware or a rewritten database
+DSN. That is the precise false accusation the kind was introduced to prevent.
+
+**Context:** `packages/core/src/types.ts` states "Consumers must not render a `reference` as though
+it were a `callsite`", and the largest downstream consumer was not updated. `scan-transfers.sh`
+already runs `--format json`, so `evidence[].kind` is in the data the specialist reads — this is a
+checklist change, not a plumbing one. Raised by the red team during the `/review` pass on
+`gate-layer-fixes`; the engine-side and renderer-side halves were fixed there, this half was
+deferred. `scripts/claims-contract.test.ts` covers the file, so the wording must stay inside the
+claim scope.
 
 **Effort:** S
-**Priority:** P3
-**Depends on:** Build the publishing pipeline
+**Priority:** P1
+**Depends on:** None
+
+### Carry the reviewed file list NUL-delimited end to end
+
+**What:** Build the file list in `skill/privacy-review/scripts/scope.sh` with `git ls-files -z` /
+`find -print0` and filter it NUL-aware (`grep -z`, `read -r -d ''`), instead of joining it with
+newlines and converting with `tr '\n' '\0'` just before `xargs -0`.
+
+**Why:** The `-0` is only nominally end to end. The list is newline-separated from line 61 and is
+filtered by newline-oriented `grep`, `sed` and `while IFS= read -r f` before being re-delimited, so
+a filename containing a newline is already split into two fragments by the time NUL delimiting
+starts. Both halves then fail the `[ -f "$f" ]` existence check and are dropped. The result is
+silent under-review: a file can remove itself from the scan by its own name. Not injection — the
+`--` terminators added alongside this item close that — but it defeats the coverage the gates claim,
+and silence is the failure mode this script has already been bitten by twice.
+
+**Context:** Pre-existing; identical on `v1-build`, so not a regression from the gate work. Raised
+by the security specialist during the `/review` pass on `gate-layer-fixes` and deliberately deferred
+there: it touches the whole front half of the script, including the `SELF_EXCLUDED` and `EXISTING`
+derivations, and risks regressing the gates that pass now. `scripts/scope-gates.test.ts` gives it a
+harness that did not exist before, including hostile-filename cases to extend. Minimum bar for
+calling it done: a fixture whose filename contains a newline is either reviewed or reported, never
+dropped in silence.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Test the three shell scripts that still have none
+
+**What:** Add vitest-driven tests for `skill/privacy-review/scripts/scan-transfers.sh`,
+`skill/egressa/scripts/scan.sh` and `skill/egressa/scripts/reconcile-aws.sh`, reusing the
+`execFileSync` pattern from `scripts/tracker-hook.test.ts:26`.
+
+**Why:** T0.1 — every content gate reading false on any repository larger than a pipe buffer —
+survived 18 test files because the only untested surface in the repository is bash. Fixing
+`scope.sh` closes that instance; the other three scripts remain in the same unlit room.
+`reconcile-aws.sh` is the single thing in the project that reaches the network, gated on
+`EGRESSA_ALLOW_AWS=1`, and nothing asserts that gate holds.
+
+**Context:** All 18 existing test files are TypeScript. `scripts/tracker-hook.test.ts` already
+proves a non-TS artifact can be driven from vitest with `execFileSync` and a temp data dir, so
+there is no harness to design. `scan-transfers.sh` is what the transfers specialist shells out
+to, and per the revised dispatch contract the transfers specialist always runs — so a silent
+failure there reproduces T0.1's exact shape in the one specialist nothing else gates. Highest
+value single assertion: `reconcile-aws.sh` makes no network call without `EGRESSA_ALLOW_AWS=1`.
+Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage.md`.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** The `scope.sh` test harness (`scripts/scope-gates.test.ts`), which establishes
+the fixture and helper shape these reuse.
 
 ## Completed
+
+### Start a CHANGELOG
+**Completed:** gate-layer-fixes (2026-09-22) -- written at 0.2.0 rather than waiting for the first
+tag, because the branch that prompted it changed both halves at once and the reasoning would not
+have survived to a later release. Engine and knowledge base are listed separately, as the item
+asked. `VERSION` at the repository root became the single source of the tool version in the same
+change: it had been written out in five places and two had already drifted to 0.0.0, with the MCP
+server carrying its own literal and `version.ts` claiming a build-time stamp that never happened.
+`scripts/version-consistency.test.ts` is what makes the single source real.
 
 ### Fix the wrong-host class in call-site analysis
 **Completed:** v1-build (2026-09-10) — binding collection walked every declarator in the file into

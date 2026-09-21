@@ -178,7 +178,7 @@ export function scan(options: ScanOptions): ScanResult {
           // unresolved destination: nothing about it is unknown.
           if (hit.vendorId) {
             signals.push({
-              kind: 'callsite',
+              kind: hit.kind,
               vendorId: hit.vendorId,
               matchedOn: hit.matchedOn,
               confidence: hit.confidence,
@@ -191,7 +191,7 @@ export function scan(options: ScanOptions): ScanResult {
           // Destination unknown. Reported so a human can check the deployment
           // configuration; never attributed to a vendor.
           signals.push({
-            kind: 'callsite',
+            kind: hit.kind,
             vendorId: null,
             matchedOn: hit.matchedOn,
             confidence: hit.confidence,
@@ -207,7 +207,7 @@ export function scan(options: ScanOptions): ScanResult {
           unmatchedHosts.add(hit.host);
         }
         signals.push({
-          kind: 'callsite',
+          kind: hit.kind,
           vendorId: hit.vendorId ?? match?.vendor.id ?? null,
           matchedOn: hit.host,
           confidence: hit.confidence,
@@ -275,6 +275,11 @@ export function scan(options: ScanOptions): ScanResult {
       ...(options.assumeAdequacyLapsed?.length
         ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed }
         : {}),
+      // The merged list actually handed to walk(), so the document records
+      // what was applied rather than re-deriving it from options.exclude,
+      // which could in principle diverge if a future caller passed it
+      // without going through walk().
+      ...(options.exclude?.length ? { exclude: options.exclude } : {}),
     },
     summary: summarise(findings),
     findings,

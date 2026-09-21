@@ -1,5 +1,5 @@
 import type { Finding, ScanResult } from '@egressa/core';
-import { DISCLAIMER } from '@egressa/core';
+import { DISCLAIMER, displayName, isReferenceOnly } from '@egressa/core';
 
 /**
  * Markdown summary, shared by `--format markdown` and the MCP server's
@@ -25,12 +25,16 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     );
   }
 
+  if (result.scan.exclude?.length) {
+    lines.push(`> ${result.scan.exclude.length} path(s) excluded from this scan.`, '');
+  }
+
   if (shown.length > 0) {
-    lines.push('| Vendor | Processing | EU region | Rule | Confidence |');
-    lines.push('| --- | --- | --- | --- | --- |');
+    lines.push('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
+    lines.push('| --- | --- | --- | --- | --- | --- |');
     for (const f of shown) {
       lines.push(
-        `| ${f.vendor?.name ?? f.evidence[0]?.matchedOn ?? 'unknown'} ` +
+        `| ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''} | ${reasonCell(f)} ` +
           `| ${f.transfer?.jurisdictions.join(', ') ?? 'unknown'} ` +
           `| ${euRegionCell(f)} | \`${f.ruleId}\` | ${f.confidence} |`,
       );
@@ -43,7 +47,7 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
   }
 
   for (const f of shown) {
-    lines.push(`### ${f.vendor?.name ?? f.evidence[0]?.matchedOn ?? 'Unknown destination'}`, '');
+    lines.push(`### ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''}`, '');
     if (f.transfer) {
       lines.push(`- Processing: ${f.transfer.jurisdictions.join(', ')}`);
       lines.push(`- EU region: ${euRegionCell(f)}`);
@@ -70,6 +74,23 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
 
   lines.push('---', '', DISCLAIMER);
   return lines.join('\n');
+}
+
+/**
+ * The Vendor column carries `displayName()`, which is deliberately generic
+ * for a finding with no vendor -- that is the whole point of Task 1. This
+ * column is where the diagnostic detail goes instead: for
+ * `transfer/unresolved-egress`, `evidence[].matchedOn` already IS the
+ * unresolved reason (see `callsites/index.ts`'s `toHit()`), so surfacing it
+ * here does not require reading `signals[].unresolvedReason` -- and for
+ * `transfer/unknown-vendor-egress` it is the resolved host that had no
+ * knowledge base entry. A finding with a matched vendor gets an empty cell:
+ * there is nothing undecided left to say.
+ */
+function reasonCell(finding: Finding): string {
+  if (finding.vendor) return '';
+  const reasons = [...new Set(finding.evidence.map((e) => e.matchedOn))];
+  return reasons.join('; ');
 }
 
 function euRegionCell(finding: Finding): string {

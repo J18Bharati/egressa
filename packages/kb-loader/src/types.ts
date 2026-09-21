@@ -84,8 +84,19 @@ export interface VendorRegion {
 }
 
 export interface PackageAlias {
+  /**
+   * An exact package name, or a registry namespace written with a trailing
+   * `/*` -- `@sentry/*`. An exact alias always wins over a namespace one.
+   */
   name: string;
-  kind: 'official-sdk' | 'wrapper' | 'plugin' | 'framework-integration';
+  /**
+   * `scope` belongs to a `/*` namespace alias and says only that the namespace
+   * is the vendor's, which is registry-enforced. It is not `official-sdk` on
+   * purpose: a namespace also carries build plugins, type packages and test
+   * helpers, and `official-sdk` is what lifts a direct dependency to high
+   * confidence.
+   */
+  kind: 'official-sdk' | 'wrapper' | 'plugin' | 'framework-integration' | 'scope';
   detectTransitive?: boolean;
 }
 

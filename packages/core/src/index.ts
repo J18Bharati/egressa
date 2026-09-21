@@ -4,6 +4,7 @@ export * from './claims.js';
 export * from './manifests/index.js';
 export * from './discovery/walk.js';
 export * from './exposure/rules.js';
+export * from './output/display.js';
 export * from './output/sarif.js';
 export * from './scan.js';
 export * from './merge/index.js';

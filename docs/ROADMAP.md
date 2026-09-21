@@ -15,8 +15,10 @@ A whole-program constant table keyed on resolved relative specifiers would close
 remaining false negative without needing `node_modules` on disk.
 
 **HTML `<script src>` extraction.** A GA or GTM tag in `index.html` is extremely common and is
-about thirty lines of work. Deliberately deferred from v1 to keep the confidence model honest —
-it would ship as a distinct low-confidence signal kind.
+about thirty lines of work. Deliberately deferred from v1 to keep the confidence model honest — it
+ships as a distinct signal kind, and that mechanism now exists: `reference` landed for `new URL()`
+and `new Request()`, with its own confidence ceiling and its own rendering, so what remains here is
+the extractor rather than the concept. `html-script` is already in the enum.
 
 ## Later
 
