@@ -1,5 +1,5 @@
 import type { Finding, ScanResult } from '@egressa/core';
-import { DISCLAIMER, displayName } from '@egressa/core';
+import { DISCLAIMER, displayName, isReferenceOnly } from '@egressa/core';
 
 /**
  * Markdown summary, shared by `--format markdown` and the MCP server's
@@ -30,7 +30,7 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     lines.push('| --- | --- | --- | --- | --- | --- |');
     for (const f of shown) {
       lines.push(
-        `| ${displayName(f)} | ${reasonCell(f)} ` +
+        `| ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''} | ${reasonCell(f)} ` +
           `| ${f.transfer?.jurisdictions.join(', ') ?? 'unknown'} ` +
           `| ${euRegionCell(f)} | \`${f.ruleId}\` | ${f.confidence} |`,
       );
@@ -43,7 +43,7 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
   }
 
   for (const f of shown) {
-    lines.push(`### ${displayName(f)}`, '');
+    lines.push(`### ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''}`, '');
     if (f.transfer) {
       lines.push(`- Processing: ${f.transfer.jurisdictions.join(', ')}`);
       lines.push(`- EU region: ${euRegionCell(f)}`);

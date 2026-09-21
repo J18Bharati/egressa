@@ -17,7 +17,13 @@ BASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) MODE="repo"; shift ;;
-    --base) BASE="${2:-}"; shift 2 ;;
+    # `shift; shift` rather than `shift 2`: with `--base` as the last argument
+    # there is nothing to shift twice, and bash's `shift 2` then shifts nothing
+    # at all rather than failing. With no `set -e` the loop never advances and
+    # the script spins forever, printing not one line -- so an orchestrator
+    # substituting an empty branch name wedges the review before it starts,
+    # which is worse than any gate this file was rewritten to fix.
+    --base) BASE="${2:-}"; shift; shift ;;
     *) shift ;;
   esac
 done

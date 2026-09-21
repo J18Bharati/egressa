@@ -120,13 +120,23 @@ for (const file of vendorFiles) {
 
   // 4. cross-vendor alias collisions -- silent misattribution bugs if allowed
   for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
-    for (const alias of list as { name: string }[]) {
+    for (const alias of list as { name: string; kind?: string }[]) {
       const key = `${ecosystem}:${alias.name}`;
       const owner = packageOwners.get(key);
       if (owner && owner !== entry.id) {
         errors.push(`${where}: package alias "${key}" already claimed by "${owner}"`);
       }
       packageOwners.set(key, entry.id);
+      // `kind` decides the confidence an alias emits, and nothing else checked
+      // that it agrees with the name. `{"name": "@sentry/*", "kind":
+      // "official-sdk"}` is the dangerous direction: it validates, and then a
+      // build-time plugin matched only by its namespace is reported at high
+      // confidence, which is exactly what `scope` exists to prevent.
+      if (alias.name.endsWith('/*') !== (alias.kind === 'scope')) {
+        errors.push(
+          `${where}: package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`,
+        );
+      }
       // A wildcard alias claims a whole registry namespace. Recorded here and
       // cross-checked once every entry is read, because an overlap is a
       // property of the set and the file that introduces it may be read first.

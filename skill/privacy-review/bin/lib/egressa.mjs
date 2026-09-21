@@ -16149,7 +16149,7 @@ function formatMarkdown(result, options = {}) {
     lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const f3 of shown) {
       lines.push(
-        `| ${displayName(f3)} | ${reasonCell(f3)} | ${f3.transfer?.jurisdictions.join(", ") ?? "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
+        `| ${displayName(f3)}${isReferenceOnly(f3) ? " (named, not called)" : ""} | ${reasonCell(f3)} | ${f3.transfer?.jurisdictions.join(", ") ?? "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
       );
     }
     lines.push("");
@@ -16158,7 +16158,7 @@ function formatMarkdown(result, options = {}) {
     lines.push(`_${result.findings.length - shown.length} further finding(s) not shown._`, "");
   }
   for (const f3 of shown) {
-    lines.push(`### ${displayName(f3)}`, "");
+    lines.push(`### ${displayName(f3)}${isReferenceOnly(f3) ? " (named, not called)" : ""}`, "");
     if (f3.transfer) {
       lines.push(`- Processing: ${f3.transfer.jurisdictions.join(", ")}`);
       lines.push(`- EU region: ${euRegionCell(f3)}`);
