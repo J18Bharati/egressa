@@ -4,6 +4,7 @@ import { type ScanResult, scan, toSarif } from '@egressa/core';
 import type { Confidence, Severity } from '@egressa/core';
 import { defineCommand } from 'citty';
 import { loadConfig } from '../config.js';
+import { writeOut } from '../emit.js';
 import { EXIT } from '../exit-codes.js';
 import { formatHuman } from '../format/human.js';
 import { formatMarkdown } from '../format/markdown.js';
@@ -68,7 +69,7 @@ export const scanCommand = defineCommand({
     },
     quiet: { type: 'boolean', default: false },
   },
-  run({ args, rawArgs }) {
+  async run({ args, rawArgs }) {
     const root = resolve(String(args.path ?? '.'));
 
     // A path that is not a directory is a usage error, not a clean scan. Left
@@ -115,7 +116,9 @@ export const scanCommand = defineCommand({
     const output = render(suppressed, String(args.format), args.color !== false);
 
     if (args.out) writeFileSync(String(args.out), `${output}\n`);
-    else if (!args.quiet) process.stdout.write(`${output}\n`);
+    // Awaited, not fire-and-forget: process.exit() below does not flush a
+    // pipe, and a truncated findings document is worse than a failed one.
+    else if (!args.quiet) await writeOut(`${output}\n`);
 
     process.exit(exitCodeFor(suppressed, failOn));
   },

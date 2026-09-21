@@ -268,3 +268,36 @@ describe('negated flags actually change the scan', () => {
     expect(declared.filter((name) => name?.startsWith('no-'))).toEqual([]);
   });
 });
+
+describe('output survives a pipe', () => {
+  // The bug was that process.exit() does not flush a pipe, so a document
+  // larger than the 64 KB buffer arrived truncated and, for json, unparseable.
+  //
+  // It has to be a *shell* pipeline. execFileSync's own stdio pipe is drained
+  // by the parent as the child writes and never reproduces this -- an earlier
+  // version of these tests used it and passed against the unfixed code, which
+  // is a test that cannot fail. `sh -c '... | cat'` reproduces it every time.
+  //
+  // Every fixture repository is far below 64 KB, so this scans the repository
+  // itself: the smallest input on hand that crosses the threshold.
+  const pipeSelf = (format: string) =>
+    execFileSync(
+      'sh',
+      ['-c', `npx tsx packages/cli/src/cli.ts scan . --format ${format} 2>/dev/null | cat`],
+      { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+    );
+
+  it.skipIf(process.platform === 'win32')(
+    'emits json that parses when it is larger than the pipe buffer',
+    () => {
+      const stdout = pipeSelf('json');
+      // Crossing the buffer is the whole point: if this document ever shrinks
+      // below 64 KB the assertion stops guarding anything and this test needs
+      // a larger input rather than a smaller threshold.
+      expect(stdout.length).toBeGreaterThan(65536);
+      const doc = JSON.parse(stdout);
+      expect(doc.schemaVersion).toBe('1.0.0');
+      expect(doc.findings.length).toBeGreaterThan(0);
+    },
+  );
+});

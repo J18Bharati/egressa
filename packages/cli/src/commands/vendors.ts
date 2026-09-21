@@ -1,5 +1,6 @@
 import { loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
+import { writeOutAndExit } from '../emit.js';
 
 /**
  * Makes the knowledge base usable without running a scan. This is what turns
@@ -19,7 +20,7 @@ export const vendorsCommand = defineCommand({
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
     json: { type: 'boolean', default: false },
   },
-  run({ args }) {
+  async run({ args }) {
     const kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
     const action = String(args.action);
     const query = args.query ? String(args.query) : undefined;
@@ -61,8 +62,7 @@ export const vendorsCommand = defineCommand({
       null;
 
     if (!entry) {
-      process.stdout.write(`No knowledge base entry matches "${query}".\n`);
-      process.exit(0);
+      await writeOutAndExit(`No knowledge base entry matches "${query}".\n`, 0);
     }
 
     process.stdout.write(`${JSON.stringify(entry, null, 2)}\n`);
