@@ -13,6 +13,40 @@ import Ajv2020 from 'ajv/dist/2020.js';
 const KB = join(process.cwd(), 'kb');
 const STALE_AFTER_DAYS = 180;
 
+/** EEA members, so a region in an EEA country satisfies an `EEA` jurisdiction. */
+const EEA_MEMBERS = new Set([
+  'AT',
+  'BE',
+  'BG',
+  'HR',
+  'CY',
+  'CZ',
+  'DK',
+  'EE',
+  'FI',
+  'FR',
+  'DE',
+  'GR',
+  'HU',
+  'IE',
+  'IT',
+  'LV',
+  'LT',
+  'LU',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SK',
+  'SI',
+  'ES',
+  'SE',
+  'IS',
+  'LI',
+  'NO',
+]);
+
 const errors: string[] = [];
 const warnings: string[] = [];
 
@@ -112,8 +146,57 @@ for (const file of vendorFiles) {
     }
   }
 
+  // 7. region map sanity
+  //
+  // Deliberately no prefix check. `eu-west-2` is London and `eu-central-2` is
+  // Zurich, and a warning that those "look wrong" would be silenced by the next
+  // contributor writing IE -- which is the exact error the map exists to stop.
+  const regionCodes = new Set<string>();
+  const undescribed = new Set<string>();
+  const jurisdictionCountries = new Set(
+    (entry.processing.jurisdictions ?? []).map((j: { country: string }) => j.country),
+  );
+  for (const region of (entry.regions ?? []) as { code: string; country: string }[]) {
+    if (regionCodes.has(region.code)) {
+      errors.push(`${where}: region "${region.code}" is listed more than once`);
+    }
+    regionCodes.add(region.code);
+    // A region resolving to a country the entry never mentions is worth
+    // saying out loud, but it is a warning rather than an error: a cloud
+    // provider publishes dozens of regions, and forcing every one of them into
+    // processing.jurisdictions would turn that field into a country list and
+    // bury the few jurisdictions that carry legal weight -- the contracting
+    // entity, and wherever support can reach the data from.
+    const coveredByEea = EEA_MEMBERS.has(region.country) && jurisdictionCountries.has('EEA');
+    if (!jurisdictionCountries.has(region.country) && !coveredByEea) {
+      undescribed.add(region.country);
+    }
+  }
+  // One line per entry, not one per region. A cloud provider publishes dozens
+  // of regions and a warning repeated twenty-four times is a warning nobody
+  // reads.
+  if (undescribed.size > 0) {
+    warnings.push(
+      `${where}: regions resolve to ${[...undescribed].sort().join(', ')}, which processing.jurisdictions does not mention`,
+    );
+  }
+
   // 6. no evaluative language in the data layer
-  const prose = [entry.notes ?? '', entry.processing.euRegion?.notes ?? ''].join(' ');
+  //
+  // Collected from every prose-bearing path rather than a hardcoded two. The
+  // old list named `notes` and `euRegion.notes` only, so `sdkDefaults[].effect`
+  // -- several paragraphs in some entries -- was never scanned. A vocabulary
+  // guard that covers some of the prose is a guard someone will route around
+  // without meaning to.
+  const prose = [
+    entry.notes ?? '',
+    entry.processing.euRegion?.notes ?? '',
+    ...(entry.processing.jurisdictions ?? []).map((j: { note?: string }) => j.note ?? ''),
+    ...(entry.sdkDefaults ?? []).map((d: { effect?: string }) => d.effect ?? ''),
+    ...(entry.regions ?? []).map(
+      (r: { label?: string; note?: string }) => `${r.label ?? ''} ${r.note ?? ''}`,
+    ),
+  ].join(' ');
   for (const word of ['risky', 'dangerous', 'avoid', 'bad ', 'unsafe', 'problematic']) {
     if (prose.toLowerCase().includes(word)) {
       errors.push(`${where}: evaluative language "${word.trim()}" belongs in the ratings layer`);

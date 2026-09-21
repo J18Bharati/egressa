@@ -1,5 +1,6 @@
 import type { AdequacyDecision, KnowledgeBase, VendorEntry } from '@egressa/kb';
 import type { Exposure, ExposureLevel, RuleId } from '../types.js';
+import { type AppliedRegion, declaresRegionNarrowing } from './regions.js';
 
 /**
  * The exposure rule table.
@@ -13,7 +14,7 @@ import type { Exposure, ExposureLevel, RuleId } from '../types.js';
  * Bump EXPOSURE_RULES_VERSION whenever the mapping below changes, so a stored
  * finding records which version produced it.
  */
-export const EXPOSURE_RULES_VERSION = '1.1.0';
+export const EXPOSURE_RULES_VERSION = '1.2.0';
 
 const EEA_MEMBERS = new Set([
   'AT',
@@ -60,11 +61,54 @@ export interface ExposureResult {
  * The flags are the output that matters; `level` is a derived ordinal offered
  * for sorting and summary lines only.
  */
-export function classifyExposure(vendor: VendorEntry, kb: KnowledgeBase): ExposureResult {
-  const countries = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
-  const nonEea = countries.filter((c) => !EEA_MEMBERS.has(c));
+export interface ExposureContext {
+  /** The region this vendor was configured with, when one was detected and resolved. */
+  region?: AppliedRegion | null;
+  /** A region identifier that was detected but is not in the vendor's map. */
+  unmappedRegion?: string | null;
+}
+
+export function classifyExposure(
+  vendor: VendorEntry,
+  kb: KnowledgeBase,
+  context: ExposureContext = {},
+): ExposureResult {
+  const known = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
   const euRegion = vendor.processing.euRegion;
-  const inputs: string[] = countries.map((c) => `jurisdiction:${c}`);
+
+  // The full set is always reported, so a reader sees what was known as well as
+  // what was evaluated.
+  const inputs: string[] = known.map((c) => `jurisdiction:${c}`);
+
+  // Narrowing is opt-in per jurisdiction and replaces only the jurisdictions an
+  // author marked as region selected. A contracting entity survives: a project
+  // hosted in Frankfurt is still contracted with the entity in the addendum,
+  // and dropping it because a region was detected would report a clean scan on
+  // a transfer that is really happening.
+  const region = context.region ?? null;
+  const narrows = region !== null && declaresRegionNarrowing(vendor);
+  const countries = narrows
+    ? [
+        region.country,
+        ...vendor.processing.jurisdictions
+          .filter((j) => j.regionSelected !== true)
+          .map((j) => j.country.toUpperCase()),
+      ]
+    : known;
+
+  if (region) {
+    inputs.push(`region:${region.code}`, `regionCountry:${region.country}`, 'regionSource:kb');
+    if (narrows) inputs.push(`narrowedTo:${[...new Set(countries)].sort().join(',')}`);
+    // A resolved region against an entry that never declared which jurisdiction
+    // it selects changes nothing, and saying so is more useful than silence.
+    else inputs.push('narrowing:not-declared');
+  } else if (context.unmappedRegion) {
+    inputs.push(`region:${context.unmappedRegion}`, 'regionSource:unmapped');
+  } else {
+    inputs.push('regionSource:none');
+  }
+
+  const nonEea = countries.filter((c) => !EEA_MEMBERS.has(c));
 
   inputs.push(`euRegion:${euRegion.available ? (euRegion.scope ?? 'unscoped') : 'none'}`);
   for (const mechanism of vendor.legal.transferMechanisms) {

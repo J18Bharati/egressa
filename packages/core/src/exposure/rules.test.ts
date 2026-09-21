@@ -1,5 +1,6 @@
 import { loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
+import { resolveRegion } from './regions.js';
 import { classifyExposure } from './rules.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
@@ -82,11 +83,81 @@ describe('classifyExposure: audit trail and versioning', () => {
   });
 
   it('stamps the rules version that produced the rating', () => {
-    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.1.0');
+    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.2.0');
   });
 
   it('treats an under-challenge decision as in force rather than predicting an outcome', () => {
     // US/DPF is under challenge; it still has legal effect today.
     expect(classifyExposure(vendor('mailgun'), kb).ruleId).toBe('transfer/adequate-country-egress');
+  });
+});
+
+describe('classifyExposure: a region selects which jurisdiction applies', () => {
+  const aws = vendor('aws');
+
+  it('resolves a region from the vendor map, never from its prefix', () => {
+    // The two that matter. Both identifiers begin `eu-`; neither country is in
+    // the EEA, and a prefix rule would place both inside it with confidence.
+    expect(resolveRegion(aws, 'eu-west-2')?.country).toBe('GB');
+    expect(resolveRegion(aws, 'eu-central-2')?.country).toBe('CH');
+    expect(resolveRegion(aws, 'eu-west-1')?.country).toBe('IE');
+  });
+
+  it('rates London as an adequate third country, not EU processing', () => {
+    const london = classifyExposure(aws, kb, { region: resolveRegion(aws, 'eu-west-2') });
+    expect(london.ruleId).toBe('transfer/adequate-country-egress');
+    expect(london.exposure.adequacyDependent).toBe(true);
+  });
+
+  it('does not clear an EEA region, because the provider entity is still in it', () => {
+    // The answer people expect here is eu-processing, and it is wrong. The
+    // region moves where customer content sits; it does not remove Amazon Web
+    // Services, Inc. from the arrangement, and that jurisdiction is not
+    // regionSelected. So choosing Dublin narrows the picture without clearing
+    // it -- which is exactly the thing a reader would otherwise get wrong.
+    const dublin = classifyExposure(aws, kb, { region: resolveRegion(aws, 'eu-west-1') });
+    expect(dublin.ruleId).toBe('transfer/adequate-country-egress');
+    expect(dublin.exposure.thirdCountryTransfer).toBe(true);
+    // ...but the narrowed set really is different from a US region's.
+    const narrowed = dublin.exposure.inputs.find((i) => i.startsWith('narrowedTo:'));
+    expect(narrowed).toContain('IE');
+    expect(dublin.exposure.inputs).toContain('regionCountry:IE');
+  });
+
+  it('records the region and the narrowed set in the audit trail', () => {
+    const inputs = classifyExposure(aws, kb, { region: resolveRegion(aws, 'us-east-1') }).exposure
+      .inputs;
+    expect(inputs).toContain('region:us-east-1');
+    expect(inputs).toContain('regionCountry:US');
+    expect(inputs).toContain('regionSource:kb');
+    // The full known set is still reported alongside the narrowed one.
+    expect(inputs).toContain('jurisdiction:EEA');
+  });
+
+  it('keeps a jurisdiction the region does not select', () => {
+    // Luxembourg is the EMEA contracting entity and is not regionSelected, so
+    // it survives narrowing to Dublin. Dropping it would report a clean scan
+    // on a contract that still exists.
+    const inputs = classifyExposure(aws, kb, { region: resolveRegion(aws, 'eu-west-1') }).exposure
+      .inputs;
+    expect(inputs.find((i) => i.startsWith('narrowedTo:'))).toContain('LU');
+  });
+
+  it('does not narrow on an unknown region, and says so', () => {
+    expect(resolveRegion(aws, 'mars-north-1')).toBeNull();
+    const inputs = classifyExposure(aws, kb, { unmappedRegion: 'mars-north-1' }).exposure.inputs;
+    expect(inputs).toContain('regionSource:unmapped');
+    expect(inputs.some((i) => i.startsWith('narrowedTo:'))).toBe(false);
+  });
+
+  it('does not narrow a vendor that has not declared what a region selects', () => {
+    // Stripe has no regions map and no regionSelected jurisdiction, so a region
+    // handed to it changes nothing.
+    const before = classifyExposure(vendor('stripe'), kb);
+    const after = classifyExposure(vendor('stripe'), kb, {
+      region: { code: 'eu-west-1', country: 'IE', sourceUrl: 'https://example.com' },
+    });
+    expect(after.ruleId).toBe(before.ruleId);
+    expect(after.exposure.inputs).toContain('narrowing:not-declared');
   });
 });
