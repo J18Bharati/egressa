@@ -47,6 +47,10 @@ interface Node {
 export interface CallsiteHit {
   /** Resolved host, or null when the destination could not be determined. */
   host: string | null;
+  /** Region identifier read from a config literal, verbatim. */
+  region?: string;
+  /** Vendor this hit is attributed to, when the sink itself named one. */
+  vendorId?: string;
   /** Populated when host is null: why it could not be resolved. */
   unresolvedReason?: string;
   location: SourceLocation;
@@ -206,7 +210,32 @@ export function analyzeFile(
           if (sink.matchAny && argument.type !== 'ObjectExpression') continue;
           const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
           if (resolution.kind !== 'resolved') continue;
-          hits.push(toHit(resolution, node, index, filePath, 'high'));
+          const hit = toHit(resolution, node, index, filePath, 'high');
+          const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
+          if (withRegion) hit.region = withRegion;
+          if (sink.vendorId) hit.vendorId = sink.vendorId;
+          hits.push(hit);
+          return;
+        }
+
+        // No host resolved. A sink named by its own export still identifies a
+        // vendor, so a region alone is enough -- `new S3Client({ region })`
+        // names a jurisdiction and no host at all. A catch-all sink matches
+        // any call and must never do this.
+        const regionOnly = sink.vendorId
+          ? regionFromArguments(args, sink.regionKeys ?? [], bindings, context)
+          : null;
+        if (regionOnly && sink.vendorId) {
+          const location = index.locationAt(filePath, node.start, node.end - node.start);
+          hits.push({
+            host: null,
+            region: regionOnly,
+            vendorId: sink.vendorId,
+            location,
+            snippet: index.snippetAt(node.start),
+            confidence: 'high',
+            matchedOn: regionOnly,
+          });
           return;
         }
         continue;
@@ -222,6 +251,45 @@ export function analyzeFile(
   });
 
   return { hits };
+}
+
+/**
+ * A region identifier from a config object, or null.
+ *
+ * Only a string literal, or a module-scope constant that survived the
+ * stability check. `region: process.env.AWS_REGION` and `` `eu-${zone}` ``
+ * yield nothing: a region that is assembled at deploy time is not a fact about
+ * this repository, and reporting a guess about where data lands is worse than
+ * reporting nothing. The caller then leaves the exposure unnarrowed.
+ */
+function regionFromArguments(
+  args: Node[],
+  regionKeys: string[],
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+): string | null {
+  if (regionKeys.length === 0) return null;
+  for (const argument of args) {
+    if (!argument || argument.type !== 'ObjectExpression') continue;
+    for (const property of (argument.properties as Node[] | undefined) ?? []) {
+      const key = property.key as Node | undefined;
+      const value = property.value as Node | undefined;
+      const name = key ? String(key.name ?? (key as { value?: string }).value ?? '') : '';
+      if (!value || !regionKeys.includes(name)) continue;
+
+      if (value.type === 'Literal' && typeof value.value === 'string') return value.value;
+      if (value.type === 'Identifier') {
+        const bindingName = String(value.name);
+        if (context.unstable.has(bindingName)) return null;
+        const binding = bindings.get(bindingName);
+        if (!binding || binding.kind !== 'string') return null;
+        if (binding.declaredAt > context.callStart) return null;
+        return binding.value;
+      }
+      return null;
+    }
+  }
+  return null;
 }
 
 function toHit(

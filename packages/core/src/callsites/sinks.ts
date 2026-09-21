@@ -40,6 +40,32 @@ export interface SinkDefinition {
    * `logger.info('https://api.stripe.com/v1')` from becoming a call site.
    */
   matchAny?: boolean;
+  /**
+   * Config keys carrying a region identifier rather than a host.
+   *
+   * `new S3Client({ region: 'eu-west-1' })` names a jurisdiction and no host at
+   * all, which `configKeys` cannot express: the value is a bare token, not a
+   * URL, and `hostFromUrlPrefix` rejects anything without a scheme.
+   */
+  regionKeys?: string[];
+  /**
+   * Match whether or not the call used `new`.
+   *
+   * A knowledge base entry records an export name, not a call form, and the
+   * same SDK export is written both ways -- `new S3Client({...})` is the usual
+   * shape and `createClient({...})` is not. Filtering these on `isNew` meant
+   * every `new`-constructed vendor client was invisible.
+   */
+  eitherForm?: boolean;
+  /**
+   * The vendor this sink came from, when it came from a knowledge base entry.
+   *
+   * A region-only hit has no host to look up, so the attribution has to travel
+   * with the sink. Only a sink matched by its own exported name carries one; a
+   * catch-all sink spans every vendor and therefore carries none, which is
+   * what stops `foo({ region: 'x' })` in unrelated code becoming a finding.
+   */
+  vendorId?: string;
 }
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'request'];
@@ -103,7 +129,7 @@ export function findSinks(
       catchAll.push(sink);
       continue;
     }
-    if (Boolean(sink.isNew) !== isNew) continue;
+    if (!sink.eitherForm && Boolean(sink.isNew) !== isNew) continue;
     if (sink.object && sink.property) {
       if (callee.object === sink.object && callee.property === sink.property) named.push(sink);
       continue;
@@ -131,6 +157,8 @@ export interface ClientConstructorSpec {
   module?: string | undefined;
   export?: string | undefined;
   hostOption?: string | null | undefined;
+  /** Option carrying a region identifier rather than a host. */
+  regionOption?: string | undefined;
 }
 
 /**
@@ -146,6 +174,41 @@ export interface ClientConstructorSpec {
  * of its arguments resolves to a real host, and the vendor is then decided by
  * looking that host up, not by which function was called.
  */
+export interface VendorConstructors {
+  vendorId: string;
+  constructors: ClientConstructorSpec[];
+}
+
+/**
+ * Sinks for every vendor's client constructors.
+ *
+ * Named sinks carry their vendor so a region read from one can be attributed
+ * without a host. The catch-all sink, which exists because a default export is
+ * bound to whatever name the importer chose, deliberately does not.
+ */
+export function vendorConstructorSinks(vendors: VendorConstructors[]): SinkDefinition[] {
+  const sinks: SinkDefinition[] = [];
+  for (const { vendorId, constructors } of vendors) {
+    for (const sink of clientConstructorSinks(constructors)) {
+      sinks.push(sink.matchAny ? sink : { ...sink, vendorId });
+    }
+  }
+  return dedupeCatchAll(sinks);
+}
+
+/**
+ * Collapse the per-vendor catch-all sinks into one with the union of options.
+ *
+ * A catch-all matches the first call it is offered, so one per vendor would
+ * mean the first vendor's option list silently shadowed every other.
+ */
+function dedupeCatchAll(sinks: SinkDefinition[]): SinkDefinition[] {
+  const named = sinks.filter((s) => !s.matchAny);
+  const options = new Set(sinks.filter((s) => s.matchAny).flatMap((s) => s.configKeys ?? []));
+  if (options.size === 0) return named;
+  return [...named, { argIndex: 0, anyArg: true, matchAny: true, configKeys: [...options] }];
+}
+
 export function clientConstructorSinks(specs: ClientConstructorSpec[]): SinkDefinition[] {
   const seen = new Set<string>();
   const anyCallOptions = new Set<string>();
@@ -166,8 +229,10 @@ export function clientConstructorSinks(specs: ClientConstructorSpec[]): SinkDefi
       continue;
     }
 
-    sinks.push({ callee: name, argIndex: 0, anyArg: true, configKeys });
-    sinks.push({ property: name, argIndex: 0, anyArg: true, configKeys });
+    const regionKeys = spec.regionOption ? [spec.regionOption] : [];
+    const shape = { argIndex: 0, anyArg: true, eitherForm: true, configKeys, regionKeys };
+    sinks.push({ callee: name, ...shape });
+    sinks.push({ property: name, ...shape });
   }
 
   if (anyCallOptions.size > 0) {

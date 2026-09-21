@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeFile } from './index.js';
-import { clientConstructorSinks } from './sinks.js';
+import { clientConstructorSinks, vendorConstructorSinks } from './sinks.js';
 
 /**
  * The golden table.
@@ -332,6 +332,58 @@ describe('golden table: knowledge base client constructors', () => {
     expect(
       analyzeFile("logger.info('https://api.stripe.com/v1');", 'input.ts', sinks).hits,
     ).toEqual([]);
+  });
+});
+
+describe('golden table: region identifiers', () => {
+  const sinks = vendorConstructorSinks([
+    {
+      vendorId: 'aws',
+      constructors: [
+        {
+          module: '@aws-sdk/client-s3',
+          export: 'S3Client',
+          hostOption: null,
+          regionOption: 'region',
+        },
+      ],
+    },
+  ]);
+  const regions = (code: string) =>
+    analyzeFile(code, 'input.ts', sinks).hits.map((h) => h.region ?? null);
+
+  it('reads a region literal from a constructed client', () => {
+    expect(regions("new S3Client({ region: 'eu-west-1' });")).toEqual(['eu-west-1']);
+  });
+
+  it('reads one through a module-scope constant', () => {
+    expect(regions("const R = 'eu-central-1';\nnew S3Client({ region: R });")).toEqual([
+      'eu-central-1',
+    ]);
+  });
+
+  // The null half. A region assembled at deploy time is not a fact about this
+  // repository, and a guess about where data lands is worse than no answer.
+  it('refuses a region from an environment variable', () => {
+    expect(
+      analyzeFile('new S3Client({ region: process.env.AWS_REGION });', 'a.ts', sinks).hits,
+    ).toEqual([]);
+  });
+
+  it('refuses an interpolated region', () => {
+    expect(analyzeFile('new S3Client({ region: `eu-${zone}` });', 'a.ts', sinks).hits).toEqual([]);
+  });
+
+  it('refuses a region whose binding is declared twice', () => {
+    const code =
+      "const R = 'eu-west-1';\nnew S3Client({ region: R });\nfunction z() { const R = 'us-east-1'; }";
+    expect(analyzeFile(code, 'a.ts', sinks).hits).toEqual([]);
+  });
+
+  it('does not turn an arbitrary call with a region into a call site', () => {
+    // No knowledge base sink names `logger`, so this is not an egress point
+    // however its options are spelled.
+    expect(analyzeFile("logger.info({ region: 'us-east-1' });", 'a.ts', sinks).hits).toEqual([]);
   });
 });
 

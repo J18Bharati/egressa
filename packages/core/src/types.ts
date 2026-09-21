@@ -1,6 +1,6 @@
 /**
  * The stable contract between the engine and its three consumers (CLI, MCP
- * server, skill). These types are the source of truth; schemas/findings-1.0.0.json
+ * server, skill). These types are the source of truth; the published schema
  * is generated from them and CI asserts the two agree.
  *
  * Compatibility rule: additive changes bump the minor version, removals or
@@ -8,7 +8,7 @@
  * `schemaVersion`.
  */
 
-export const FINDINGS_SCHEMA_VERSION = '1.0.0';
+export const FINDINGS_SCHEMA_VERSION = '1.1.0';
 
 export type RuleId =
   | 'transfer/third-country-egress'

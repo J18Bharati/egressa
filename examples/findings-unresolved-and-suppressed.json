@@ -1,6 +1,6 @@
 {
-  "$schema": "https://egressa.dev/schemas/findings-1.0.0.json",
-  "schemaVersion": "1.0.0",
+  "$schema": "https://egressa.dev/schemas/findings-1.1.0.json",
+  "schemaVersion": "1.1.0",
   "disclaimer": "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
   "tool": {
     "name": "egressa",

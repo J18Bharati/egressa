@@ -5,11 +5,12 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import { findForbiddenClaims } from './claims.js';
 import { scan } from './scan.js';
+import { FINDINGS_SCHEMA_VERSION } from './types.js';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats.default(ajv);
 const validateFindings = ajv.compile(
-  JSON.parse(readFileSync('schemas/findings-1.0.0.json', 'utf8')) as object,
+  JSON.parse(readFileSync(`schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`, 'utf8')) as object,
 );
 
 const NOW = new Date('2026-09-06T12:00:00.000Z');
@@ -127,5 +128,28 @@ describe('scan: options', () => {
     // A year on, every entry is past the 180-day threshold, whatever the count.
     const entries = readdirSync('kb/vendors').filter((f) => f.endsWith('.json')).length;
     expect(scan({ ...base, root, now: new Date('2027-09-06') }).kb.staleEntryCount).toBe(entries);
+  });
+});
+
+describe('scan: a document carrying regions', () => {
+  // The express-stripe-sendgrid fixture has no region, so it validated happily
+  // against a schema that rejected every region-bearing document -- the signal
+  // item is additionalProperties:false. A scan with regions has to be checked
+  // separately or the gap reopens the next time a field is added.
+  const result = scan({
+    ...base,
+    root: 'fixtures/repos/regional-multi',
+    includeCallsites: true,
+  });
+
+  it('validates against the published schema', () => {
+    const ok = validateFindings(result);
+    if (!ok) expect(validateFindings.errors?.slice(0, 5)).toEqual([]);
+    expect(ok).toBe(true);
+  });
+
+  it('actually carries a region, so the assertion above is not vacuous', () => {
+    expect(result.findings.some((f) => f.signals.some((s) => s.region))).toBe(true);
+    expect(result.findings.some((f) => f.evidence.some((e) => e.region))).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
-import { clientConstructorSinks } from './callsites/sinks.js';
+import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -103,8 +103,11 @@ export function scan(options: ScanOptions): ScanResult {
   // Vendor SDK initialisers, built from the knowledge base rather than a
   // hardcoded table: `aliases.clientConstructors` names the option carrying the
   // destination, which is where a configured region actually appears.
-  const vendorSinks = clientConstructorSinks(
-    kb.vendors.flatMap((v) => v.aliases.clientConstructors ?? []),
+  const vendorSinks = vendorConstructorSinks(
+    kb.vendors.map((v) => ({
+      vendorId: v.id,
+      constructors: v.aliases.clientConstructors ?? [],
+    })),
   );
 
   let manifestsScanned = 0;
@@ -166,6 +169,21 @@ export function scan(options: ScanOptions): ScanResult {
 
       for (const hit of hits) {
         if (hit.host === null) {
+          // A hit the sink itself attributed -- `new S3Client({ region })`
+          // names a vendor and a jurisdiction without naming a host. Not an
+          // unresolved destination: nothing about it is unknown.
+          if (hit.vendorId) {
+            signals.push({
+              kind: 'callsite',
+              vendorId: hit.vendorId,
+              matchedOn: hit.matchedOn,
+              confidence: hit.confidence,
+              location: hit.location,
+              snippet: hit.snippet,
+              ...(hit.region ? { region: hit.region } : {}),
+            });
+            continue;
+          }
           // Destination unknown. Reported so a human can check the deployment
           // configuration; never attributed to a vendor.
           signals.push({
@@ -186,11 +204,12 @@ export function scan(options: ScanOptions): ScanResult {
         }
         signals.push({
           kind: 'callsite',
-          vendorId: match?.vendor.id ?? null,
+          vendorId: hit.vendorId ?? match?.vendor.id ?? null,
           matchedOn: hit.host,
           confidence: hit.confidence,
           location: hit.location,
           snippet: hit.snippet,
+          ...(hit.region ? { region: hit.region } : {}),
         });
       }
     }

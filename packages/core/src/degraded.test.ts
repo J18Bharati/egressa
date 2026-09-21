@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FINDINGS_SCHEMA_VERSION } from './types.js';
 
 /**
  * The forced-binding-failure test the v1 plan specified and the code never had.
@@ -20,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats.default(ajv);
 const validateFindings = ajv.compile(
-  JSON.parse(readFileSync('schemas/findings-1.0.0.json', 'utf8')) as object,
+  JSON.parse(readFileSync(`schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`, 'utf8')) as object,
 );
 
 const NOW = new Date('2026-09-06T12:00:00.000Z');

@@ -1,6 +1,6 @@
 /**
  * Guards the contract three ways:
- *  1. every example document validates against schemas/findings-1.0.0.json
+ *  1. every example document validates against the published findings schema
  *  2. the TypeScript enums and the JSON Schema enums agree (the real drift risk,
  *     since types.ts is the source of truth but the schema is hand-maintained)
  *  3. every example carries the exact disclaimer and no forbidden claim words
@@ -11,11 +11,15 @@ import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { DISCLAIMER, findForbiddenClaims } from '../packages/core/src/claims.js';
 import { RULE_IDS } from '../packages/core/src/rules.js';
+import { FINDINGS_SCHEMA_VERSION } from '../packages/core/src/types.js';
 
 const root = process.cwd();
 const failures: string[] = [];
 
-const schema = JSON.parse(readFileSync(join(root, 'schemas/findings-1.0.0.json'), 'utf8'));
+// Derived from the constant, not hardcoded: a version bump used to leave the
+// new schema unvalidated while the superseded one silently kept passing.
+const schemaPath = `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
+const schema = JSON.parse(readFileSync(join(root, schemaPath), 'utf8'));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats.default(ajv);
 const validate = ajv.compile(schema);

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scan } from '@egressa/core';
+import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 import { EXIT } from './exit-codes.js';
@@ -186,7 +186,7 @@ describe('cli end to end', () => {
       'json',
     ]);
     const parsed = JSON.parse(stdout) as { schemaVersion: string; disclaimer: string };
-    expect(parsed.schemaVersion).toBe('1.0.0');
+    expect(parsed.schemaVersion).toBe(FINDINGS_SCHEMA_VERSION);
     expect(parsed.disclaimer).toContain('does not assess or certify');
   });
 
@@ -296,7 +296,7 @@ describe('output survives a pipe', () => {
       // a larger input rather than a smaller threshold.
       expect(stdout.length).toBeGreaterThan(65536);
       const doc = JSON.parse(stdout);
-      expect(doc.schemaVersion).toBe('1.0.0');
+      expect(doc.schemaVersion).toBe(FINDINGS_SCHEMA_VERSION);
       expect(doc.findings.length).toBeGreaterThan(0);
     },
   );

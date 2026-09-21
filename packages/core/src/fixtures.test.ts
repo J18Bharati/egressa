@@ -124,3 +124,45 @@ describe('fixture: modern-solo-stack', () => {
     expect(find('clerk')).toBeDefined();
   });
 });
+
+describe('fixture: regional-multi', () => {
+  const result = run('regional-multi');
+  const withRegion = (code: string) =>
+    result.findings.find((f) => f.evidence.some((e) => e.region === code));
+
+  it('reports one provider in four regions as four findings', () => {
+    // Region is in the grouping key, so "AWS in Ireland" and "AWS in Virginia"
+    // do not collapse into one finding whose flags came from whichever signal
+    // was seen first.
+    const aws = result.findings.filter((f) => f.vendor?.id === 'aws');
+    expect(aws.length).toBe(5); // four regions plus the dependency-only signal
+    expect(new Set(aws.map((f) => f.id)).size).toBe(5);
+  });
+
+  it('does not read London as an EEA region', () => {
+    // The whole reason the map is sourced data. Both identifiers begin `eu-`.
+    expect(withRegion('eu-west-2')?.exposure?.inputs).toContain('regionCountry:GB');
+    expect(withRegion('eu-west-1')?.exposure?.inputs).toContain('regionCountry:IE');
+  });
+
+  it('keeps the contracting entity a region does not select', () => {
+    // Luxembourg is the EMEA contracting entity and survives narrowing to
+    // Ireland; dropping it would report a clean scan on a live contract.
+    const narrowed = withRegion('eu-west-1')?.exposure?.inputs.find((i) =>
+      i.startsWith('narrowedTo:'),
+    );
+    expect(narrowed).toContain('LU');
+    expect(narrowed).toContain('IE');
+  });
+
+  it('never guesses a region supplied at deploy time', () => {
+    // src/storage.ts passes process.env.AWS_REGION. No finding may claim it.
+    const regions = result.findings.flatMap((f) => f.evidence.map((e) => e.region).filter(Boolean));
+    expect(regions.sort()).toEqual(['eu-central-1', 'eu-west-1', 'eu-west-2', 'us-east-1']);
+  });
+
+  it('flips every region to a warning when the framework lapses', () => {
+    const lapsed = run('regional-multi', { assumeAdequacyLapsed: ['US:DPF'] });
+    expect(lapsed.findings.every((f) => f.severity === 'warning')).toBe(true);
+  });
+});

@@ -82,7 +82,12 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
       : finding.severity === 'error'
         ? c('red', 'x')
         : c('blue', 'i');
-  const name = finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? 'unknown destination';
+  const vendorName =
+    finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? 'unknown destination';
+  // Without the region in the header, one provider configured in four regions
+  // renders as four identical blocks.
+  const region = finding.evidence.find((e) => e.region)?.region;
+  const name = region ? `${vendorName} (${region})` : vendorName;
   const suppressed = finding.suppressed ? c('dim', ' (suppressed)') : '';
   const confidence =
     finding.confidence === 'high' ? '' : c('dim', ` [${finding.confidence} confidence]`);
@@ -91,7 +96,15 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
 
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
-    lines.push(`    processing: ${finding.transfer.jurisdictions.join(', ')}`);
+    // The narrowed set when a region selected one, the full set otherwise. The
+    // audit trail in exposure.inputs carries both either way.
+    const narrowed = finding.exposure?.inputs
+      .find((i) => i.startsWith('narrowedTo:'))
+      ?.slice('narrowedTo:'.length);
+    const jurisdictions = narrowed
+      ? narrowed.split(',')
+      : [...new Set(finding.transfer.jurisdictions)];
+    lines.push(`    processing: ${jurisdictions.join(', ')}`);
     lines.push(
       `    EU region:  ${
         eu.available ? `available (${eu.scope ?? 'scope not recorded'})` : 'not documented'

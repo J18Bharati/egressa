@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { FINDINGS_SCHEMA_VERSION } from '@egressa/core';
 import { defineCommand } from 'citty';
 
 /** Prints the published schemas, so a consumer can pin against them offline. */
@@ -14,7 +15,10 @@ export const schemaCommand = defineCommand({
   },
   run({ args }) {
     const which = String(args.which);
-    const path = which === 'vendor' ? 'kb/schema/vendor-1.0.0.json' : 'schemas/findings-1.0.0.json';
+    const path =
+      which === 'vendor'
+        ? 'kb/schema/vendor-1.0.0.json'
+        : `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
     try {
       process.stdout.write(readFileSync(path, 'utf8'));
     } catch {
