@@ -194,6 +194,33 @@ KB update can change findings without any code moving.
 **Priority:** P3
 **Depends on:** Build the publishing pipeline
 
+## Testing
+
+### Test the three shell scripts that still have none
+
+**What:** Add vitest-driven tests for `skill/privacy-review/scripts/scan-transfers.sh`,
+`skill/egressa/scripts/scan.sh` and `skill/egressa/scripts/reconcile-aws.sh`, reusing the
+`execFileSync` pattern from `scripts/tracker-hook.test.ts:26`.
+
+**Why:** T0.1 — every content gate reading false on any repository larger than a pipe buffer —
+survived 18 test files because the only untested surface in the repository is bash. Fixing
+`scope.sh` closes that instance; the other three scripts remain in the same unlit room.
+`reconcile-aws.sh` is the single thing in the project that reaches the network, gated on
+`EGRESSA_ALLOW_AWS=1`, and nothing asserts that gate holds.
+
+**Context:** All 18 existing test files are TypeScript. `scripts/tracker-hook.test.ts` already
+proves a non-TS artifact can be driven from vitest with `execFileSync` and a temp data dir, so
+there is no harness to design. `scan-transfers.sh` is what the transfers specialist shells out
+to, and per the revised dispatch contract the transfers specialist always runs — so a silent
+failure there reproduces T0.1's exact shape in the one specialist nothing else gates. Highest
+value single assertion: `reconcile-aws.sh` makes no network call without `EGRESSA_ALLOW_AWS=1`.
+Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage.md`.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** The `scope.sh` test harness (`scripts/scope-gates.test.ts`), which establishes
+the fixture and helper shape these reuse.
+
 ## Completed
 
 ### Fix the wrong-host class in call-site analysis

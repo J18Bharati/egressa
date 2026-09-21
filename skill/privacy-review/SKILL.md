@@ -71,6 +71,12 @@ Read the checklist file for each specialist you dispatch. Each lives in
 | Opt-out signals | `opt-out-signals.md` | `SCOPE_TRACKERS` or `SCOPE_TRACKER_CODE` is true |
 | Transfers | `transfers.md` | Always, when a manifest or JS/TS source changed |
 
+**Transfers is not gated.** Its row says "Always" because it does not read any `SCOPE_*` line at
+all — a manifest or JS/TS file in scope, established back in Step 1, is the only condition there
+is. Nothing later in this step, including the "no gate fires" case below, describes a condition
+under which Transfers is skipped; if you find yourself asking whether it still runs, the answer is
+always yes.
+
 **Not every gate selects a specialist.** Four are context, passed to specialists to inform severity
 and to the summary, but never used to dispatch: `SCOPE_FRONTEND`, `SCOPE_BACKEND`, `SCOPE_CONSENT`
 and `SCOPE_ERASURE`. A true value on any of them is not an unrouted finding and not a bug.
@@ -83,8 +89,24 @@ If the user passes `--all`, dispatch every specialist regardless of gates. If th
 (`--consent`, `--retention`, `--logs`, `--session-replay`, `--opt-out`, `--transfers`), dispatch
 only that one.
 
-If no gate fires, do not invent work. Say which gates were checked and came back false, name the
-blind spots from Step 5, and stop.
+**A degraded gate is not a false gate.** `scope.sh` can emit a second line for a gate it failed to
+evaluate — a crash, a missing dependency, a timeout — in addition to that gate's ordinary
+`SCOPE_*: false`:
+
+```
+SCOPE_DEGRADED: <GATE_NAME> exit=<n>
+```
+
+That `false` was never earned; the helper did not find no match, it did not run to a match at all,
+so treating it as a clean result is the exact silent failure this whole step exists to prevent.
+Dispatch the specialist that gate would have selected, and say in Step 5 that the gate was
+unreliable rather than reporting a clean skip.
+
+If no *gated* specialist is selected — every gate in the table above came back false, and none of
+them came back degraded — do not invent work. Say which gates were checked and came back false,
+name the blind spots from Step 5, and stop. This check is about the five gated specialists only:
+Transfers was already selected by the table's "Always" row, before this paragraph is ever reached,
+and stopping here does not undo that.
 
 ## Step 3 — Dispatch
 
@@ -174,6 +196,9 @@ skipped:
   records of processing. None of that is in the code, and all of it decides the actual answer.
 - Files the analysis skipped: `node_modules`, build output, minified and vendored bundles.
 - Specialists that were gated off, by name.
+- Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
+  a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two
+  runs needs to know the selection was made defensively rather than on a real signal.
 
 ## Recording an accepted finding
 
