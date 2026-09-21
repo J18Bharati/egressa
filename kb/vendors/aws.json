@@ -44,6 +44,31 @@
           "detectTransitive": false
         },
         {
+          "name": "@aws-sdk/client-bedrock-runtime",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-textract",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-secrets-manager",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/client-cloudwatch",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@aws-sdk/*",
+          "kind": "scope",
+          "detectTransitive": false
+        },
+        {
           "name": "aws-sdk",
           "kind": "official-sdk",
           "detectTransitive": false
@@ -96,6 +121,30 @@
       {
         "module": "@aws-sdk/client-sqs",
         "export": "SQSClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-bedrock-runtime",
+        "export": "BedrockRuntimeClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-textract",
+        "export": "TextractClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-secrets-manager",
+        "export": "SecretsManagerClient",
+        "hostOption": null,
+        "regionOption": "region"
+      },
+      {
+        "module": "@aws-sdk/client-cloudwatch",
+        "export": "CloudWatchClient",
         "hostOption": null,
         "regionOption": "region"
       }
@@ -193,6 +242,12 @@
     {
       "url": "https://aws.amazon.com/compliance/sub-processors/",
       "title": "AWS Sub-processors",
+      "publisher": "vendor",
+      "accessedAt": "2026-09-21"
+    },
+    {
+      "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/clients",
+      "title": "AWS SDK for JavaScript v3 - client package READMEs for client-bedrock-runtime, client-textract, client-secrets-manager and client-cloudwatch",
       "publisher": "vendor",
       "accessedAt": "2026-09-21"
     }
@@ -459,5 +514,5 @@
       "lastChecked": "2026-09-21"
     }
   ],
-  "notes": "The Data Privacy Framework certification is held by Amazon.com, Inc., participant record 5776, with Amazon Web Services listed among its covered entities rather than certified under its own name. This follows the same shape as Okta and Auth0, and Twilio and Segment, already recorded in this knowledge base. AWS states on its own EU-US Data Privacy Framework page that it adheres to the Framework principles. Region identifiers are recorded from the AWS Regions documentation and are never derived from the identifier itself: three Regions whose identifier begins eu- are outside the EEA, namely London in the United Kingdom and Zurich in Switzerland, and the GovCloud Regions are in the United States despite their distinct identifiers. A Region is a customer configuration setting and the scanner can only report one when it appears in the repository; where it does not, the jurisdictions above are reported unnarrowed."
+  "notes": "The Data Privacy Framework certification is held by Amazon.com, Inc., participant record 5776, with Amazon Web Services listed among its covered entities rather than certified under its own name. This follows the same shape as Okta and Auth0, and Twilio and Segment, already recorded in this knowledge base. AWS states on its own EU-US Data Privacy Framework page that it adheres to the Framework principles. Region identifiers are recorded from the AWS Regions documentation and are never derived from the identifier itself: three Regions whose identifier begins eu- are outside the EEA, namely London in the United Kingdom and Zurich in Switzerland, and the GovCloud Regions are in the United States despite their distinct identifiers. A Region is a customer configuration setting and the scanner can only report one when it appears in the repository; where it does not, the jurisdictions above are reported unnarrowed. The npm scope @aws-sdk/ is registered as a wildcard alias, @aws-sdk/*, so a client package published under it is attributed to AWS without being enumerated; AWS publishes one package per service under that scope and the list changes with every new service. The exact names are kept beside it because the wildcard records only that the namespace is AWS, while an exact entry records that the package is an official SDK. The four client constructors BedrockRuntimeClient, TextractClient, SecretsManagerClient and CloudWatchClient, and their packages, were read from the README of each client package in the AWS SDK for JavaScript v3 source repository cited above; each README instantiates its client as new <Name>Client({ region: ... }), which is the option recorded as regionOption. The unscoped names aws-sdk and aws-cdk-lib are outside that namespace and stay enumerated individually."
 }

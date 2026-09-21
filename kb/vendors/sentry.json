@@ -15,7 +15,9 @@
         { "name": "@sentry/angular", "kind": "framework-integration", "detectTransitive": false },
         { "name": "@sentry/nextjs", "kind": "framework-integration", "detectTransitive": false },
         { "name": "@sentry/remix", "kind": "framework-integration", "detectTransitive": false },
-        { "name": "@sentry/svelte", "kind": "framework-integration", "detectTransitive": false }
+        { "name": "@sentry/svelte", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/nuxt", "kind": "framework-integration", "detectTransitive": false },
+        { "name": "@sentry/*", "kind": "scope", "detectTransitive": false }
       ]
     },
     "hosts": [
@@ -136,5 +138,5 @@
   ],
   "lastVerified": "2026-09-06",
   "verifiedBy": "egressa-kb",
-  "notes": "Sentry markets performance monitoring and session replay alongside error tracking; the category field holds one value and error-tracking was selected as the closest. Verification limitation: docs.sentry.io did not resolve during verification, so the content of the docs.sentry.io sources above was read from the vendor's own public documentation source repository at github.com/getsentry/sentry-docs, which is the source of those published pages. The npm scope @sentry/ is not registered as a wildcard alias; eight package names were confirmed individually on the registry."
+  "notes": "Sentry markets performance monitoring and session replay alongside error tracking; the category field holds one value and error-tracking was selected as the closest. Verification limitation: docs.sentry.io did not resolve during verification, so the content of the docs.sentry.io sources above was read from the vendor's own public documentation source repository at github.com/getsentry/sentry-docs, which is the source of those published pages. The npm scope @sentry/ is registered as a wildcard alias, @sentry/*, so a package published under it is attributed to Functional Software, Inc. without being enumerated. The nine exact names above are kept beside it: they were confirmed individually on the registry and they record which are official SDKs and which are framework integrations, which a namespace alias cannot. A name matched only by the namespace is recorded with kind scope rather than official-sdk, because the namespace also carries packages that are not SDKs, among them build-time and configuration packages. @sentry/nuxt was read from the npm registry metadata for that package, which gives the description Official Sentry SDK for Nuxt and the repository github.com/getsentry/sentry-javascript, the same repository as the other eight."
 }

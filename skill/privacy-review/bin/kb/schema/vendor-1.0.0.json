@@ -441,10 +441,12 @@
       "properties": {
         "name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "An exact package name, or a registry namespace written with a trailing `/*` (e.g. `@sentry/*`). An exact alias always wins over a namespace alias, and a name matched by two vendors' namespaces is refused rather than attributed."
         },
         "kind": {
-          "enum": ["official-sdk", "wrapper", "plugin", "framework-integration"]
+          "enum": ["official-sdk", "wrapper", "plugin", "framework-integration", "scope"],
+          "description": "`scope` is the kind for a `/*` namespace alias: it records that the registry namespace is the vendor's, which is all that is known about a name nobody enumerated. It is deliberately not `official-sdk`, because a namespace also carries build plugins, type packages and test helpers, and `official-sdk` is what raises a direct dependency to high confidence."
         },
         "detectTransitive": {
           "type": "boolean",

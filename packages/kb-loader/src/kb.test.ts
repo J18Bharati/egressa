@@ -1,3 +1,6 @@
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { HostTrie, loadKnowledgeBase, normaliseHost } from './index.js';
 import type { HostAlias, VendorEntry } from './types.js';
@@ -28,6 +31,53 @@ describe('loadKnowledgeBase', () => {
 
   it('returns null for unknown packages rather than guessing', () => {
     expect(kb.lookupPackage('npm', 'left-pad')).toBeNull();
+  });
+
+  it('matches a package nobody enumerated through its vendor scope', () => {
+    // An npm scope is a registry-enforced namespace, so @sentry/* is Sentry by
+    // construction. This is the recall the exact list kept losing: a vendor
+    // ships a new framework integration and the hand-written enumeration is
+    // silently a package behind.
+    const match = kb.lookupPackage('npm', '@sentry/some-package-nobody-listed');
+    expect(match?.vendor.id).toBe('sentry');
+    expect(match?.alias.name).toBe('@sentry/*');
+    // Never official-sdk: a scope also carries build plugins and type packages,
+    // and official-sdk is what lifts a direct dependency to high confidence.
+    expect(match?.alias.kind).toBe('scope');
+  });
+
+  it('prefers an exact alias over a wildcard scope, so kind survives', () => {
+    // @sentry/nextjs is covered by both the exact entry and @sentry/*. The
+    // exact one carries the fact that it is a framework integration rather
+    // than an official SDK, which is the difference between medium and high
+    // confidence on a direct dependency. First-match-by-insertion-order would
+    // hold this by accident; precedence is the property under test.
+    const match = kb.lookupPackage('npm', '@sentry/nextjs');
+    expect(match?.alias.name).toBe('@sentry/nextjs');
+    expect(match?.alias.kind).toBe('framework-integration');
+    expect(kb.lookupPackage('npm', '@aws-sdk/client-textract')?.alias.kind).toBe('official-sdk');
+  });
+
+  it('refuses to attribute a name that two vendor scopes both claim', () => {
+    // The failure this replaces is the one findSinks() already had: returning
+    // the first matching scope let whichever vendor sorted first silently
+    // shadow the other, and the output names a company. A wrong vendor is
+    // worse than no vendor, so the ambiguous name degrades to unmatched.
+    //
+    // Built from a temporary kb/ rather than asserted against the shipped one,
+    // because the validator rejects an overlap in the data -- the runtime
+    // branch exists for a caller passing its own kbPath.
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-'));
+    cpSync('kb', dir, { recursive: true });
+    const clash = JSON.parse(readFileSync(join(dir, 'vendors/clerk.json'), 'utf8'));
+    clash.aliases.packages.npm = [{ name: '@sentry/*', kind: 'scope', detectTransitive: false }];
+    writeFileSync(join(dir, 'vendors/clerk.json'), JSON.stringify(clash));
+    const ambiguous = loadKnowledgeBase({ kbPath: dir });
+
+    expect(ambiguous.lookupPackage('npm', '@sentry/not-enumerated')).toBeNull();
+    // The exact entries still resolve: precedence is checked before ambiguity.
+    expect(ambiguous.lookupPackage('npm', '@sentry/nextjs')?.vendor.id).toBe('sentry');
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('resolves documented hosts', () => {

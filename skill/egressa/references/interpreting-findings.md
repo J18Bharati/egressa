@@ -11,7 +11,7 @@ They are orthogonal and both matter.
 | Confidence | Means | How to treat it |
 |---|---|---|
 | `high` | Resolved call-site host, or a direct dependency on the vendor's own SDK | Report it plainly |
-| `medium` | Wrapper or framework-integration package, a host resolved through a client binding, or a dev-only dependency | Report it, and say how it was inferred |
+| `medium` | Wrapper or framework-integration package, a package matched only by the vendor's npm scope, a host resolved through a client binding, or a dev-only dependency | Report it, and say how it was inferred |
 | `low` | Transitive dependency, or an unresolved destination | Frame as "worth checking", never as established |
 
 A `low`-confidence finding on a US vendor and a `high`-confidence one carry the same severity and
