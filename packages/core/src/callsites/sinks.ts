@@ -4,7 +4,28 @@
  * Data-driven rather than hard-coded branches, so it is testable and so adding
  * a client library is a one-line change.
  */
+
+/**
+ * What a match on this sink proves.
+ *
+ * `callsite` -- data left here. `reference` -- a vendor is named here, and
+ * nothing more: `new URL(...)` and `new Request(...)` parse a string into an
+ * object and open no socket. The same shapes appear on an *inbound* request in
+ * HTTPS-redirect middleware, and on a database DSN rewritten only to set a
+ * query parameter, so treating them as egress inverts the direction the tool
+ * reports. The rows stay because the vendor attribution is often right --
+ * `new URL(`${GMAIL_API_BASE}/messages`)` before a `fetch` -- and deleting
+ * them would lose that.
+ */
+export type SinkKind = 'callsite' | 'reference';
+
 export interface SinkDefinition {
+  /**
+   * What a match proves. Absent means `callsite`, which is the default for
+   * every genuine client: a new sink is an egress sink unless it says
+   * otherwise, so forgetting the field cannot silently under-report.
+   */
+  kind?: SinkKind;
   /** Bare function call, e.g. `fetch(url)`. */
   callee?: string;
   /** Member call, e.g. `axios.get(url)` or `https.request(url)`. */
@@ -77,10 +98,14 @@ export const SINKS: SinkDefinition[] = [
   { callee: '$fetch', argIndex: 0 },
   { callee: 'ky', argIndex: 0 },
   { callee: 'got', argIndex: 0 },
-  { isNew: true, callee: 'URL', argIndex: 0 },
+  // Not egress: a parsed object, no socket. See SinkKind.
+  { kind: 'reference', isNew: true, callee: 'URL', argIndex: 0 },
   { isNew: true, callee: 'WebSocket', argIndex: 0 },
   { isNew: true, callee: 'EventSource', argIndex: 0 },
-  { isNew: true, callee: 'Request', argIndex: 0 },
+  // Not egress either: `app.handle(new Request(...))` is an in-process
+  // dispatch in Elysia and Hono, and the nine `new Request('http://localhost/...')`
+  // calls an external reviewer hit were all test-file dispatches.
+  { kind: 'reference', isNew: true, callee: 'Request', argIndex: 0 },
 ];
 
 for (const object of CLIENT_OBJECTS) {
@@ -93,6 +118,11 @@ SINKS.push(
   { object: 'axios', property: 'create', argIndex: 0, configKeys: ['baseURL'] },
   { object: 'navigator', property: 'sendBeacon', argIndex: 0 },
 );
+
+/** A sink's kind, defaulting to `callsite` when the row does not say. */
+export function sinkKind(sink: SinkDefinition): SinkKind {
+  return sink.kind ?? 'callsite';
+}
 
 export interface CalleeShape {
   name?: string | undefined;

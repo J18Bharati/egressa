@@ -11,7 +11,7 @@ import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { DISCLAIMER, findForbiddenClaims } from '../packages/core/src/claims.js';
 import { RULE_IDS } from '../packages/core/src/rules.js';
-import { FINDINGS_SCHEMA_VERSION } from '../packages/core/src/types.js';
+import { FINDINGS_SCHEMA_VERSION, SIGNAL_KINDS } from '../packages/core/src/types.js';
 
 const root = process.cwd();
 const failures: string[] = [];
@@ -56,6 +56,20 @@ if (missingInSchema.length > 0) {
 }
 if (missingInTs.length > 0) {
   failures.push(`rule ids in schema but not in rules.ts: ${missingInTs.join(', ')}`);
+}
+
+// Signal kinds, for the same reason and by the same route. This was hand-synced
+// until `reference` was added: the header above has always claimed the TS and
+// JSON enums agree, and only the rule ids were ever compared, so a kind added on
+// one side and forgotten on the other passed the check that exists to catch it.
+const schemaSignalKinds: string[] = schema.$defs.signalKind.enum;
+const kindsMissingInSchema = SIGNAL_KINDS.filter((k) => !schemaSignalKinds.includes(k));
+const kindsMissingInTs = schemaSignalKinds.filter((k) => !SIGNAL_KINDS.includes(k as never));
+if (kindsMissingInSchema.length > 0) {
+  failures.push(`signal kinds in types.ts but not in schema: ${kindsMissingInSchema.join(', ')}`);
+}
+if (kindsMissingInTs.length > 0) {
+  failures.push(`signal kinds in schema but not in types.ts: ${kindsMissingInTs.join(', ')}`);
 }
 
 // vendor schema is at least parseable and self-consistent

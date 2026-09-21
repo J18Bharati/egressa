@@ -178,7 +178,7 @@ export function scan(options: ScanOptions): ScanResult {
           // unresolved destination: nothing about it is unknown.
           if (hit.vendorId) {
             signals.push({
-              kind: 'callsite',
+              kind: hit.kind,
               vendorId: hit.vendorId,
               matchedOn: hit.matchedOn,
               confidence: hit.confidence,
@@ -191,7 +191,7 @@ export function scan(options: ScanOptions): ScanResult {
           // Destination unknown. Reported so a human can check the deployment
           // configuration; never attributed to a vendor.
           signals.push({
-            kind: 'callsite',
+            kind: hit.kind,
             vendorId: null,
             matchedOn: hit.matchedOn,
             confidence: hit.confidence,
@@ -207,7 +207,7 @@ export function scan(options: ScanOptions): ScanResult {
           unmatchedHosts.add(hit.host);
         }
         signals.push({
-          kind: 'callsite',
+          kind: hit.kind,
           vendorId: hit.vendorId ?? match?.vendor.id ?? null,
           matchedOn: hit.host,
           confidence: hit.confidence,

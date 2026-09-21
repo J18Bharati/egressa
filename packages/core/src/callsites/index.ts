@@ -1,8 +1,17 @@
 import type { parseSync as ParseSync } from 'oxc-parser';
+import { confidenceForKind } from '../merge/confidence.js';
 import type { Confidence, Signal, SourceLocation } from '../types.js';
 import { LineIndex } from '../util/line-index.js';
 import { type HostResolution, MAX_DEPTH, hostFromUrlPrefix } from './resolve-host.js';
-import { type CalleeShape, SINKS, type SinkDefinition, findSink, findSinks } from './sinks.js';
+import {
+  type CalleeShape,
+  SINKS,
+  type SinkDefinition,
+  type SinkKind,
+  findSink,
+  findSinks,
+  sinkKind,
+} from './sinks.js';
 
 /**
  * The native parser, loaded at module evaluation and allowed to be absent.
@@ -45,6 +54,11 @@ interface Node {
 }
 
 export interface CallsiteHit {
+  /**
+   * What this hit proves: `callsite` that data left here, `reference` only
+   * that a vendor is named here. See `SinkKind`.
+   */
+  kind: SinkKind;
   /** Resolved host, or null when the destination could not be determined. */
   host: string | null;
   /** Region identifier read from a config literal, verbatim. */
@@ -88,6 +102,18 @@ interface ResolveContext {
   unstable: Map<string, string>;
   /** Offset of the call being resolved; a binding declared later is not in scope. */
   callStart: number;
+  /**
+   * Start offsets of `new URL(...)` / `new Request(...)` nodes this resolution
+   * read through.
+   *
+   * `fetch(new Request(URL))` is one transfer written as two expressions. The
+   * outer sink is the one that proves it, so the inner construction must not
+   * also be reported: the reviewer's complaint was volume, and emitting a
+   * reference beside the call site it feeds is pure duplication. Recorded
+   * here and suppressed by the caller, which is possible because the walk
+   * visits a parent before its children.
+   */
+  referencesRead?: number[];
 }
 
 /**
@@ -124,6 +150,8 @@ export function analyzeFile(
   const unstable = collectUnstableNames(program);
   const sinks = extraSinks.length > 0 ? [...SINKS, ...extraSinks] : SINKS;
   const hits: CallsiteHit[] = [];
+  // Reference constructions already accounted for by an enclosing call sink.
+  const consumedReferences = new Set<number>();
 
   // Pass 1: collect module-scope constant and client bindings, so a call site
   // later in the file can resolve an identifier declared earlier.
@@ -160,6 +188,8 @@ export function analyzeFile(
   walk(program, (node) => {
     const isNew = node.type === 'NewExpression';
     if (node.type !== 'CallExpression' && !isNew) return;
+    // `fetch(new Request(X))`: the outer sink already reported this node.
+    if (consumedReferences.has(node.start)) return;
 
     const callee = node.callee as Node | undefined;
     if (!callee) return;
@@ -181,13 +211,14 @@ export function analyzeFile(
             filePath,
             // Resolved through a binding rather than read directly at the call.
             'medium',
+            'callsite',
           ),
         );
         return;
       }
     }
 
-    const context = { unstable, callStart: node.start };
+    const context: ResolveContext = { unstable, callStart: node.start, referencesRead: [] };
 
     // Several sinks can match one call. Try each until one yields a
     // destination, so a name shared by two vendors cannot shadow the other.
@@ -210,7 +241,7 @@ export function analyzeFile(
           if (sink.matchAny && argument.type !== 'ObjectExpression') continue;
           const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
           if (resolution.kind !== 'resolved') continue;
-          const hit = toHit(resolution, node, index, filePath, 'high');
+          const hit = toHit(resolution, node, index, filePath, 'high', sinkKind(sink));
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
           if (sink.vendorId) hit.vendorId = sink.vendorId;
@@ -228,6 +259,7 @@ export function analyzeFile(
         if (regionOnly && sink.vendorId) {
           const location = index.locationAt(filePath, node.start, node.end - node.start);
           hits.push({
+            kind: sinkKind(sink),
             host: null,
             region: regionOnly,
             vendorId: sink.vendorId,
@@ -243,9 +275,21 @@ export function analyzeFile(
 
       const argument = args[sink.argIndex];
       if (!argument) continue;
+      const kind = sinkKind(sink);
+      if (context.referencesRead) context.referencesRead.length = 0;
       const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
       if (resolution.kind === 'not-a-url') continue;
-      hits.push(toHit(resolution, node, index, filePath, 'high'));
+      // A reference sink emits only on a RESOLVED host, and is otherwise
+      // silent. `transfer/unresolved-egress` says "something left here and we
+      // cannot say where"; for `new URL(request.url)` or
+      // `new URL(connectionString)` neither half is true, and those two shapes
+      // were the bulk of the noise an external reviewer reported. This is the
+      // same rule a knowledge base sink already follows, for the same reason.
+      if (kind === 'reference' && resolution.kind !== 'resolved') continue;
+      hits.push(toHit(resolution, node, index, filePath, 'high', kind));
+      if (kind === 'callsite') {
+        for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+      }
       return;
     }
   });
@@ -298,14 +342,25 @@ function toHit(
   index: LineIndex,
   filePath: string,
   confidence: Confidence,
+  kind: SinkKind,
 ): CallsiteHit {
   const location = index.locationAt(filePath, node.start, node.end - node.start);
   const snippet = index.snippetAt(node.start);
   if (resolution.kind === 'resolved') {
-    return { host: resolution.host, location, snippet, confidence, matchedOn: resolution.host };
+    return {
+      kind,
+      host: resolution.host,
+      location,
+      snippet,
+      // A reference is capped below a call site: certainty about the string is
+      // not certainty that a transfer happened.
+      confidence: confidenceForKind(kind, confidence),
+      matchedOn: resolution.host,
+    };
   }
   const reason = resolution.kind === 'unresolved' ? resolution.reason : 'not a URL';
   return {
+    kind,
     host: null,
     unresolvedReason: reason,
     location,
@@ -385,6 +440,24 @@ function resolveArgument(
           : { kind: 'unresolved', reason: binding.reason ?? 'client base URL not resolvable' };
       }
       return hostFromUrlPrefix(binding.value, false);
+    }
+
+    // `fetch(new Request(url))` and `fetch(new URL(url))`. The constructed
+    // object *is* the outer call's destination, so the outer sink resolves
+    // through it -- and the inner construction is then recorded as consumed,
+    // so one transfer is reported once.
+    case 'NewExpression': {
+      const callee = node.callee as Node | undefined;
+      if (!callee) return { kind: 'not-a-url' };
+      const isReference = findSinks(calleeShape(callee), true, SINKS).some(
+        (candidate) => sinkKind(candidate) === 'reference',
+      );
+      if (!isReference) return { kind: 'not-a-url' };
+      const inner = ((node.arguments as Node[] | undefined) ?? [])[0];
+      if (!inner) return { kind: 'not-a-url' };
+      const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
+      if (resolution.kind === 'resolved') context.referencesRead?.push(node.start);
+      return resolution;
     }
 
     case 'MemberExpression': {
@@ -583,7 +656,7 @@ function walk(node: unknown, visit: (node: Node) => void): void {
 /** Convert file hits into engine signals. Host matching happens in scan(). */
 export function hitToSignal(hit: CallsiteHit, vendorId: string | null): Signal {
   return {
-    kind: 'callsite',
+    kind: hit.kind,
     vendorId,
     matchedOn: hit.host ?? hit.matchedOn,
     confidence: hit.confidence,

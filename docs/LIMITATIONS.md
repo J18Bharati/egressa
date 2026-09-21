@@ -33,7 +33,8 @@ fetch(process.env.ANALYTICS_URL);        // transfer/unresolved-egress, names AN
 fetch(`https://${region}.example.com`);  // transfer/unresolved-egress, authority interpolated
 ```
 
-Egressa names the variable and the location. It never guesses the host.
+Egressa names the variable and the location. It never guesses the host. That applies to call
+sinks; a `reference` sink stays silent instead, for the reason below.
 
 ### Vendors absent from the knowledge base
 
@@ -85,6 +86,40 @@ also untracked and unresolved.
 
 There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
 answer rather than declining.
+
+### A constructed URL is a reference, not a call
+
+`new URL(...)` and `new Request(...)` parse a string into an object. No socket is opened, and the
+same two expressions appear on data arriving *inbound*:
+
+```js
+const u = new URL(request.url);              // HTTPS-redirect middleware: nothing left
+const url = new URL(connectionString);       // a DSN rewritten to set sslmode
+url.searchParams.set('sslmode', 'verify-full');
+app.handle(new Request('https://x/openapi')); // an in-process dispatch, not a transfer
+```
+
+These carry `kind: "reference"` rather than `kind: "callsite"`, and their confidence is capped at
+`medium`. A reference means *a vendor is named here*; it is not evidence that a call happened. The
+rows stay in the sink table because the attribution is often right -- a `new URL` on the line
+before a `fetch` names the correct vendor -- and deleting them would lose that.
+
+Two consequences are deliberate false negatives:
+
+- **A reference emits only on a resolved host.** Where the argument does not resolve, nothing is
+  reported at all. A call sink in the same position emits `transfer/unresolved-egress` naming the
+  variable; a reference sink stays silent, because "a variable was passed to `new URL()`" is not
+  evidence that anything left. So `new URL(request.url)` and `new URL(connectionString)` above
+  produce no finding, and neither does `` new URL(`${API_BASE}/messages`) `` whose base is
+  interpolated.
+- **An in-process dispatcher is indistinguishable from a transfer.** Nothing in the source says
+  whether `app.handle(new Request(host))` crosses a network. The analyzer reports the weaker claim
+  rather than guessing either way, so a genuinely local dispatch still appears as a reference to
+  whatever host the literal names -- including `localhost`. Scope those out with `--exclude` or
+  `.egressaignore` rather than expecting the engine to recognise a test.
+
+A consumer that renders a `reference` the way it renders a `callsite` re-creates the whole defect.
+The distinction is carried by the type, not by the wording.
 
 ### Constant chains deeper than three steps
 

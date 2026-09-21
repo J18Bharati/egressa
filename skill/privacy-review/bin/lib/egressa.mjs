@@ -14943,6 +14943,21 @@ var CONFIDENCE_BONUS = { high: 20, medium: 10, low: 0 };
 function toRank(severity, confidence) {
   return Math.min(100, SEVERITY_RANK[severity] + CONFIDENCE_BONUS[confidence]);
 }
+function confidenceForDependency(record, alias) {
+  if (!record.direct) return "low";
+  if (record.dev) return "medium";
+  return alias.kind === "official-sdk" ? "high" : "medium";
+}
+var ORDER = { low: 0, medium: 1, high: 2 };
+var CEILING = { reference: "medium" };
+function confidenceForKind(kind, raw) {
+  const ceiling = CEILING[kind];
+  if (!ceiling) return raw;
+  return ORDER[raw] > ORDER[ceiling] ? ceiling : raw;
+}
+function strongest(values) {
+  return values.reduce((best, v2) => ORDER[v2] > ORDER[best] ? v2 : best, "low");
+}
 var MAX_DEPTH = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
   const schemeEnd = prefix.indexOf("://");
@@ -14977,10 +14992,14 @@ var SINKS = [
   { callee: "$fetch", argIndex: 0 },
   { callee: "ky", argIndex: 0 },
   { callee: "got", argIndex: 0 },
-  { isNew: true, callee: "URL", argIndex: 0 },
+  // Not egress: a parsed object, no socket. See SinkKind.
+  { kind: "reference", isNew: true, callee: "URL", argIndex: 0 },
   { isNew: true, callee: "WebSocket", argIndex: 0 },
   { isNew: true, callee: "EventSource", argIndex: 0 },
-  { isNew: true, callee: "Request", argIndex: 0 }
+  // Not egress either: `app.handle(new Request(...))` is an in-process
+  // dispatch in Elysia and Hono, and the nine `new Request('http://localhost/...')`
+  // calls an external reviewer hit were all test-file dispatches.
+  { kind: "reference", isNew: true, callee: "Request", argIndex: 0 }
 ];
 for (const object of CLIENT_OBJECTS) {
   for (const property of HTTP_METHODS) {
@@ -14991,6 +15010,9 @@ SINKS.push(
   { object: "axios", property: "create", argIndex: 0, configKeys: ["baseURL"] },
   { object: "navigator", property: "sendBeacon", argIndex: 0 }
 );
+function sinkKind(sink) {
+  return sink.kind ?? "callsite";
+}
 function findSink(callee, isNew, sinks = SINKS) {
   return findSinks(callee, isNew, sinks)[0] ?? null;
 }
@@ -15082,6 +15104,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
   const unstable = collectUnstableNames(program);
   const sinks = extraSinks.length > 0 ? [...SINKS, ...extraSinks] : SINKS;
   const hits = [];
+  const consumedReferences = /* @__PURE__ */ new Set();
   for (const node of moduleScopeDeclarators(program)) {
     const id = node.id;
     const init2 = node.init;
@@ -15105,6 +15128,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
     if (node.type !== "CallExpression" && !isNew) return;
+    if (consumedReferences.has(node.start)) return;
     const callee = node.callee;
     if (!callee) return;
     const shape = calleeShape(callee);
@@ -15119,13 +15143,14 @@ function analyzeFile(text, filePath, extraSinks = []) {
             index,
             filePath,
             // Resolved through a binding rather than read directly at the call.
-            "medium"
+            "medium",
+            "callsite"
           )
         );
         return;
       }
     }
-    const context = { unstable, callStart: node.start };
+    const context = { unstable, callStart: node.start, referencesRead: [] };
     for (const sink of findSinks(shape, isNew, sinks)) {
       const configKeys = sink.configKeys ?? [];
       if (sink.anyArg) {
@@ -15134,7 +15159,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
           if (sink.matchAny && argument2.type !== "ObjectExpression") continue;
           const resolution2 = resolveArgument(argument2, configKeys, bindings, 0, context);
           if (resolution2.kind !== "resolved") continue;
-          const hit = toHit(resolution2, node, index, filePath, "high");
+          const hit = toHit(resolution2, node, index, filePath, "high", sinkKind(sink));
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
           if (sink.vendorId) hit.vendorId = sink.vendorId;
@@ -15145,6 +15170,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
         if (regionOnly && sink.vendorId) {
           const location = index.locationAt(filePath, node.start, node.end - node.start);
           hits.push({
+            kind: sinkKind(sink),
             host: null,
             region: regionOnly,
             vendorId: sink.vendorId,
@@ -15159,9 +15185,15 @@ function analyzeFile(text, filePath, extraSinks = []) {
       }
       const argument = args[sink.argIndex];
       if (!argument) continue;
+      const kind = sinkKind(sink);
+      if (context.referencesRead) context.referencesRead.length = 0;
       const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
       if (resolution.kind === "not-a-url") continue;
-      hits.push(toHit(resolution, node, index, filePath, "high"));
+      if (kind === "reference" && resolution.kind !== "resolved") continue;
+      hits.push(toHit(resolution, node, index, filePath, "high", kind));
+      if (kind === "callsite") {
+        for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+      }
       return;
     }
   });
@@ -15190,14 +15222,24 @@ function regionFromArguments(args, regionKeys, bindings, context) {
   }
   return null;
 }
-function toHit(resolution, node, index, filePath, confidence) {
+function toHit(resolution, node, index, filePath, confidence, kind) {
   const location = index.locationAt(filePath, node.start, node.end - node.start);
   const snippet = index.snippetAt(node.start);
   if (resolution.kind === "resolved") {
-    return { host: resolution.host, location, snippet, confidence, matchedOn: resolution.host };
+    return {
+      kind,
+      host: resolution.host,
+      location,
+      snippet,
+      // A reference is capped below a call site: certainty about the string is
+      // not certainty that a transfer happened.
+      confidence: confidenceForKind(kind, confidence),
+      matchedOn: resolution.host
+    };
   }
   const reason = resolution.kind === "unresolved" ? resolution.reason : "not a URL";
   return {
+    kind,
     host: null,
     unresolvedReason: reason,
     location,
@@ -15260,6 +15302,23 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
         return binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" };
       }
       return hostFromUrlPrefix(binding.value, false);
+    }
+    // `fetch(new Request(url))` and `fetch(new URL(url))`. The constructed
+    // object *is* the outer call's destination, so the outer sink resolves
+    // through it -- and the inner construction is then recorded as consumed,
+    // so one transfer is reported once.
+    case "NewExpression": {
+      const callee = node.callee;
+      if (!callee) return { kind: "not-a-url" };
+      const isReference = findSinks(calleeShape(callee), true, SINKS).some(
+        (candidate) => sinkKind(candidate) === "reference"
+      );
+      if (!isReference) return { kind: "not-a-url" };
+      const inner = (node.arguments ?? [])[0];
+      if (!inner) return { kind: "not-a-url" };
+      const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
+      if (resolution.kind === "resolved") context.referencesRead?.push(node.start);
+      return resolution;
     }
     case "MemberExpression": {
       const env2 = envVarName(node);
@@ -15515,15 +15574,6 @@ function parseServerlessYaml(text, path) {
     }
   ];
 }
-function confidenceForDependency(record, alias) {
-  if (!record.direct) return "low";
-  if (record.dev) return "medium";
-  return alias.kind === "official-sdk" ? "high" : "medium";
-}
-var ORDER = { low: 0, medium: 1, high: 2 };
-function strongest(values) {
-  return values.reduce((best, v2) => ORDER[v2] > ORDER[best] ? v2 : best, "low");
-}
 function mergeSignals(signals, options) {
   const { kb, staleVendorIds = /* @__PURE__ */ new Set() } = options;
   const groups = /* @__PURE__ */ new Map();
@@ -15756,7 +15806,7 @@ function scan(options) {
         if (hit.host === null) {
           if (hit.vendorId) {
             signals.push({
-              kind: "callsite",
+              kind: hit.kind,
               vendorId: hit.vendorId,
               matchedOn: hit.matchedOn,
               confidence: hit.confidence,
@@ -15767,7 +15817,7 @@ function scan(options) {
             continue;
           }
           signals.push({
-            kind: "callsite",
+            kind: hit.kind,
             vendorId: null,
             matchedOn: hit.matchedOn,
             confidence: hit.confidence,
@@ -15782,7 +15832,7 @@ function scan(options) {
           unmatchedHosts.add(hit.host);
         }
         signals.push({
-          kind: "callsite",
+          kind: hit.kind,
           vendorId: hit.vendorId ?? match?.vendor.id ?? null,
           matchedOn: hit.host,
           confidence: hit.confidence,

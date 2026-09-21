@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeFile } from './index.js';
-import { clientConstructorSinks, vendorConstructorSinks } from './sinks.js';
+import { type SinkKind, clientConstructorSinks, vendorConstructorSinks } from './sinks.js';
 
 /**
  * The golden table.
@@ -17,6 +17,13 @@ import { clientConstructorSinks, vendorConstructorSinks } from './sinks.js';
  * A case that resolves to the WRONG host is far worse than one that resolves to
  * null: null produces a note asking a human to look, while a wrong host
  * produces a confident vendor attribution that is false.
+ *
+ * There is a third outcome, and it is not a shade of the first two. A hit can
+ * resolve a host and still not be evidence that anything left: `new URL(...)`
+ * and `new Request(...)` construct a parsed object and open no socket. Those
+ * carry `kind: 'reference'`, and a case states the kind it expects so that a
+ * change moving a sink between the two classes fails here rather than
+ * silently renaming a reference into a transfer.
  */
 
 interface Case {
@@ -24,6 +31,12 @@ interface Case {
   code: string;
   /** Expected resolved host, or null when the analyzer must not resolve one. */
   host: string | null;
+  /**
+   * Expected signal kind of the first hit. Omitted means `callsite`: a case
+   * that does not say must be a genuine egress call, so a sink demoted to
+   * `reference` by accident fails a row that never mentioned kinds.
+   */
+  kind?: SinkKind;
   /** Substring expected in the unresolved reason, when host is null. */
   reason?: string;
   /** No call site at all should be reported. */
@@ -117,9 +130,53 @@ const RESOLVES: Case[] = [
     host: 'eu.api.openai.com',
   },
   {
-    name: 'new URL with an absolute string',
+    // Changed deliberately: the host is still right, but constructing a URL is
+    // not a transfer. See docs/LIMITATIONS.md, "A constructed URL is a
+    // reference, not a call".
+    name: 'new URL with an absolute string names a vendor, it does not call one',
     code: `const u = new URL('https://api.stripe.com/v1');`,
     host: 'api.stripe.com',
+    kind: 'reference',
+  },
+  {
+    // The case that stops this row being deleted outright: the vendor
+    // attribution is correct and worth keeping, only the claim is narrower.
+    name: 'new URL over a module-scope base constant',
+    code:
+      `const API_BASE = 'https://gmail.googleapis.com';\n` +
+      `const u = new URL(API_BASE + '/messages');`,
+    host: 'gmail.googleapis.com',
+    kind: 'reference',
+  },
+  {
+    // `app.handle(new Request(...))` is an in-process dispatch in Elysia and
+    // Hono -- no socket is opened. The analyzer cannot tell that from a
+    // construct-then-fetch, so it reports the weaker of the two claims rather
+    // than guessing either way.
+    name: 'new Request handed to an in-process dispatcher',
+    code: `app.handle(new Request('https://emit/openapi/json'));`,
+    host: 'emit',
+    kind: 'reference',
+  },
+  {
+    name: 'new Request to localhost in a test dispatch',
+    code: `app.handle(new Request('http://localhost/api/users'));`,
+    host: 'localhost',
+    kind: 'reference',
+  },
+  {
+    // The outer call is the one that proves a transfer, and it reports once:
+    // the inner construction is consumed rather than emitted beside it.
+    name: 'fetch over a constructed Request is still a call site',
+    code: `fetch(new Request('https://api.stripe.com/v1'));`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
+  },
+  {
+    name: 'fetch over a constructed URL is still a call site',
+    code: `fetch(new URL('https://api.stripe.com/v1'));`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
   },
   {
     name: 'new WebSocket',
@@ -281,6 +338,34 @@ const NO_CALL_SITE: Case[] = [
     host: null,
     noHit: true,
   },
+  {
+    // The inverted-direction case: this parses an INBOUND request inside
+    // HTTPS-redirect middleware. Five of these reached an external reviewer's
+    // report as outbound transfers.
+    name: 'new URL over an inbound request URL',
+    code: `const u = new URL(request.url);`,
+    host: null,
+    noHit: true,
+  },
+  {
+    // A database DSN rewritten only to set a query parameter. Nothing about
+    // this is an unknown destination, so naming the variable would be noise
+    // rather than a prompt to look.
+    name: 'new URL over an unknown connection string',
+    code: `const url = new URL(connectionString);\nurl.searchParams.set('sslmode', 'verify-full');`,
+    host: null,
+    noHit: true,
+  },
+  {
+    // Deliberate false negative, new with the reference kind: a call sink
+    // would report transfer/unresolved-egress here. A reference sink stays
+    // silent, because "a variable was passed to new URL()" is not evidence
+    // that anything left. Recorded in docs/LIMITATIONS.md.
+    name: 'new URL built from a fully interpolated base',
+    code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
+    host: null,
+    noHit: true,
+  },
 ];
 
 describe('golden table: knowledge base client constructors', () => {
@@ -394,6 +479,7 @@ describe('golden table: hosts that must resolve', () => {
       expect(error).toBeUndefined();
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0]?.host).toBe(testCase.host);
+      expect(hits[0]?.kind).toBe(testCase.kind ?? 'callsite');
     });
   }
 });
@@ -404,6 +490,7 @@ describe('golden table: destinations the analyzer must decline to resolve', () =
       const { hits } = analyzeFile(testCase.code, 'input.ts');
       expect(hits.length).toBeGreaterThan(0);
       const hit = hits[0];
+      expect(hit?.kind).toBe(testCase.kind ?? 'callsite');
       if (testCase.host === null) {
         expect(hit?.host).toBeNull();
         if (testCase.reason) expect(hit?.unresolvedReason).toContain(testCase.reason);
@@ -452,6 +539,23 @@ describe('analyzeFile: locations and robustness', () => {
     expect(viaClient.hits[0]?.confidence).toBe('high');
     expect(viaClient.hits[1]?.confidence).toBe('medium');
     expect(viaClient.hits[1]?.host).toBe('api.stripe.com');
+  });
+
+  it('never lets a reference reach the confidence of a call site', () => {
+    // Both read the host off a string literal, so the certainty about the
+    // *string* is identical. What differs is what it proves.
+    const call = analyzeFile(`fetch('https://api.stripe.com/v1');`, 'a.ts');
+    expect(call.hits[0]?.confidence).toBe('high');
+
+    const reference = analyzeFile(`const u = new URL('https://api.stripe.com/v1');`, 'b.ts');
+    expect(reference.hits[0]?.kind).toBe('reference');
+    expect(reference.hits[0]?.confidence).toBe('medium');
+  });
+
+  it('reports one hit, not two, when a call site wraps a constructed Request', () => {
+    const { hits } = analyzeFile(`fetch(new Request('https://api.stripe.com/v1'));`, 'a.ts');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.kind).toBe('callsite');
   });
 
   it('gives an unresolved destination low confidence, never an attribution', () => {
