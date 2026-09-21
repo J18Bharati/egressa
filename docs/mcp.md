@@ -24,7 +24,7 @@ In Claude Code: `claude mcp add egressa -- npx -y @egressa/mcp@latest`
 
 | Tool | Purpose |
 |---|---|
-| `scan_repository` | Scan a local path. Returns a token-budgeted summary by default; `full: true` for the whole findings document, `maxFindings` to bound it, `assumeAdequacyLapsed: ["US:DPF"]` to model a lapse |
+| `scan_repository` | Scan a local path. Returns a token-budgeted summary by default; `full: true` for the whole findings document, `maxFindings` to bound it, `assumeAdequacyLapsed: ["US:DPF"]` to model a lapse, `exclude: ["vendor/**"]` to skip globs during discovery |
 | `lookup_vendor` | Full sourced entry by vendor id, package name or host |
 | `list_vendors` | Every entry with jurisdiction and EU-region scope |
 | `check_package` | Pre-install check: does this package belong to a known vendor, and where does it process? |
@@ -47,6 +47,13 @@ an agent that runs out of room mid-review is worse than one that asked for more.
 
 The summariser lives in `@egressa/core`, so an agent's view and the CLI's markdown output can
 never disagree about what a scan said.
+
+Each summarised finding also carries `referenceOnly`, computed over the full evidence array before
+truncation: true when every piece of evidence is a vendor merely *named* in source (`reference`)
+rather than a resolved call site (`callsite`). A finding can hold several `dependency` and
+`reference` entries with the distinguishing evidence cut by the three-per-finding limit above, so
+the flag is what survives that cut -- do not infer reference-only-ness from the truncated
+`evidence` array.
 
 ## Verified transcript
 

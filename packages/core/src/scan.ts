@@ -275,6 +275,11 @@ export function scan(options: ScanOptions): ScanResult {
       ...(options.assumeAdequacyLapsed?.length
         ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed }
         : {}),
+      // The merged list actually handed to walk(), so the document records
+      // what was applied rather than re-deriving it from options.exclude,
+      // which could in principle diverge if a future caller passed it
+      // without going through walk().
+      ...(options.exclude?.length ? { exclude: options.exclude } : {}),
     },
     summary: summarise(findings),
     findings,

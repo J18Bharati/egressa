@@ -77,8 +77,24 @@ fi
 # A gate reading that is not detecting a tracker, it is reading a catalogue -- and on
 # the consent half of the conjunction below, a false positive suppresses a real signal
 # rather than raising a false one, which is the harder failure to notice.
+#
+# GENERATED_DIRS is the one list behind both this filter and the --exclude-dir flags
+# `declared()` builds below. A build directory does not just carry a catalogue string --
+# `.next/standalone/package.json` is Next.js's own verbatim copy of whatever manifest
+# produced the build, a real dependency list that is not this project's declared scope.
+# `declared()` used to search the whole working directory with only node_modules
+# excluded, so a generated copy of package.json read as this project's own dependencies.
+# One array feeding both exclusions is what keeps that from happening again by drift:
+# a directory added here is a directory `declared()` also skips, with no second edit.
+GENERATED_DIRS=(node_modules dist build .next .nuxt .output .svelte-kit .astro .vercel .turbo .amplify-hosting coverage)
+_gen_re=""
+for _d in "${GENERATED_DIRS[@]}"; do
+  _gen_re="${_gen_re:+$_gen_re|}(^|/)${_d//./\\.}/"
+done
+GENERATED_EXCLUDE_RE="${_gen_re}|\\.min\\.js\$|\\.map\$"
+
 SRC="$(printf '%s\n' "${FILES:-}" \
-  | grep -Ev '(^|/)node_modules/|(^|/)dist/|(^|/)build/|(^|/)\.next/|(^|/)coverage/|(^|/)\.nuxt/|(^|/)\.output/|(^|/)\.svelte-kit/|(^|/)\.astro/|(^|/)\.vercel/|(^|/)\.turbo/|(^|/)\.amplify-hosting/|\.min\.js$|\.map$' \
+  | grep -Ev "$GENERATED_EXCLUDE_RE" \
   | sed '/^$/d')"
 emit FILES_UNDER_REVIEW "$(printf '%s\n' "$SRC" | sed '/^$/d' | wc -l | tr -d ' ')"
 
@@ -177,12 +193,21 @@ declared() {
   # shape the rest of this file was rewritten to remove, and it hid here because
   # this is the only helper whose pipeline continues past the search.
   #
-  # `--exclude-dir` rather than filtering node_modules out of the result: the
-  # walk is what must not read it. Filtering afterwards still opens every
-  # installed package.json, which contradicts the invariant in CLAUDE.md, costs
-  # time proportional to an installed tree rather than the reviewed source, and
-  # matched `node_modules` anywhere in a path rather than as a directory.
-  _d_found="$(grep -rIlE "$1" --include=package.json --exclude-dir=node_modules . 2>/dev/null)"
+  # `--exclude-dir` rather than filtering the result: the walk is what must not
+  # read the directory. Filtering afterwards still opens every installed or
+  # generated package.json, which contradicts the invariant in CLAUDE.md for
+  # node_modules, costs time proportional to an installed tree rather than the
+  # reviewed source, and matches a directory name anywhere in a path rather
+  # than as a path component. GENERATED_DIRS (built above, beside the SRC
+  # filter it also drives) supplies every flag here, not just node_modules --
+  # a build directory carries a verbatim copy of whatever manifest produced
+  # it, so excluding it from the file set but not from this whole-repo walk
+  # left exactly the gap `.next/standalone/package.json` fell through.
+  _d_exclude_flags=()
+  for _d in "${GENERATED_DIRS[@]}"; do
+    _d_exclude_flags+=("--exclude-dir=$_d")
+  done
+  _d_found="$(grep -rIlE "$1" --include=package.json "${_d_exclude_flags[@]}" . 2>/dev/null)"
   GATE_STATUS=$?
   GATE_OUT="$(printf '%s' "$_d_found" \
     | { [ -n "${SELF_REL:-}" ] && grep -v "^\./${SELF_REL}/" || cat; })"

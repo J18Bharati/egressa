@@ -104,6 +104,44 @@ These carry `kind: "reference"` rather than `kind: "callsite"`, and their confid
 rows stay in the sink table because the attribution is often right -- a `new URL` on the line
 before a `fetch` names the correct vendor -- and deleting them would lose that.
 
+**A construction that a call does consume is a call site, at `high`, reported once.** The demotion
+applies to the construction *on its own*, never to a transfer that happens to be written in two
+expressions. The analyzer therefore resolves through the forms that hand the constructed object to
+the call -- directly, through `.toString()`, `.toJSON()` or `.href`, and through a module-scope
+binding:
+
+```js
+fetch(new URL('https://api.stripe.com/v1'));                  // callsite, high
+fetch(new URL('https://api.stripe.com/v1').toString());       // callsite, high
+fetch(new URL('https://api.stripe.com/v1').href);             // callsite, high
+const u = new URL('https://api.stripe.com/v1');
+fetch(u.toString());                                          // callsite, high -- one finding
+const req = new Request('https://api.stripe.com/v1');
+await fetch(req);                                             // callsite, high -- one finding
+```
+
+Each of those is **one** finding, not two: the construction the call read is recorded as consumed
+and the reference it would otherwise have emitted is dropped. That bookkeeping cannot be a skip
+during the walk, because through a binding the construction is emitted several statements before
+the call that consumes it; the suppression happens once the file is finished.
+
+The recall this recovers is not optional decoration. A resolved third-country call site that is
+reported at `medium` disappears from a `--min-confidence high` CI gate, and a scanner that stops
+failing a gate it used to fail is worse than one that reports a reference nobody wanted. The golden
+table pins the kind, the confidence and the count on every one of these shapes.
+
+What still declines, deliberately:
+
+- **Only `href`, `toString()` and `toJSON()` are read through.** `pathname`, `origin` and
+  `searchParams` are parts of a destination, not the destination, and `Request#url` is left out
+  because `request.url` on an *inbound* request is the commonest shape in this whole area.
+- **A bound construction obeys the same refusal every other binding does.** Module scope only, and
+  never a name declared twice or reassigned -- there is no scope chain to say which declaration a
+  call reads. A construction inside a function, or one whose name is shadowed, does not resolve.
+- **Reading through does not invent an argument the constructor never had.**
+  `fetch(new URL(request.url).toString())` reports a call site with **no** host, exactly as
+  `fetch(new URL(request.url))` does: the call is real, the destination is not knowable.
+
 Two consequences are deliberate false negatives:
 
 - **A reference emits only on a resolved host.** Where the argument does not resolve, nothing is

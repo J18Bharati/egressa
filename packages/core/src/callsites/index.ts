@@ -82,7 +82,14 @@ export interface AnalyzeFileResult {
 type BindingValue =
   | { kind: 'string'; value: string }
   | { kind: 'env'; name: string }
-  | { kind: 'client'; host: string | null; reason?: string };
+  | { kind: 'client'; host: string | null; reason?: string }
+  /**
+   * `const u = new URL('https://...')`: a constructed reference object whose
+   * destination is known. `start` is the offset of the `new` expression, so a
+   * call that later consumes the binding can suppress the reference hit the
+   * construction itself emitted.
+   */
+  | { kind: 'reference'; host: string; start: number };
 
 /** A binding plus where it was declared, so a call above it cannot read it. */
 type Binding = BindingValue & { declaredAt: number };
@@ -110,8 +117,13 @@ interface ResolveContext {
    * outer sink is the one that proves it, so the inner construction must not
    * also be reported: the reviewer's complaint was volume, and emitting a
    * reference beside the call site it feeds is pure duplication. Recorded
-   * here and suppressed by the caller, which is possible because the walk
-   * visits a parent before its children.
+   * here and suppressed by the caller.
+   *
+   * Suppression cannot rely on walk order. Directly nested, the parent is
+   * visited before its child; through a binding -- `const u = new URL(X)`
+   * then `fetch(u.toString())` -- the construction is several statements
+   * *earlier* and has already been emitted. So the caller records the offsets
+   * and filters the emitted list once the walk is done.
    */
   referencesRead?: number[];
 }
@@ -149,8 +161,14 @@ export function analyzeFile(
   const bindings = new Map<string, Binding>();
   const unstable = collectUnstableNames(program);
   const sinks = extraSinks.length > 0 ? [...SINKS, ...extraSinks] : SINKS;
-  const hits: CallsiteHit[] = [];
-  // Reference constructions already accounted for by an enclosing call sink.
+  // Hits paired with the offset of the node that produced them, so a reference
+  // a later call site turns out to consume can be dropped after the walk.
+  const emitted: { start: number; hit: CallsiteHit }[] = [];
+  const emit = (node: Node, hit: CallsiteHit): void => {
+    emitted.push({ start: node.start, hit });
+  };
+  // Reference constructions already accounted for by an enclosing or later
+  // call sink.
   const consumedReferences = new Set<number>();
 
   // Pass 1: collect module-scope constant and client bindings, so a call site
@@ -170,6 +188,11 @@ export function analyzeFile(
     const client = clientBindingFor(init, bindings, context);
     if (client) {
       bindings.set(name, { ...client, declaredAt: node.start });
+      continue;
+    }
+    const reference = referenceBindingFor(init, bindings, context);
+    if (reference) {
+      bindings.set(name, { ...reference, declaredAt: node.start });
       continue;
     }
     // `const B = A` aliases an earlier binding, which is how a two-step
@@ -201,7 +224,8 @@ export function analyzeFile(
     if (callee.type === 'MemberExpression' && shape.object) {
       const binding = readable(bindings, shape.object, unstable, node.start);
       if (binding?.kind === 'client') {
-        hits.push(
+        emit(
+          node,
           toHit(
             binding.host
               ? { kind: 'resolved', host: binding.host }
@@ -239,13 +263,20 @@ export function analyzeFile(
           // config objects; a bare URL argument to an arbitrary function is
           // not a call site.
           if (sink.matchAny && argument.type !== 'ObjectExpression') continue;
+          if (context.referencesRead) context.referencesRead.length = 0;
           const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
           if (resolution.kind !== 'resolved') continue;
-          const hit = toHit(resolution, node, index, filePath, 'high', sinkKind(sink));
+          const hitKind = sinkKind(sink);
+          const hit = toHit(resolution, node, index, filePath, 'high', hitKind);
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
           if (sink.vendorId) hit.vendorId = sink.vendorId;
-          hits.push(hit);
+          emit(node, hit);
+          // `createClient(new URL(X))` is the same one transfer as
+          // `fetch(new URL(X))`, and is deduplicated the same way.
+          if (hitKind === 'callsite') {
+            for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+          }
           return;
         }
 
@@ -258,7 +289,7 @@ export function analyzeFile(
           : null;
         if (regionOnly && sink.vendorId) {
           const location = index.locationAt(filePath, node.start, node.end - node.start);
-          hits.push({
+          emit(node, {
             kind: sinkKind(sink),
             host: null,
             region: regionOnly,
@@ -286,13 +317,21 @@ export function analyzeFile(
       // were the bulk of the noise an external reviewer reported. This is the
       // same rule a knowledge base sink already follows, for the same reason.
       if (kind === 'reference' && resolution.kind !== 'resolved') continue;
-      hits.push(toHit(resolution, node, index, filePath, 'high', kind));
+      emit(node, toHit(resolution, node, index, filePath, 'high', kind));
       if (kind === 'callsite') {
         for (const start of context.referencesRead ?? []) consumedReferences.add(start);
       }
       return;
     }
   });
+
+  // Drop every reference a call site turned out to consume. Doing this after
+  // the walk rather than during it is what makes the indirect shapes work:
+  // `const u = new URL(X)` is emitted long before the `fetch(u.toString())`
+  // that proves the transfer, so it cannot be skipped on the way past.
+  const hits = emitted
+    .filter(({ start, hit }) => !(hit.kind === 'reference' && consumedReferences.has(start)))
+    .map(({ hit }) => hit);
 
   return { hits };
 }
@@ -439,6 +478,12 @@ function resolveArgument(
           ? { kind: 'resolved', host: binding.host }
           : { kind: 'unresolved', reason: binding.reason ?? 'client base URL not resolvable' };
       }
+      // `const req = new Request(X); fetch(req)`. The construction is the
+      // destination; the call is what proves it left.
+      if (binding.kind === 'reference') {
+        context.referencesRead?.push(binding.start);
+        return { kind: 'resolved', host: binding.host };
+      }
       return hostFromUrlPrefix(binding.value, false);
     }
 
@@ -447,20 +492,25 @@ function resolveArgument(
     // through it -- and the inner construction is then recorded as consumed,
     // so one transfer is reported once.
     case 'NewExpression': {
-      const callee = node.callee as Node | undefined;
-      if (!callee) return { kind: 'not-a-url' };
-      const isReference = findSinks(calleeShape(callee), true, SINKS).some(
-        (candidate) => sinkKind(candidate) === 'reference',
-      );
-      if (!isReference) return { kind: 'not-a-url' };
-      const inner = ((node.arguments as Node[] | undefined) ?? [])[0];
-      if (!inner) return { kind: 'not-a-url' };
-      const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
-      if (resolution.kind === 'resolved') context.referencesRead?.push(node.start);
-      return resolution;
+      const viaReference = referenceObjectHost(node, configKeys, bindings, depth, context);
+      return viaReference ?? { kind: 'not-a-url' };
+    }
+
+    // `fetch(new URL(X).toString())` and `fetch(u.toJSON())`. A method that
+    // renders the reference back to its string is the same destination the
+    // constructor was handed, so the outer sink resolves through it and
+    // consumes the construction.
+    case 'CallExpression': {
+      const viaReference = referenceMethodHost(node, configKeys, bindings, depth, context);
+      return viaReference ?? { kind: 'not-a-url' };
     }
 
     case 'MemberExpression': {
+      // `fetch(new URL(X).href)` and `fetch(u.href)`. Only `href`: nothing
+      // else on a URL is the whole destination, and reading `searchParams` or
+      // `pathname` as one would be a guess.
+      const viaReference = referencePropertyHost(node, configKeys, bindings, depth, context);
+      if (viaReference) return viaReference;
       const env = envVarName(node);
       return env
         ? { kind: 'unresolved', reason: `host supplied by environment variable ${env}` }
@@ -491,6 +541,134 @@ function resolveArgument(
     default:
       return { kind: 'not-a-url' };
   }
+}
+
+/**
+ * The one property of a constructed `URL`/`Request` that is the destination.
+ *
+ * `href` renders the whole thing. `pathname`, `searchParams` and `origin` are
+ * parts of it, and reading any of them as the destination would be a guess of
+ * exactly the kind `resolve-host.ts` refuses to make. `Request#url` is left
+ * out too: `request.url` on an *inbound* request is the single commonest
+ * shape in this whole area, and it is not worth resolving a bound one at the
+ * cost of a rule that reads like it covers both.
+ */
+const REFERENCE_VALUE_PROPERTY = 'href';
+
+/** Methods that render a constructed reference back to its own string. */
+const REFERENCE_VALUE_METHODS = new Set(['toString', 'toJSON']);
+
+/** Whether `new <callee>(...)` is one of the reference sinks. */
+function isReferenceConstruction(callee: Node): boolean {
+  return findSinks(calleeShape(callee), true, SINKS).some(
+    (candidate) => sinkKind(candidate) === 'reference',
+  );
+}
+
+/**
+ * The destination behind a constructed reference, or null when this node is
+ * not one.
+ *
+ * Two forms reach here: the construction written in place --
+ * `fetch(new URL(X))` -- and a module-scope name bound to one. Either way the
+ * offset of the `new` expression is recorded in `referencesRead`, so the
+ * caller can drop the reference hit that construction emits and report the
+ * transfer once.
+ *
+ * Returning an *unresolved* resolution for an in-place construction is
+ * deliberate: `fetch(new URL(request.url))` is a call whose destination is
+ * unknown, and the call sink says so. A bound name that did not resolve was
+ * never recorded as a binding at all, so it falls through to the ordinary
+ * "value of X is not known statically".
+ */
+function referenceObjectHost(
+  node: Node,
+  configKeys: string[],
+  bindings: Map<string, Binding>,
+  depth: number,
+  context: ResolveContext,
+): HostResolution | null {
+  if (node.type === 'NewExpression') {
+    const callee = node.callee as Node | undefined;
+    if (!callee || !isReferenceConstruction(callee)) return null;
+    const inner = ((node.arguments as Node[] | undefined) ?? [])[0];
+    if (!inner) return null;
+    const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
+    if (resolution.kind === 'resolved') context.referencesRead?.push(node.start);
+    return resolution;
+  }
+  if (node.type === 'Identifier') {
+    const name = String(node.name);
+    // The same refusal every other binding read makes: a name declared twice
+    // or reassigned resolves to nothing, because there is no scope chain to
+    // say which declaration this is.
+    if (context.unstable.has(name)) return null;
+    const binding = bindings.get(name);
+    if (!binding || binding.kind !== 'reference') return null;
+    if (binding.declaredAt > context.callStart) return null;
+    context.referencesRead?.push(binding.start);
+    return { kind: 'resolved', host: binding.host };
+  }
+  return null;
+}
+
+/** `<reference>.href`, and nothing else. */
+function referencePropertyHost(
+  node: Node,
+  configKeys: string[],
+  bindings: Map<string, Binding>,
+  depth: number,
+  context: ResolveContext,
+): HostResolution | null {
+  if (node.computed === true) return null;
+  const property = node.property as Node | undefined;
+  if (property?.type !== 'Identifier' || String(property.name) !== REFERENCE_VALUE_PROPERTY) {
+    return null;
+  }
+  const object = node.object as Node | undefined;
+  return object ? referenceObjectHost(object, configKeys, bindings, depth, context) : null;
+}
+
+/** `<reference>.toString()` and `<reference>.toJSON()`, called with no arguments. */
+function referenceMethodHost(
+  node: Node,
+  configKeys: string[],
+  bindings: Map<string, Binding>,
+  depth: number,
+  context: ResolveContext,
+): HostResolution | null {
+  if (((node.arguments as Node[] | undefined) ?? []).length > 0) return null;
+  const callee = node.callee as Node | undefined;
+  if (callee?.type !== 'MemberExpression' || callee.computed === true) return null;
+  const property = callee.property as Node | undefined;
+  if (property?.type !== 'Identifier' || !REFERENCE_VALUE_METHODS.has(String(property.name))) {
+    return null;
+  }
+  const object = callee.object as Node | undefined;
+  return object ? referenceObjectHost(object, configKeys, bindings, depth, context) : null;
+}
+
+/**
+ * `const u = new URL('https://...')` / `const req = new Request('https://...')`.
+ *
+ * Recorded so `fetch(u.toString())` and `fetch(req)` resolve through the
+ * binding instead of emitting an unresolved destination *beside* the
+ * reference -- one transfer written over two statements was being reported
+ * twice, once with the right host and no call and once with a call and no
+ * host.
+ *
+ * Only a resolved host is recorded, which is what keeps
+ * `const u = new URL(request.url)` from becoming a binding at all.
+ */
+function referenceBindingFor(
+  init: Node,
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+): BindingValue | null {
+  if (init.type !== 'NewExpression') return null;
+  const resolution = referenceObjectHost(init, [], bindings, 0, context);
+  if (resolution?.kind !== 'resolved') return null;
+  return { kind: 'reference', host: resolution.host, start: init.start };
 }
 
 /** `const B = 'https://...'` or `const B = process.env.X`. */

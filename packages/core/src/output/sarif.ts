@@ -41,6 +41,10 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
         },
         automationDetails: { id: 'egressa/scan' },
         // GitHub shows this in the alert; it makes the KB version auditable.
+        // `exclude` lives here rather than on individual results: it describes
+        // the run, not any one finding, and a SARIF narrowed by --exclude must
+        // not be byte-indistinguishable from a genuinely clean scan -- this is
+        // the one place in the document that provenance can hide.
         properties: {
           kbVersion: result.kb.version,
           kbLicense: result.kb.license,
@@ -48,6 +52,7 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
           ...(result.scan.assumedAdequacyLapsed
             ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }
             : {}),
+          ...(result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}),
         },
         results: result.findings.map((finding) => toResult(finding, result)),
       },

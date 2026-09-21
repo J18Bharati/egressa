@@ -70,6 +70,10 @@ export function formatHuman(result: ScanResult, options: HumanOptions): string {
       ),
     );
   }
+  if (result.scan.exclude?.length) {
+    const n = result.scan.exclude.length;
+    lines.push(c('yellow', `${n} path(s) excluded from this scan`));
+  }
   lines.push(c('dim', DISCLAIMER_SHORT));
 
   return lines.join('\n');

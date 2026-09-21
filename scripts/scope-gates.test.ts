@@ -303,6 +303,26 @@ describe('generated output is not read as evidence', () => {
     const run = runScope(root);
     expect(run.lines.SCOPE_SESSION_REPLAY).toBe('true');
   });
+
+  // declared() used to search the whole working directory with only
+  // node_modules excluded, so it ignored every other exclusion this file set
+  // applies -- including .next, which Next.js fills with a verbatim copy of
+  // whatever manifest produced the build. This is not a vendor catalogue like
+  // .nuxt/imports.d.ts; it is a real dependency list, just not this project's.
+  it('does not read a build directory copy of package.json as a declared dependency', () => {
+    const root = scratch('gen-manifest');
+    plant(root, 'package.json', '{"name":"app","dependencies":{}}\n');
+    plant(
+      root,
+      '.next/standalone/package.json',
+      '{"name":"app","dependencies":{"posthog-js":"^1.0.0","mixpanel-browser":"^2.0.0"}}\n',
+    );
+
+    const run = runScope(root);
+    expect(run.lines.SCOPE_END).toBe('ok');
+    expect(run.lines.SCOPE_TRACKERS).toBe('false');
+    expect(run.lines.SIGNAL_TRACKERS_NO_CONSENT).toBe('false');
+  });
 });
 
 /**

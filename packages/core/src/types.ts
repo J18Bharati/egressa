@@ -277,6 +277,20 @@ export interface ScanMeta {
   engine: EngineInfo;
   /** Set when --assume-adequacy-lapsed was used, naming the lapsed decisions. */
   assumedAdequacyLapsed?: string[];
+  /**
+   * Globs actually applied to narrow discovery: the union of `exclude:` in
+   * `.egressa.yml` and any `--exclude` flags, merged the same way
+   * `assumedAdequacyLapsed` records a run-changing option -- so a scan that
+   * was narrowed says so in the document itself, not only in the CLI
+   * invocation that produced it. Does not include `.gitignore` or
+   * `.egressaignore`, which are already committed and readable in the
+   * repository. Flat list, not tagged by source (config vs flag): the two
+   * are unioned before this point and a wrong host is worse than no host,
+   * but a merged glob list is not a wrong fact, so the simpler shape was
+   * kept, matching `assumedAdequacyLapsed`. Omitted entirely when nothing
+   * was excluded.
+   */
+  exclude?: string[];
 }
 
 export interface KbMeta {

@@ -106,6 +106,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

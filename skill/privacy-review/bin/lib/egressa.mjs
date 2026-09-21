@@ -14822,11 +14822,16 @@ function toSarif(result, options) {
         },
         automationDetails: { id: "egressa/scan" },
         // GitHub shows this in the alert; it makes the KB version auditable.
+        // `exclude` lives here rather than on individual results: it describes
+        // the run, not any one finding, and a SARIF narrowed by --exclude must
+        // not be byte-indistinguishable from a genuinely clean scan -- this is
+        // the one place in the document that provenance can hide.
         properties: {
           kbVersion: result.kb.version,
           kbLicense: result.kb.license,
           adequacyStatusAsOf: result.kb.adequacyStatusAsOf,
-          ...result.scan.assumedAdequacyLapsed ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed } : {}
+          ...result.scan.assumedAdequacyLapsed ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed } : {},
+          ...result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}
         },
         results: result.findings.map((finding) => toResult(finding, result))
       }
@@ -15110,7 +15115,10 @@ function analyzeFile(text, filePath, extraSinks = []) {
   const bindings = /* @__PURE__ */ new Map();
   const unstable = collectUnstableNames(program);
   const sinks = extraSinks.length > 0 ? [...SINKS, ...extraSinks] : SINKS;
-  const hits = [];
+  const emitted = [];
+  const emit = (node, hit) => {
+    emitted.push({ start: node.start, hit });
+  };
   const consumedReferences = /* @__PURE__ */ new Set();
   for (const node of moduleScopeDeclarators(program)) {
     const id = node.id;
@@ -15122,6 +15130,11 @@ function analyzeFile(text, filePath, extraSinks = []) {
     const client = clientBindingFor(init2, bindings, context);
     if (client) {
       bindings.set(name, { ...client, declaredAt: node.start });
+      continue;
+    }
+    const reference = referenceBindingFor(init2, bindings, context);
+    if (reference) {
+      bindings.set(name, { ...reference, declaredAt: node.start });
       continue;
     }
     if (init2.type === "Identifier") {
@@ -15143,7 +15156,8 @@ function analyzeFile(text, filePath, extraSinks = []) {
     if (callee.type === "MemberExpression" && shape.object) {
       const binding = readable(bindings, shape.object, unstable, node.start);
       if (binding?.kind === "client") {
-        hits.push(
+        emit(
+          node,
           toHit(
             binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" },
             node,
@@ -15164,19 +15178,24 @@ function analyzeFile(text, filePath, extraSinks = []) {
         for (const argument2 of args) {
           if (!argument2) continue;
           if (sink.matchAny && argument2.type !== "ObjectExpression") continue;
+          if (context.referencesRead) context.referencesRead.length = 0;
           const resolution2 = resolveArgument(argument2, configKeys, bindings, 0, context);
           if (resolution2.kind !== "resolved") continue;
-          const hit = toHit(resolution2, node, index, filePath, "high", sinkKind(sink));
+          const hitKind = sinkKind(sink);
+          const hit = toHit(resolution2, node, index, filePath, "high", hitKind);
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
           if (sink.vendorId) hit.vendorId = sink.vendorId;
-          hits.push(hit);
+          emit(node, hit);
+          if (hitKind === "callsite") {
+            for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+          }
           return;
         }
         const regionOnly = sink.vendorId ? regionFromArguments(args, sink.regionKeys ?? [], bindings, context) : null;
         if (regionOnly && sink.vendorId) {
           const location = index.locationAt(filePath, node.start, node.end - node.start);
-          hits.push({
+          emit(node, {
             kind: sinkKind(sink),
             host: null,
             region: regionOnly,
@@ -15197,13 +15216,14 @@ function analyzeFile(text, filePath, extraSinks = []) {
       const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
       if (resolution.kind === "not-a-url") continue;
       if (kind === "reference" && resolution.kind !== "resolved") continue;
-      hits.push(toHit(resolution, node, index, filePath, "high", kind));
+      emit(node, toHit(resolution, node, index, filePath, "high", kind));
       if (kind === "callsite") {
         for (const start of context.referencesRead ?? []) consumedReferences.add(start);
       }
       return;
     }
   });
+  const hits = emitted.filter(({ start, hit }) => !(hit.kind === "reference" && consumedReferences.has(start))).map(({ hit }) => hit);
   return { hits };
 }
 function regionFromArguments(args, regionKeys, bindings, context) {
@@ -15308,6 +15328,10 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
       if (binding.kind === "client") {
         return binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" };
       }
+      if (binding.kind === "reference") {
+        context.referencesRead?.push(binding.start);
+        return { kind: "resolved", host: binding.host };
+      }
       return hostFromUrlPrefix(binding.value, false);
     }
     // `fetch(new Request(url))` and `fetch(new URL(url))`. The constructed
@@ -15315,19 +15339,20 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     // through it -- and the inner construction is then recorded as consumed,
     // so one transfer is reported once.
     case "NewExpression": {
-      const callee = node.callee;
-      if (!callee) return { kind: "not-a-url" };
-      const isReference = findSinks(calleeShape(callee), true, SINKS).some(
-        (candidate) => sinkKind(candidate) === "reference"
-      );
-      if (!isReference) return { kind: "not-a-url" };
-      const inner = (node.arguments ?? [])[0];
-      if (!inner) return { kind: "not-a-url" };
-      const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
-      if (resolution.kind === "resolved") context.referencesRead?.push(node.start);
-      return resolution;
+      const viaReference = referenceObjectHost(node, configKeys, bindings, depth, context);
+      return viaReference ?? { kind: "not-a-url" };
+    }
+    // `fetch(new URL(X).toString())` and `fetch(u.toJSON())`. A method that
+    // renders the reference back to its string is the same destination the
+    // constructor was handed, so the outer sink resolves through it and
+    // consumes the construction.
+    case "CallExpression": {
+      const viaReference = referenceMethodHost(node, configKeys, bindings, depth, context);
+      return viaReference ?? { kind: "not-a-url" };
     }
     case "MemberExpression": {
+      const viaReference = referencePropertyHost(node, configKeys, bindings, depth, context);
+      if (viaReference) return viaReference;
       const env2 = envVarName(node);
       return env2 ? { kind: "unresolved", reason: `host supplied by environment variable ${env2}` } : { kind: "unresolved", reason: "host is computed at runtime" };
     }
@@ -15350,6 +15375,60 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     default:
       return { kind: "not-a-url" };
   }
+}
+var REFERENCE_VALUE_PROPERTY = "href";
+var REFERENCE_VALUE_METHODS = /* @__PURE__ */ new Set(["toString", "toJSON"]);
+function isReferenceConstruction(callee) {
+  return findSinks(calleeShape(callee), true, SINKS).some(
+    (candidate) => sinkKind(candidate) === "reference"
+  );
+}
+function referenceObjectHost(node, configKeys, bindings, depth, context) {
+  if (node.type === "NewExpression") {
+    const callee = node.callee;
+    if (!callee || !isReferenceConstruction(callee)) return null;
+    const inner = (node.arguments ?? [])[0];
+    if (!inner) return null;
+    const resolution = resolveArgument(inner, configKeys, bindings, depth + 1, context);
+    if (resolution.kind === "resolved") context.referencesRead?.push(node.start);
+    return resolution;
+  }
+  if (node.type === "Identifier") {
+    const name = String(node.name);
+    if (context.unstable.has(name)) return null;
+    const binding = bindings.get(name);
+    if (!binding || binding.kind !== "reference") return null;
+    if (binding.declaredAt > context.callStart) return null;
+    context.referencesRead?.push(binding.start);
+    return { kind: "resolved", host: binding.host };
+  }
+  return null;
+}
+function referencePropertyHost(node, configKeys, bindings, depth, context) {
+  if (node.computed === true) return null;
+  const property = node.property;
+  if (property?.type !== "Identifier" || String(property.name) !== REFERENCE_VALUE_PROPERTY) {
+    return null;
+  }
+  const object = node.object;
+  return object ? referenceObjectHost(object, configKeys, bindings, depth, context) : null;
+}
+function referenceMethodHost(node, configKeys, bindings, depth, context) {
+  if ((node.arguments ?? []).length > 0) return null;
+  const callee = node.callee;
+  if (callee?.type !== "MemberExpression" || callee.computed === true) return null;
+  const property = callee.property;
+  if (property?.type !== "Identifier" || !REFERENCE_VALUE_METHODS.has(String(property.name))) {
+    return null;
+  }
+  const object = callee.object;
+  return object ? referenceObjectHost(object, configKeys, bindings, depth, context) : null;
+}
+function referenceBindingFor(init2, bindings, context) {
+  if (init2.type !== "NewExpression") return null;
+  const resolution = referenceObjectHost(init2, [], bindings, 0, context);
+  if (resolution?.kind !== "resolved") return null;
+  return { kind: "reference", host: resolution.host, start: init2.start };
 }
 function literalBindingFor(init2) {
   if (init2.type === "Literal" && typeof init2.value === "string") {
@@ -15893,7 +15972,12 @@ function scan(options) {
       filesScanned: includeCallsites ? filesAnalysed : sources.length,
       manifestsScanned,
       engine,
-      ...options.assumeAdequacyLapsed?.length ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed } : {}
+      ...options.assumeAdequacyLapsed?.length ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed } : {},
+      // The merged list actually handed to walk(), so the document records
+      // what was applied rather than re-deriving it from options.exclude,
+      // which could in principle diverge if a future caller passed it
+      // without going through walk().
+      ...options.exclude?.length ? { exclude: options.exclude } : {}
     },
     summary: summarise(findings),
     findings,
@@ -16073,6 +16157,10 @@ function formatHuman(result, options) {
       )
     );
   }
+  if (result.scan.exclude?.length) {
+    const n2 = result.scan.exclude.length;
+    lines.push(c3("yellow", `${n2} path(s) excluded from this scan`));
+  }
   lines.push(c3("dim", DISCLAIMER_SHORT));
   return lines.join("\n");
 }
@@ -16143,6 +16231,9 @@ function formatMarkdown(result, options = {}) {
       `> Hypothetical run: ${result.scan.assumedAdequacyLapsed.join(", ")} treated as withdrawn.`,
       ""
     );
+  }
+  if (result.scan.exclude?.length) {
+    lines.push(`> ${result.scan.exclude.length} path(s) excluded from this scan.`, "");
   }
   if (shown.length > 0) {
     lines.push("| Vendor | Reason | Processing | EU region | Rule | Confidence |");

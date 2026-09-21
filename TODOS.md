@@ -227,6 +227,36 @@ KB update can change findings without any code moving.
 
 ## Testing
 
+### Teach the transfers specialist that a reference is not a call
+
+**What:** Add a rule to `skill/privacy-review/specialists/transfers.md`: a finding whose evidence
+contains no `kind: "callsite"` entry is at most `decidability: "config"` and must emit a `question`,
+never a `fix`, whatever its rule id — and must say "named, not called" in its summary. Mirror it in
+`references/finding-schema.md` and in `skill/egressa/references/interpreting-findings.md`, which
+still describes confidence without mentioning the kind axis.
+
+**Why:** The `reference` kind does not survive the CLI-to-skill boundary, and the skill converts it
+back into an accusation. `transfers.md` derives `decidability` from `ruleId` alone —
+"`transfer/third-country-egress` → `code`. The vendor and its jurisdiction are both settled facts" —
+and its mapping table reads only `ruleId`, `severity`, `confidence` and `evidence[0]`. But a
+reference-only finding carries exactly those rule ids: `const u = new URL('https://api.stripe.com/v1')`
+alone produces `transfer/adequate-country-egress` with `evidence: [{kind: "reference"}]`. The
+specialist therefore emits `decidability: "code"`, which under the skill's own rule licenses a
+remediation instruction for `new URL(request.url)` in redirect middleware or a rewritten database
+DSN. That is the precise false accusation the kind was introduced to prevent.
+
+**Context:** `packages/core/src/types.ts` states "Consumers must not render a `reference` as though
+it were a `callsite`", and the largest downstream consumer was not updated. `scan-transfers.sh`
+already runs `--format json`, so `evidence[].kind` is in the data the specialist reads — this is a
+checklist change, not a plumbing one. Raised by the red team during the `/review` pass on
+`gate-layer-fixes`; the engine-side and renderer-side halves were fixed there, this half was
+deferred. `scripts/claims-contract.test.ts` covers the file, so the wording must stay inside the
+claim scope.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** None
+
 ### Carry the reviewed file list NUL-delimited end to end
 
 **What:** Build the file list in `skill/privacy-review/scripts/scope.sh` with `git ls-files -z` /

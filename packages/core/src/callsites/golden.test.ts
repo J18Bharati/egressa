@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Confidence } from '../types.js';
 import { analyzeFile } from './index.js';
 import { type SinkKind, clientConstructorSinks, vendorConstructorSinks } from './sinks.js';
 
@@ -37,6 +38,16 @@ interface Case {
    * `reference` by accident fails a row that never mentioned kinds.
    */
   kind?: SinkKind;
+  /**
+   * Expected confidence of the first hit, where the row exists to pin it.
+   *
+   * A CI gate runs `--min-confidence high`, so a resolved call site silently
+   * demoted to `medium` stops failing that gate while every host in the table
+   * still looks right. Rows that care say so.
+   */
+  confidence?: Confidence;
+  /** Expected number of hits, where the row exists to pin that one transfer is reported once. */
+  hitCount?: number;
   /** Substring expected in the unresolved reason, when host is null. */
   reason?: string;
   /** No call site at all should be reported. */
@@ -177,6 +188,50 @@ const RESOLVES: Case[] = [
     code: `fetch(new URL('https://api.stripe.com/v1'));`,
     host: 'api.stripe.com',
     kind: 'callsite',
+    confidence: 'high',
+    hitCount: 1,
+  },
+  // The four rows below are the indirect forms of the two above. Only the
+  // directly nested shape was covered when the `reference` kind landed, and
+  // every one of these silently became `reference`/`medium` -- a resolved
+  // third-country call site that a `--min-confidence high` gate stopped
+  // seeing. They pin the kind, the confidence AND the count, because two of
+  // them used to report the same transfer twice.
+  {
+    name: 'fetch over a constructed URL rendered with toString()',
+    code: `fetch(new URL('https://api.stripe.com/v1/a').toString());`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
+    confidence: 'high',
+    hitCount: 1,
+  },
+  {
+    name: 'fetch over a constructed URL read through .href',
+    code: `fetch(new URL('https://api.stripe.com/v1/c').href);`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
+    confidence: 'high',
+    hitCount: 1,
+  },
+  {
+    name: 'fetch over a URL bound to a module-scope const and rendered with toString()',
+    code:
+      `const u = new URL('https://api.stripe.com/v1/b');\n` + //
+      `fetch(u.toString());`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
+    confidence: 'high',
+    hitCount: 1,
+  },
+  {
+    name: 'fetch over a Request bound to a module-scope const',
+    code:
+      `const req = new Request('https://api.stripe.com/v1/d');\n` + //
+      `await fetch(req);`,
+    host: 'api.stripe.com',
+    kind: 'callsite',
+    confidence: 'high',
+    hitCount: 1,
   },
   {
     name: 'new WebSocket',
@@ -305,6 +360,16 @@ const DOES_NOT_RESOLVE: Case[] = [
     host: null,
     reason: 'environment variable API',
   },
+  {
+    // Reading through `.toString()` must not invent what the constructor was
+    // never given. The call is real, so it reports -- as a call site with no
+    // host, exactly as `fetch(new URL(request.url))` does.
+    name: 'fetch over a constructed URL whose own argument does not resolve',
+    code: `fetch(new URL(request.url).toString());`,
+    host: null,
+    kind: 'callsite',
+    reason: 'computed at runtime',
+  },
 ];
 
 const NO_CALL_SITE: Case[] = [
@@ -363,6 +428,16 @@ const NO_CALL_SITE: Case[] = [
     // that anything left. Recorded in docs/LIMITATIONS.md.
     name: 'new URL built from a fully interpolated base',
     code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
+    host: null,
+    noHit: true,
+  },
+  {
+    // The binding table now records a constructed URL, so this guards the
+    // near miss: an unresolved construction is recorded as nothing at all,
+    // and reading it back through an accessor stays as silent as the
+    // construction was.
+    name: 'an inbound request URL read back through an accessor',
+    code: `const u = new URL(request.url);\nconst target = u.href;`,
     host: null,
     noHit: true,
   },
@@ -480,6 +555,8 @@ describe('golden table: hosts that must resolve', () => {
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0]?.host).toBe(testCase.host);
       expect(hits[0]?.kind).toBe(testCase.kind ?? 'callsite');
+      if (testCase.confidence) expect(hits[0]?.confidence).toBe(testCase.confidence);
+      if (testCase.hitCount !== undefined) expect(hits).toHaveLength(testCase.hitCount);
     });
   }
 });
@@ -556,6 +633,38 @@ describe('analyzeFile: locations and robustness', () => {
     const { hits } = analyzeFile(`fetch(new Request('https://api.stripe.com/v1'));`, 'a.ts');
     expect(hits).toHaveLength(1);
     expect(hits[0]?.kind).toBe('callsite');
+  });
+
+  it('reports one hit when the constructed Request reaches the call through a binding', () => {
+    // The construction is emitted several statements before the call that
+    // consumes it, so the deduplication cannot be a skip on the way past.
+    const { hits } = analyzeFile(
+      `const req = new Request('https://api.stripe.com/v1/d');\nawait fetch(req);`,
+      'a.ts',
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.kind).toBe('callsite');
+    expect(hits[0]?.confidence).toBe('high');
+  });
+
+  it('still reports the reference when nothing consumes the constructed URL', () => {
+    // The suppression must be driven by an actual consumer, not by the shape
+    // of the construction.
+    const { hits } = analyzeFile(
+      `const u = new URL('https://api.stripe.com/v1/b');\nconsole.log(u);`,
+      'a.ts',
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.kind).toBe('reference');
+    expect(hits[0]?.confidence).toBe('medium');
+  });
+
+  it('reports each call separately when two share one constructed URL', () => {
+    const { hits } = analyzeFile(
+      `const u = new URL('https://api.stripe.com/v1/b');\nfetch(u.toString());\nfetch(u.href);`,
+      'a.ts',
+    );
+    expect(hits.map((h) => h.kind)).toEqual(['callsite', 'callsite']);
   });
 
   it('gives an unresolved destination low confidence, never an attribution', () => {

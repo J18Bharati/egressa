@@ -25,6 +25,10 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     );
   }
 
+  if (result.scan.exclude?.length) {
+    lines.push(`> ${result.scan.exclude.length} path(s) excluded from this scan.`, '');
+  }
+
   if (shown.length > 0) {
     lines.push('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
     lines.push('| --- | --- | --- | --- | --- | --- |');

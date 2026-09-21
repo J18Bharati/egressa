@@ -343,6 +343,9 @@ describe('--exclude scopes discovery', () => {
     const on = json(base);
     expect(on.summary.findingCount).toBe(3);
     expect(on.findings.some((f) => f.vendor?.id === 'google-analytics')).toBe(true);
+    // An unexcluded scan must not carry the field at all -- a document that
+    // always has `scan.exclude: []` gives a reader nothing to grep for.
+    expect(on.scan.exclude).toBeUndefined();
 
     const off = json([...base, '--exclude', 'src/analytics.ts']);
     expect(off.summary.findingCount).toBe(2);
@@ -352,6 +355,9 @@ describe('--exclude scopes discovery', () => {
     // names, not the vendor everywhere it's mentioned.
     expect(off.findings.some((f) => f.vendor?.id === 'openai')).toBe(true);
     expect(off.findings.some((f) => f.vendor?.id === 'sentry')).toBe(true);
+    // A narrowed scan says so in the document itself -- that is the whole
+    // point of this task, not just what it excluded.
+    expect(off.scan.exclude).toEqual(['src/analytics.ts']);
   });
 
   it('accepts the flag more than once and applies every glob', () => {
@@ -362,6 +368,7 @@ describe('--exclude scopes discovery', () => {
     // Losing package.json as well removes the dependency signal that kept
     // openai and sentry alive in the single-flag case above.
     expect(off.summary.findingCount).toBe(0);
+    expect(off.scan.exclude).toEqual(['src/analytics.ts', 'package.json']);
   });
 
   it('unions the flag with .egressa.yml rather than one replacing the other', () => {
@@ -395,6 +402,9 @@ describe('--exclude scopes discovery', () => {
       'package.json',
     ]);
     expect(withBoth.summary.findingCount).toBe(0);
+    // The recorded list is the union actually applied -- the config's glob
+    // and the flag's, not just one of the two sources.
+    expect(withBoth.scan.exclude).toEqual(['src/analytics.ts', 'package.json']);
   });
 });
 
