@@ -54,6 +54,11 @@ export const scanCommand = defineCommand({
       default: true,
       description: 'Analyse dependency manifests (--no-manifests skips)',
     },
+    infrastructure: {
+      type: 'boolean',
+      default: true,
+      description: 'Read deployment config for your own regions (--no-infrastructure skips)',
+    },
     'min-confidence': { type: 'string', default: 'low', description: 'low | medium | high' },
     'only-vendor': { type: 'string', description: 'Comma-separated vendor ids' },
     'assume-adequacy-lapsed': {
@@ -98,6 +103,7 @@ export const scanCommand = defineCommand({
         includeTransitive: Boolean(args['include-transitive']) || config.includeTransitive === true,
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,
+        includeInfrastructure: args.infrastructure !== false,
         includeCallsites: args.callsites !== false,
         minConfidence: parseConfidence(String(args['min-confidence'])),
         ...(args['only-vendor'] ? { onlyVendor: String(args['only-vendor']).split(',') } : {}),

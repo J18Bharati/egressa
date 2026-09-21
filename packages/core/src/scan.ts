@@ -5,6 +5,7 @@ import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
 import { walk } from './discovery/walk.js';
+import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
 import { confidenceForDependency } from './merge/confidence.js';
 import { mergeSignals } from './merge/index.js';
@@ -29,6 +30,8 @@ export interface ScanOptions {
   includeDev?: boolean;
   /** Off until the call-site analyzer lands; manifests alone are still useful. */
   includeCallsites?: boolean;
+  /** Read deployment configuration for the regions this repository declares. */
+  includeInfrastructure?: boolean;
   includeManifests?: boolean;
   minConfidence?: Confidence;
   onlyVendor?: string[];
@@ -59,6 +62,7 @@ export function scan(options: ScanOptions): ScanResult {
     includeDev = true,
     includeManifests = true,
     includeCallsites = false,
+    includeInfrastructure = true,
     minConfidence = 'low',
     onlyVendor,
     now = new Date(),
@@ -93,12 +97,12 @@ export function scan(options: ScanOptions): ScanResult {
     });
   }
 
-  const { manifests, sources } = rootUsable
+  const { manifests, sources, infrastructure } = rootUsable
     ? walk({
         root,
         ...(options.exclude ? { exclude: options.exclude } : {}),
       })
-    : { manifests: [], sources: [] };
+    : { manifests: [], sources: [], infrastructure: [] };
 
   // Vendor SDK initialisers, built from the knowledge base rather than a
   // hardcoded table: `aliases.clientConstructors` names the option carrying the
@@ -212,6 +216,28 @@ export function scan(options: ScanOptions): ScanResult {
           ...(hit.region ? { region: hit.region } : {}),
         });
       }
+    }
+  }
+
+  // Regions this repository declares for infrastructure it controls. Under
+  // EDPB Guidelines 05/2021 the transfer is to the provider as a processor,
+  // not to the region, so the provider is the vendor and the region selects
+  // which of its jurisdictions applies.
+  if (includeInfrastructure) {
+    const infra = analyzeInfrastructure({ root, configPaths: infrastructure });
+    errors.push(...infra.errors);
+    for (const record of infra.regions) {
+      const vendor = kb.byId.get(record.provider);
+      if (!vendor) unmatchedHosts.add(record.provider);
+      signals.push({
+        kind: 'infrastructure',
+        vendorId: vendor?.id ?? null,
+        matchedOn: record.region,
+        confidence: 'high',
+        location: record.loc,
+        snippet: record.snippet,
+        region: record.region,
+      });
     }
   }
 

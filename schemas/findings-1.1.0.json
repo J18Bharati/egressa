@@ -230,7 +230,7 @@
       "enum": ["high", "medium", "low"]
     },
     "signalKind": {
-      "enum": ["dependency", "callsite", "html-script"]
+      "enum": ["dependency", "callsite", "html-script", "infrastructure"]
     },
     "location": {
       "type": "object",

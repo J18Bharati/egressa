@@ -130,12 +130,33 @@ describe('fixture: regional-multi', () => {
   const withRegion = (code: string) =>
     result.findings.find((f) => f.evidence.some((e) => e.region === code));
 
-  it('reports one provider in four regions as four findings', () => {
+  it('reads a region from Terraform and from a Serverless config', () => {
+    // Different languages, same shape: a known key, an equals sign and a
+    // quoted literal. main.tf's eu-west-2 merges with the SDK's because they
+    // are the same region; serverless.yml's us-west-2 merges with us-east-1
+    // because they are different regions with the same legal answer.
+    const evidence = result.findings.flatMap((f) => f.evidence);
+    expect(evidence.some((e) => e.file === 'main.tf' && e.region === 'eu-west-2')).toBe(true);
+    expect(evidence.some((e) => e.file === 'serverless.yml' && e.region === 'us-west-2')).toBe(
+      true,
+    );
+  });
+
+  it('refuses a Terraform region that comes from a variable', () => {
+    // main.tf declares gcp with `region = var.deployment_region`. A region
+    // resolved at plan time is not a fact about this repository.
+    expect(result.findings.some((f) => f.vendor?.id === 'gcp')).toBe(false);
+    expect(
+      result.findings.flatMap((f) => f.evidence).some((e) => e.region?.startsWith('var')),
+    ).toBe(false);
+  });
+
+  it('reports one provider in several regions as separate findings', () => {
     // Region is in the grouping key, so "AWS in Ireland" and "AWS in Virginia"
     // do not collapse into one finding whose flags came from whichever signal
     // was seen first.
     const aws = result.findings.filter((f) => f.vendor?.id === 'aws');
-    expect(aws.length).toBe(5); // four regions plus the dependency-only signal
+    expect(aws.length).toBe(5); // four distinct countries plus the dependency-only signal
     expect(new Set(aws.map((f) => f.id)).size).toBe(5);
   });
 
@@ -158,7 +179,13 @@ describe('fixture: regional-multi', () => {
   it('never guesses a region supplied at deploy time', () => {
     // src/storage.ts passes process.env.AWS_REGION. No finding may claim it.
     const regions = result.findings.flatMap((f) => f.evidence.map((e) => e.region).filter(Boolean));
-    expect(regions.sort()).toEqual(['eu-central-1', 'eu-west-1', 'eu-west-2', 'us-east-1']);
+    expect([...new Set(regions)].sort()).toEqual([
+      'eu-central-1',
+      'eu-west-1',
+      'eu-west-2',
+      'us-east-1',
+      'us-west-2',
+    ]);
   });
 
   it('flips every region to a warning when the framework lapses', () => {

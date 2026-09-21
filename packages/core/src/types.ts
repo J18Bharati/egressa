@@ -30,7 +30,7 @@ export type Severity = 'error' | 'warning' | 'note';
  */
 export type Confidence = 'high' | 'medium' | 'low';
 
-export type SignalKind = 'dependency' | 'callsite' | 'html-script';
+export type SignalKind = 'dependency' | 'callsite' | 'html-script' | 'infrastructure';
 
 export type Ecosystem = 'npm' | 'pypi';
 

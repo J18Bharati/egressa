@@ -85,9 +85,11 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   const vendorName =
     finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? 'unknown destination';
   // Without the region in the header, one provider configured in four regions
-  // renders as four identical blocks.
-  const region = finding.evidence.find((e) => e.region)?.region;
-  const name = region ? `${vendorName} (${region})` : vendorName;
+  // renders as four identical blocks. All of them, not the first: two regions
+  // in the same country share a finding because they have the same legal
+  // answer, and naming only one of them would imply the other was not found.
+  const regions = [...new Set(finding.evidence.map((e) => e.region).filter(Boolean))];
+  const name = regions.length > 0 ? `${vendorName} (${regions.join(', ')})` : vendorName;
   const suppressed = finding.suppressed ? c('dim', ' (suppressed)') : '';
   const confidence =
     finding.confidence === 'high' ? '' : c('dim', ` [${finding.confidence} confidence]`);

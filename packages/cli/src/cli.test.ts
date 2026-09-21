@@ -301,3 +301,25 @@ describe('output survives a pipe', () => {
     },
   );
 });
+
+describe('the infrastructure flag changes the scan', () => {
+  it('--no-infrastructure drops the regions declared in deployment config', () => {
+    const withInfra = scan({
+      root: 'fixtures/repos/regional-multi',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      now: NOW,
+    });
+    const without = scan({
+      root: 'fixtures/repos/regional-multi',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      now: NOW,
+      includeInfrastructure: false,
+    });
+    const infraSignals = (r: typeof withInfra) =>
+      r.findings.flatMap((f) => f.signals).filter((s) => s.kind === 'infrastructure').length;
+    expect(infraSignals(withInfra)).toBeGreaterThan(0);
+    expect(infraSignals(without)).toBe(0);
+  });
+});

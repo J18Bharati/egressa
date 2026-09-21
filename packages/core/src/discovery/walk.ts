@@ -37,6 +37,21 @@ export const MANIFEST_PATTERNS = [
 
 export const SOURCE_PATTERNS = ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'];
 
+/**
+ * Deployment configuration declaring where the repository's own workloads run.
+ *
+ * Note these are matched and then confirmed by content, not trusted by name:
+ * `vercel.json` is also the filename of this project's own Vercel vendor
+ * entry, and reading a knowledge base file as a deployment config would be the
+ * self-reference failure the write-time hook already has to avoid.
+ */
+export const INFRA_PATTERNS = [
+  '**/vercel.json',
+  '**/serverless.{yml,yaml}',
+  '**/fly.toml',
+  '**/*.tf',
+];
+
 export interface WalkOptions {
   root: string;
   exclude?: string[];
@@ -47,6 +62,7 @@ export interface WalkOptions {
 export interface WalkResult {
   manifests: string[];
   sources: string[];
+  infrastructure: string[];
 }
 
 /** Repo-relative POSIX path, so output is identical on Windows and Linux. */
@@ -65,7 +81,11 @@ export function walk(options: WalkOptions): WalkResult {
       .filter((p) => (filter ? !filter.ignores(p) : true))
       .sort();
 
-  return { manifests: collect(MANIFEST_PATTERNS), sources: collect(SOURCE_PATTERNS) };
+  return {
+    manifests: collect(MANIFEST_PATTERNS),
+    sources: collect(SOURCE_PATTERNS),
+    infrastructure: collect(INFRA_PATTERNS),
+  };
 }
 
 function buildIgnoreFilter(root: string): ReturnType<typeof ignore> | null {
