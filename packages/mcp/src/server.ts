@@ -20,7 +20,7 @@ import { z } from 'zod';
  * supplies.
  */
 
-const TOOL_VERSION = '0.1.0';
+const TOOL_VERSION = '0.2.0';
 
 const server = new McpServer({ name: 'egressa', version: TOOL_VERSION });
 

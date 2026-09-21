@@ -210,21 +210,6 @@ test from a clean container, since the bundle's shape has changed twice.
 **Priority:** P2
 **Depends on:** Create the GitHub repository and push
 
-### Start a CHANGELOG
-
-**What:** A `CHANGELOG.md`, written from the point the first tag exists.
-
-**Why:** The knowledge base is versioned data that people will pin and diff. Changes to vendor facts
-matter to anyone who acted on a previous scan, and a rename has already happened once.
-
-**Context:** No changelog exists. Commit messages are currently the only record, and they are
-detailed but not user-facing. Should distinguish engine changes from knowledge-base changes, since a
-KB update can change findings without any code moving.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** Build the publishing pipeline
-
 ## Testing
 
 ### Teach the transfers specialist that a reference is not a call
@@ -309,6 +294,15 @@ Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Start a CHANGELOG
+**Completed:** gate-layer-fixes (2026-09-22) -- written at 0.2.0 rather than waiting for the first
+tag, because the branch that prompted it changed both halves at once and the reasoning would not
+have survived to a later release. Engine and knowledge base are listed separately, as the item
+asked. `VERSION` at the repository root became the single source of the tool version in the same
+change: it had been written out in five places and two had already drifted to 0.0.0, with the MCP
+server carrying its own literal and `version.ts` claiming a build-time stamp that never happened.
+`scripts/version-consistency.test.ts` is what makes the single source real.
 
 ### Fix the wrong-host class in call-site analysis
 **Completed:** v1-build (2026-09-10) — binding collection walked every declarator in the file into

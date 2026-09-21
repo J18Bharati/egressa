@@ -1,6 +1,6 @@
 {
   "name": "@egressa/core",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Engine for Egressa: detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
   "license": "Apache-2.0",
   "type": "module",

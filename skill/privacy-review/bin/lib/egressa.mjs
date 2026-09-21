@@ -16354,7 +16354,7 @@ function expiredNote(finding, rule) {
 }
 
 // src/version.ts
-var TOOL_VERSION = "0.1.0";
+var TOOL_VERSION = "0.2.0";
 
 // src/commands/scan.ts
 function toStringArray(value) {
