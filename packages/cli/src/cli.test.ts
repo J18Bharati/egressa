@@ -114,19 +114,74 @@ describe('human output', () => {
     });
     expect(formatHuman(lapsed, { color: false })).toContain('hypothetical');
   });
+
+  it('does not render the unresolved reason as though it were a vendor name', () => {
+    // Every finding here has vendor: null and evidence[].matchedOn equal to
+    // the diagnostic sentence explaining why (see toHit() in
+    // callsites/index.ts). Promoting that sentence into the header used to
+    // make it read like a company. The reason must still survive somewhere.
+    const unresolved = scan({
+      root: 'fixtures/repos/unresolvable-hosts',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    const text = formatHuman(unresolved, { color: false });
+    const headerLines = text.split('\n').filter((line) => /^[!xi] /.test(line));
+    expect(headerLines.length).toBeGreaterThan(0);
+    for (const line of headerLines) {
+      expect(line).toContain('Unrecognised destination');
+      expect(line).not.toContain('interpolated value');
+      expect(line).not.toContain('declared more than once');
+      expect(line).not.toContain('environment variable');
+    }
+    // The reason is still present, just in the evidence line rather than the header.
+    expect(text).toContain(
+      'host is completed by an interpolated value and cannot be resolved statically',
+    );
+  });
 });
 
 describe('markdown output', () => {
   it('carries the full disclaimer and a per-vendor table', () => {
     const md = formatMarkdown(result());
     expect(md).toContain('does not assess or certify GDPR compliance');
-    expect(md).toContain('| Vendor | Processing | EU region | Rule | Confidence |');
+    expect(md).toContain('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
     expect(md).toContain('Stripe, LLC');
   });
 
   it('says how many findings it withheld when truncating', () => {
     const md = formatMarkdown(result(), { maxFindings: 0 });
     expect(md).toContain('1 further finding(s) not shown');
+  });
+
+  it('keeps the unresolved reason out of the Vendor column but visible in its own column', () => {
+    const unresolved = scan({
+      root: 'fixtures/repos/unresolvable-hosts',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    const md = formatMarkdown(unresolved);
+    const tableLines = md
+      .split('\n')
+      .filter(
+        (line) =>
+          line.startsWith('| ') && !line.startsWith('| Vendor') && !line.startsWith('| ---'),
+      );
+    expect(tableLines.length).toBe(3);
+    for (const line of tableLines) {
+      const vendorCell = line.split('|')[1]?.trim();
+      expect(vendorCell).toBe('Unrecognised destination');
+    }
+    // The reason is still present -- it moved to its own column, not to the heading.
+    expect(md).toContain(
+      '| Unrecognised destination | host is completed by an interpolated value and cannot be resolved statically |',
+    );
+    expect(md).not.toContain('### host is completed by an interpolated value');
+    expect(md).toContain('### Unrecognised destination');
   });
 });
 
@@ -395,5 +450,60 @@ describe('the infrastructure flag changes the scan', () => {
       r.findings.flatMap((f) => f.signals).filter((s) => s.kind === 'infrastructure').length;
     expect(infraSignals(withInfra)).toBeGreaterThan(0);
     expect(infraSignals(without)).toBe(0);
+  });
+});
+
+describe('a reference is not rendered like a call site', () => {
+  // `new URL(...)` and `new Request(...)` name a vendor without proving a
+  // call happened (docs/LIMITATIONS.md, "A constructed URL is a reference,
+  // not a call"). No fixture repo has one, so build a minimal one here: a
+  // single `new URL()` naming Stripe, with no `fetch`/client-constructor
+  // call site and no dependency on the `stripe` package, so the finding's
+  // evidence is entirely `reference`.
+  const referenceOnlyResult = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-reference-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'reference-only', version: '1.0.0', private: true }),
+    );
+    writeFileSync(
+      join(dir, 'src', 'index.ts'),
+      "const u = new URL('https://api.stripe.com/v1');\n",
+    );
+    return scan({
+      root: dir,
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+  };
+
+  it('has evidence of kind reference and only reference', () => {
+    const r = referenceOnlyResult();
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]?.vendor?.id).toBe('stripe');
+    expect(r.findings[0]?.evidence.map((e) => e.kind)).toEqual(['reference']);
+  });
+
+  it('is marked distinctly from a call-site finding in human output', () => {
+    const referenceText = formatHuman(referenceOnlyResult(), { color: false });
+    // express-stripe-sendgrid has an actual `fetch()` call site for Stripe
+    // (src/pay.ts), so its evidence is not reference-only.
+    const callsiteResult = scan({
+      root: 'fixtures/repos/express-stripe-sendgrid',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+    expect(callsiteResult.findings[0]?.evidence.some((e) => e.kind === 'callsite')).toBe(true);
+    const callsiteText = formatHuman(callsiteResult, { color: false });
+
+    expect(referenceText).toContain('[reference]');
+    expect(referenceText).toContain('[named, not called]');
+    expect(callsiteText).not.toContain('[reference]');
+    expect(callsiteText).not.toContain('[named, not called]');
   });
 });

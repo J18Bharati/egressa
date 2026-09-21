@@ -1,5 +1,5 @@
 import type { Finding, ScanResult } from '@egressa/core';
-import { DISCLAIMER_SHORT } from '@egressa/core';
+import { DISCLAIMER_SHORT, displayName, isReferenceOnly } from '@egressa/core';
 
 /** Built at runtime so no literal control character appears in the source. */
 const ESC = String.fromCharCode(27);
@@ -82,8 +82,7 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
       : finding.severity === 'error'
         ? c('red', 'x')
         : c('blue', 'i');
-  const vendorName =
-    finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? 'unknown destination';
+  const vendorName = displayName(finding);
   // Without the region in the header, one provider configured in four regions
   // renders as four identical blocks. All of them, not the first: two regions
   // in the same country share a finding because they have the same legal
@@ -93,8 +92,13 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   const suppressed = finding.suppressed ? c('dim', ' (suppressed)') : '';
   const confidence =
     finding.confidence === 'high' ? '' : c('dim', ` [${finding.confidence} confidence]`);
+  // A finding resting only on `reference` evidence -- a vendor named, never a
+  // resolved call site -- is a materially weaker claim than one with a call
+  // site. Flagging it here means a reader can tell without opening the JSON,
+  // even when evidence is truncated below. See docs/LIMITATIONS.md.
+  const referenceOnly = isReferenceOnly(finding) ? c('dim', ' [named, not called]') : '';
 
-  const lines = [`${marker} ${c('bold', name)}${confidence}${suppressed}`];
+  const lines = [`${marker} ${c('bold', name)}${confidence}${suppressed}${referenceOnly}`];
 
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
@@ -122,7 +126,14 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   }
 
   for (const evidence of finding.evidence.slice(0, 3)) {
-    lines.push(c('dim', `    ${evidence.file}:${evidence.startLine}  ${evidence.matchedOn}`));
+    // `callsite` is the expected, unmarked case -- data left here. Anything
+    // else (`reference`, `dependency`, `html-script`, `infrastructure`) is a
+    // weaker kind of observation and says so, so the same host string does
+    // not render identically for a `fetch()` and a `new URL()`.
+    const kindTag = evidence.kind === 'callsite' ? '' : ` [${evidence.kind}]`;
+    lines.push(
+      c('dim', `    ${evidence.file}:${evidence.startLine}  ${evidence.matchedOn}${kindTag}`),
+    );
   }
   if (finding.evidence.length > 3) {
     lines.push(c('dim', `    ... and ${finding.evidence.length - 3} more`));

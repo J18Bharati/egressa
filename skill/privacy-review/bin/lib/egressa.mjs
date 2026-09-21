@@ -14794,6 +14794,12 @@ function vendorIsDpfCertified(vendor) {
 function flags(input) {
   return { ...input, rulesVersion: EXPOSURE_RULES_VERSION };
 }
+function displayName(finding) {
+  return finding.vendor?.name ?? "Unrecognised destination";
+}
+function isReferenceOnly(finding) {
+  return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
+}
 var SARIF_VERSION = "2.1.0";
 var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
 var INFORMATION_URI = "https://github.com/egressa-dev/egressa";
@@ -14913,10 +14919,11 @@ function confidencePrefix(finding) {
   return finding.confidence === "high" ? "" : `[${finding.confidence} confidence] `;
 }
 function buildMessageText(finding) {
-  const vendor = finding.vendor?.name ?? "Unrecognised destination";
+  const vendor = displayName(finding);
   const where = finding.transfer ? ` (processing: ${finding.transfer.jurisdictions.join(", ")})` : "";
   const count = finding.evidence.length > 1 ? ` ${finding.evidence.length} references in this repository.` : "";
-  return `${confidencePrefix(finding)}${vendor}${where}.${count}`;
+  const referenceOnly = isReferenceOnly(finding) ? " Named, not called." : "";
+  return `${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}`;
 }
 function buildMessage(finding) {
   const text = buildMessageText(finding);
@@ -16071,12 +16078,13 @@ function formatHuman(result, options) {
 }
 function formatFinding(finding, c3) {
   const marker = finding.severity === "warning" ? c3("yellow", "!") : finding.severity === "error" ? c3("red", "x") : c3("blue", "i");
-  const vendorName = finding.vendor?.name ?? finding.evidence[0]?.matchedOn ?? "unknown destination";
+  const vendorName = displayName(finding);
   const regions = [...new Set(finding.evidence.map((e2) => e2.region).filter(Boolean))];
   const name = regions.length > 0 ? `${vendorName} (${regions.join(", ")})` : vendorName;
   const suppressed = finding.suppressed ? c3("dim", " (suppressed)") : "";
   const confidence = finding.confidence === "high" ? "" : c3("dim", ` [${finding.confidence} confidence]`);
-  const lines = [`${marker} ${c3("bold", name)}${confidence}${suppressed}`];
+  const referenceOnly = isReferenceOnly(finding) ? c3("dim", " [named, not called]") : "";
+  const lines = [`${marker} ${c3("bold", name)}${confidence}${suppressed}${referenceOnly}`];
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
     const narrowed = finding.exposure?.inputs.find((i2) => i2.startsWith("narrowedTo:"))?.slice("narrowedTo:".length);
@@ -16094,7 +16102,10 @@ function formatFinding(finding, c3) {
     lines.push(c3("dim", `    verified:   ${finding.transfer.lastVerified}`));
   }
   for (const evidence of finding.evidence.slice(0, 3)) {
-    lines.push(c3("dim", `    ${evidence.file}:${evidence.startLine}  ${evidence.matchedOn}`));
+    const kindTag = evidence.kind === "callsite" ? "" : ` [${evidence.kind}]`;
+    lines.push(
+      c3("dim", `    ${evidence.file}:${evidence.startLine}  ${evidence.matchedOn}${kindTag}`)
+    );
   }
   if (finding.evidence.length > 3) {
     lines.push(c3("dim", `    ... and ${finding.evidence.length - 3} more`));
@@ -16134,11 +16145,11 @@ function formatMarkdown(result, options = {}) {
     );
   }
   if (shown.length > 0) {
-    lines.push("| Vendor | Processing | EU region | Rule | Confidence |");
-    lines.push("| --- | --- | --- | --- | --- |");
+    lines.push("| Vendor | Reason | Processing | EU region | Rule | Confidence |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const f3 of shown) {
       lines.push(
-        `| ${f3.vendor?.name ?? f3.evidence[0]?.matchedOn ?? "unknown"} | ${f3.transfer?.jurisdictions.join(", ") ?? "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
+        `| ${displayName(f3)} | ${reasonCell(f3)} | ${f3.transfer?.jurisdictions.join(", ") ?? "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
       );
     }
     lines.push("");
@@ -16147,7 +16158,7 @@ function formatMarkdown(result, options = {}) {
     lines.push(`_${result.findings.length - shown.length} further finding(s) not shown._`, "");
   }
   for (const f3 of shown) {
-    lines.push(`### ${f3.vendor?.name ?? f3.evidence[0]?.matchedOn ?? "Unknown destination"}`, "");
+    lines.push(`### ${displayName(f3)}`, "");
     if (f3.transfer) {
       lines.push(`- Processing: ${f3.transfer.jurisdictions.join(", ")}`);
       lines.push(`- EU region: ${euRegionCell(f3)}`);
@@ -16172,6 +16183,11 @@ function formatMarkdown(result, options = {}) {
   }
   lines.push("---", "", DISCLAIMER);
   return lines.join("\n");
+}
+function reasonCell(finding) {
+  if (finding.vendor) return "";
+  const reasons = [...new Set(finding.evidence.map((e2) => e2.matchedOn))];
+  return reasons.join("; ");
 }
 function euRegionCell(finding) {
   const eu = finding.transfer?.euRegion;
