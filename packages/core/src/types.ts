@@ -61,6 +61,8 @@ export interface Evidence extends SourceLocation {
   devOnly?: boolean;
   /** Set when the dependency was reached transitively. */
   transitiveVia?: string[];
+  /** Region identifier this evidence carried, verbatim. */
+  region?: string;
 }
 
 export interface Signal {
@@ -74,6 +76,14 @@ export interface Signal {
   transitiveVia?: string[];
   /** For unresolved egress: the named but unresolvable source, e.g. `process.env.API_URL`. */
   unresolvedReason?: string;
+  /**
+   * A region identifier read from configuration, verbatim as written.
+   *
+   * Resolved against the vendor's own `regions` map, never from its prefix.
+   * Carried raw so an unmapped identifier can still be reported rather than
+   * silently dropped.
+   */
+  region?: string;
 }
 
 // ---------------------------------------------------------------------------

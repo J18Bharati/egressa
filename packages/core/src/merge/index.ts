@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { KnowledgeBase, VendorEntry } from '@egressa/kb';
-import { classifyExposure } from '../exposure/rules.js';
+import { type AppliedRegion, resolveRegion } from '../exposure/regions.js';
+import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
 import { RULES } from '../rules.js';
 import type {
   Confidence,
@@ -31,21 +32,55 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
   const { kb, staleVendorIds = new Set() } = options;
   const groups = new Map<
     string,
-    { ruleId: RuleId; vendor: VendorEntry | null; signals: Signal[] }
+    {
+      ruleId: RuleId;
+      vendor: VendorEntry | null;
+      signals: Signal[];
+      classified: ExposureResult | null;
+      region: AppliedRegion | null;
+    }
   >();
 
   for (const signal of signals) {
     const vendor = signal.vendorId ? (kb.byId.get(signal.vendorId) ?? null) : null;
-    const ruleId = ruleForSignal(signal, vendor, kb);
-    const key = `${signal.vendorId ?? `unknown:${signal.matchedOn}`}|${ruleId}`;
+    // Classify once, here, and carry the result into the finding. This used to
+    // run per signal for the rule id and again per group for the exposure,
+    // which agreed only because both were a pure function of the vendor. A
+    // region makes them disagree -- a finding whose rule came from one region
+    // and whose flags came from another, with nothing in the output to show it.
+    const region = vendor && signal.region ? resolveRegion(vendor, signal.region) : null;
+    const classified = vendor
+      ? classifyExposure(vendor, kb, {
+          region,
+          ...(signal.region && !region ? { unmappedRegion: signal.region } : {}),
+        })
+      : null;
+    const ruleId = classified?.ruleId ?? unmatchedRule(signal);
+
+    // Only a region that actually narrowed splits a group. An unmapped code
+    // narrows nothing, so it must not fragment findings either.
+    const narrowedTo = classified?.exposure.inputs.some((i) => i.startsWith('narrowedTo:'))
+      ? region?.country
+      : undefined;
+    const key = `${signal.vendorId ?? `unknown:${signal.matchedOn}`}|${ruleId}|${narrowedTo ?? ''}`;
+
     const existing = groups.get(key);
     if (existing) existing.signals.push(signal);
-    else groups.set(key, { ruleId, vendor, signals: [signal] });
+    else groups.set(key, { ruleId, vendor, signals: [signal], classified, region: region ?? null });
   }
 
   const findings: Finding[] = [];
   for (const group of groups.values()) {
-    findings.push(buildFinding(group.ruleId, group.vendor, group.signals, kb, staleVendorIds));
+    findings.push(
+      buildFinding(
+        group.ruleId,
+        group.vendor,
+        group.signals,
+        group.classified,
+        group.region,
+        staleVendorIds,
+      ),
+    );
   }
 
   // Deterministic order: severity, then confidence, then vendor name.
@@ -57,20 +92,17 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
   );
 }
 
-function ruleForSignal(signal: Signal, vendor: VendorEntry | null, kb: KnowledgeBase): RuleId {
-  if (!vendor) {
-    return signal.unresolvedReason
-      ? 'transfer/unresolved-egress'
-      : 'transfer/unknown-vendor-egress';
-  }
-  return classifyExposure(vendor, kb).ruleId;
+/** The rule for a signal that matched no knowledge base entry. */
+function unmatchedRule(signal: Signal): RuleId {
+  return signal.unresolvedReason ? 'transfer/unresolved-egress' : 'transfer/unknown-vendor-egress';
 }
 
 function buildFinding(
   ruleId: RuleId,
   vendor: VendorEntry | null,
   signals: Signal[],
-  kb: KnowledgeBase,
+  classified: ExposureResult | null,
+  region: AppliedRegion | null,
   staleVendorIds: Set<string>,
 ): Finding {
   const evidence = signals.map(toEvidence).sort(byStrength);
@@ -78,10 +110,15 @@ function buildFinding(
   const primary = evidence[0];
 
   const transfer = vendor ? toTransferFacts(vendor) : null;
-  const exposure = vendor ? classifyExposure(vendor, kb).exposure : null;
+  const exposure = classified?.exposure ?? null;
 
   return {
-    id: fingerprint(vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ''}`, ruleId, primary),
+    id: fingerprint(
+      vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ''}`,
+      ruleId,
+      primary,
+      exposure?.inputs.some((i) => i.startsWith('narrowedTo:')) ? (region?.country ?? null) : null,
+    ),
     ruleId,
     vendor: vendor ? { id: vendor.id, name: vendor.name, category: vendor.category } : null,
     transfer,
@@ -105,6 +142,9 @@ function toEvidence(signal: Signal): Evidence {
     confidence: signal.confidence,
     ...(signal.devOnly ? { devOnly: true } : {}),
     ...(signal.transitiveVia ? { transitiveVia: signal.transitiveVia } : {}),
+    // This list is a whitelist: a field not named here is dropped from the
+    // finding even though the signal carried it.
+    ...(signal.region ? { region: signal.region } : {}),
   };
 }
 
@@ -177,10 +217,20 @@ function buildRemediation(
  * SARIF alerts are keyed on it: a fingerprint that moved would close and reopen
  * every alert on every commit.
  */
-function fingerprint(vendorKey: string, ruleId: string, primary: Evidence | undefined): string {
-  const hash = createHash('sha256');
-  hash.update(`${vendorKey}\0${ruleId}\0${primary?.file ?? ''}\0${primary?.matchedOn ?? ''}`);
-  return hash.digest('hex').slice(0, 16);
+function fingerprint(
+  vendorKey: string,
+  ruleId: string,
+  primary: Evidence | undefined,
+  narrowedCountry: string | null,
+): string {
+  const parts = [vendorKey, ruleId, primary?.file ?? '', primary?.matchedOn ?? ''];
+  // Appended only when a region narrowed the answer. An empty component would
+  // still change the digest, because the separator count changes -- so every
+  // finding produced before regions existed hashes the identical four-field
+  // string and its alert survives the upgrade rather than closing and
+  // reopening.
+  if (narrowedCountry) parts.push(`region:${narrowedCountry}`);
+  return createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16);
 }
 
 const SEVERITY_ORDER = { error: 3, warning: 2, note: 1 } as const;
