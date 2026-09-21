@@ -480,6 +480,43 @@ describe('a reference is not rendered like a call site', () => {
     });
   };
 
+  /**
+   * The case `isReferenceOnly` exists for. A dependency signal outranks a
+   * reference in `byStrength`, so it sorts first -- and checking `evidence[0]`
+   * would then call this finding a call site when nothing observed a call.
+   * The single-signal case above would pass either way, so it does not cover
+   * the reason the function reads the whole array.
+   */
+  it('is still reference-only when a dependency signal sorts ahead of the reference', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-reference-mixed-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'mixed', version: '1.0.0', dependencies: { stripe: '^14.0.0' } }),
+    );
+    // Names the vendor twice, calls it never.
+    writeFileSync(
+      join(dir, 'src', 'index.ts'),
+      "const u = new URL('https://api.stripe.com/v1');\n",
+    );
+    const result = scan({
+      root: dir,
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+
+    const finding = result.findings.find((f) => f.vendor?.id === 'stripe');
+    const kinds = finding?.evidence.map((e) => e.kind) ?? [];
+    expect(kinds).toContain('dependency');
+    expect(kinds).toContain('reference');
+    expect(kinds).not.toContain('callsite');
+    // The dependency sorts first, which is exactly what evidence[0] would trip on.
+    expect(finding?.evidence[0]?.kind).toBe('dependency');
+    expect(formatHuman(result, { color: false })).toContain('named, not called');
+  });
+
   it('has evidence of kind reference and only reference', () => {
     const r = referenceOnlyResult();
     expect(r.findings).toHaveLength(1);

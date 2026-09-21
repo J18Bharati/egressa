@@ -116,6 +116,19 @@ means *this vendor moves if a decision is withdrawn*, so it is false for an SCC 
 **Severity and confidence are orthogonal.** Severity comes from KB facts; confidence from how the
 signal was obtained. Both are surfaced; do not collapse them.
 
+**A `reference` is not a `callsite`, and rendering it as one re-creates the defect it exists to
+prevent.** `callsite` means data left here; `reference` means a vendor is named here, which is not
+evidence that a call happened. `new URL()` and `new Request()` are reference sinks: constructing
+either opens no socket, and the same expression appears in an HTTPS-redirect middleware parsing an
+*inbound* request and in a DSN rewritten only to set a query parameter. They are demoted rather than
+dropped because the vendor attribution can still be right — a `new URL()` on the line before a
+`fetch` names the right vendor. Two rules follow. A reference sink emits only on a **resolved**
+host, the same rule knowledge base sinks already follow, so an unresolved one is silent rather than
+naming a variable. And confidence is capped at `medium`, as a ceiling and not a value: the certainty
+is about the string, never about a transfer. `docs/LIMITATIONS.md` records the deliberate false
+negatives this buys, and `scripts/check-schemas.ts` keeps `SIGNAL_KINDS` and the JSON enum in step —
+it compares the kinds as well as the rule ids, because they were hand-synced past it once.
+
 **Nothing defaults to `error`,** and SARIF must not set `security-severity` — that would file
 privacy findings in GitHub's Security tab dressed as vulnerabilities. CI failure is expressed only
 through `--fail-on` and exit codes (`0` clean, `1` findings, `2` usage, `3` internal, `4` KB load).
@@ -172,6 +185,25 @@ from `kb/` instead.
 subagents. It covers what the engine does not: trackers firing before consent, personal data in logs,
 session replay recording inputs, storage with no expiry, opt-out signals. `transfers.md` shells out
 to the CLI rather than reimplementing detection by grep.
+
+**`scope.sh` gates route work; they never assert.** Its three helpers must not depend on the
+writer's exit status. They used to end in `grep -q`, which exits at its first match and closes the
+pipe under the still-writing `printf`; the writer took SIGPIPE, `pipefail` promoted 141 to the
+pipeline status, and every content gate read `false` — but only once the file list exceeded a pipe
+buffer, so every fixture passed and every real repository failed, silently and closed. Three rules
+came out of fixing it. A gate that could not be evaluated prints `SCOPE_DEGRADED: <GATE> exit=<n>`
+beside its `false`, and `SKILL.md` dispatches that gate's specialist anyway, because a gate that did
+not run is not a gate that came back false. A helper's status must be the *search's* own, which is
+why `declared()` runs its search on its own line — `pipefail` reports the rightmost non-zero, so a
+filter matching nothing (1) masks a real failure (2). And every file list is passed after `--`: the
+reviewed tree is arbitrary third-party source, and a file named `-i.js` otherwise reaches `sed` as
+its in-place flag and this read-only review rewrites what it was asked to read.
+
+Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
+line is the one thing the script asserts rather than routes. Everything else matches raw text: a
+needless route is cheap and a missed one is not. `scripts/scope-gates.test.ts` is the contract —
+the first test of any shell script here, and its large-tree cases are generated rather than
+committed, because a fixture small enough to commit is the reason the original bug survived.
 
 Four rules govern it, and three of them exist because the research contradicted the obvious design:
 
@@ -243,6 +275,17 @@ else here and `jq` is not guaranteed.
 `kb/` is CC-BY-4.0 with its own LICENSE, deliberately separable from the Apache-2.0 code. Entries
 state facts and cite them; nothing evaluative belongs in the data layer.
 
+**A package alias may be a namespace, and an ambiguous one is refused.** An alias ending `/*` —
+`@sentry/*` — matches the whole npm scope, which is registry-enforced: `@sentry/*` is Sentry by
+construction, unlike `eu-*`, which is not the EEA by construction. The two look like the same
+inference and are not. Exact aliases stay beside the wildcards because they carry `kind`, and
+`merge/confidence.ts` lifts a direct dependency to `high` only for `official-sdk`; a namespace also
+holds build plugins and test helpers, so a wildcard is `kind: scope` and falls through to `medium`.
+`lookupPackage` tries exact first, then collects **every** matching scope and returns nothing when
+two vendors both claim the name — the same refusal `findSinks()` makes, which the package index did
+not have until a wildcard existed to expose it. `kb:validate` rejects the overlap in the data too,
+naming the owning vendor, so the runtime branch should be unreachable on a shipped knowledge base.
+
 Exposure is **computed, not authored** — `packages/core/src/exposure/rules.ts` is a versioned rule
 table, and `kb/ratings/exposure-overrides.json` holds only overrides with mandatory rationale.
 `kb/adequacy-status.json` is separate and EC-sourced, which is what makes
@@ -296,7 +339,7 @@ Because nothing has ever been published, `schemas/findings-1.0.0.json` was corre
 the Chapter V flag semantics were fixed, rather than a 2.0.0 being cut for a version no consumer
 has. That option closes at the first release; after it, a meaning change needs a new schema file.
 
-The knowledge base holds 15 vendors. `pnpm kb:coverage` reports the matched fraction over the
+The knowledge base holds 16 vendors. `pnpm kb:coverage` reports the matched fraction over the
 fixture repositories — note that the package denominator counts every declared dependency including
 frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 

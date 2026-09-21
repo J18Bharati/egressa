@@ -227,6 +227,32 @@ KB update can change findings without any code moving.
 
 ## Testing
 
+### Carry the reviewed file list NUL-delimited end to end
+
+**What:** Build the file list in `skill/privacy-review/scripts/scope.sh` with `git ls-files -z` /
+`find -print0` and filter it NUL-aware (`grep -z`, `read -r -d ''`), instead of joining it with
+newlines and converting with `tr '\n' '\0'` just before `xargs -0`.
+
+**Why:** The `-0` is only nominally end to end. The list is newline-separated from line 61 and is
+filtered by newline-oriented `grep`, `sed` and `while IFS= read -r f` before being re-delimited, so
+a filename containing a newline is already split into two fragments by the time NUL delimiting
+starts. Both halves then fail the `[ -f "$f" ]` existence check and are dropped. The result is
+silent under-review: a file can remove itself from the scan by its own name. Not injection — the
+`--` terminators added alongside this item close that — but it defeats the coverage the gates claim,
+and silence is the failure mode this script has already been bitten by twice.
+
+**Context:** Pre-existing; identical on `v1-build`, so not a regression from the gate work. Raised
+by the security specialist during the `/review` pass on `gate-layer-fixes` and deliberately deferred
+there: it touches the whole front half of the script, including the `SELF_EXCLUDED` and `EXISTING`
+derivations, and risks regressing the gates that pass now. `scripts/scope-gates.test.ts` gives it a
+harness that did not exist before, including hostile-filename cases to extend. Minimum bar for
+calling it done: a fixture whose filename contains a newline is either reviewed or reported, never
+dropped in silence.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ### Test the three shell scripts that still have none
 
 **What:** Add vitest-driven tests for `skill/privacy-review/scripts/scan-transfers.sh`,

@@ -131,12 +131,20 @@ emit CODE_FILES "$(printf '%s\n' "$CODE" | sed '/^$/d' | wc -l | tr -d ' ')"
 # value `xargs` reports distinctly (as 124).
 #
 # GATE_OUT / GATE_STATUS are the last helper's result; `gate` reads them.
+#
+# Every file list below is passed after `--`. The list comes from the reviewed
+# repository, which is arbitrary third-party source, and a filename is allowed
+# to look exactly like an option. Without the terminator a file named `-i.js`
+# reaches `sed` as its in-place flag and this read-only review rewrites the
+# files it was asked to read; a file named `--regexp=^|z.js` reaches `grep` as
+# a pattern and turns every content gate true on a repository containing none
+# of the things they test for. Both were demonstrated, not theorised.
 
 # Runs grep over the reviewed CODE set. $1 is the pattern.
 hits() {
   [ -z "$CODE" ] && return 1
   GATE_OUT="$(printf '%s\n' "$CODE" | tr '\n' '\0' \
-    | xargs -0 -r sh -c 'grep -lIE "$0" "$@" 2>/dev/null; s=$?; [ "$s" -le 1 ] && exit 0; exit 255' "$1" 2>/dev/null)"
+    | xargs -0 -r sh -c 'grep -lIE "$0" -- "$@" 2>/dev/null; s=$?; [ "$s" -le 1 ] && exit 0; exit 255' "$1" 2>/dev/null)"
   GATE_STATUS=$?
   [ -n "$GATE_OUT" ] && return 0
   [ "$GATE_STATUS" -eq 0 ] && return 1
@@ -155,10 +163,23 @@ paths() {
 # Dependency manifests are read whole regardless of mode: a tracker dependency added
 # three commits ago is still in the product being reviewed.
 declared() {
-  GATE_OUT="$(grep -rIlE "$1" --include=package.json . 2>/dev/null \
-    | grep -v node_modules \
-    | { [ -n "${SELF_REL:-}" ] && grep -v "^\./${SELF_REL}/" || cat; })"
+  # The search runs on its own line so GATE_STATUS is *its* status. Filtering it
+  # in the same pipeline would report the rightmost non-zero instead: a genuine
+  # failure in the search (exit 2) followed by a filter that matches nothing
+  # (exit 1) yields 1, which reads as a healthy no-match and never reaches the
+  # `>1` branch that prints SCOPE_DEGRADED. That is the same silent-failure
+  # shape the rest of this file was rewritten to remove, and it hid here because
+  # this is the only helper whose pipeline continues past the search.
+  #
+  # `--exclude-dir` rather than filtering node_modules out of the result: the
+  # walk is what must not read it. Filtering afterwards still opens every
+  # installed package.json, which contradicts the invariant in CLAUDE.md, costs
+  # time proportional to an installed tree rather than the reviewed source, and
+  # matched `node_modules` anywhere in a path rather than as a directory.
+  _d_found="$(grep -rIlE "$1" --include=package.json --exclude-dir=node_modules . 2>/dev/null)"
   GATE_STATUS=$?
+  GATE_OUT="$(printf '%s' "$_d_found" \
+    | { [ -n "${SELF_REL:-}" ] && grep -v "^\./${SELF_REL}/" || cat; })"
   [ -n "$GATE_OUT" ] && return 0
   [ "$GATE_STATUS" -le 1 ] && return 1
   return "$GATE_STATUS"
@@ -205,6 +226,21 @@ _comment_sed() {
 
 # Like hits(), with comment lines removed first. Only a boolean is wanted, so the
 # files of one family are stripped and searched as a single stream.
+#
+# The search ends in `grep -q`, which is what the rest of this file was rewritten
+# to remove -- but here it is correct, and the difference is the shell it runs in.
+# The original bug was `pipefail` promoting the writer's SIGPIPE to the pipeline
+# status. Inside this `sh -c` there is no `pipefail`, so `sed` taking SIGPIPE when
+# `grep` stops early is what is supposed to happen and the status is grep's own.
+#
+# Without the early exit this function reads every byte of every file in a family
+# even once it has its answer: measured at 4ms against 508ms on one 49 MB file,
+# and it captured every matching line -- about 1.6 MB for that file -- into a
+# shell variable to decide a boolean. Now it stops at the first match and reports
+# one character.
+#
+# Error handling mirrors hits(): grep's own status is mapped inside the batch,
+# and only a genuine failure becomes 255, which xargs reports distinctly as 124.
 hits_live() {
   [ -z "$CODE" ] && return 1
   _hl_worst=1
@@ -212,8 +248,15 @@ hits_live() {
     _hl_files="$(printf '%s\n' "$CODE" | grep -E "$(_comment_exts "$_hl_fam")")"
     [ -z "$_hl_files" ] && continue
     GATE_OUT="$(printf '%s\n' "$_hl_files" | tr '\n' '\0' \
-      | xargs -0 -r sed -E "$(_comment_sed "$_hl_fam")" 2>/dev/null \
-      | grep -aE "$1")"
+      | xargs -0 -r env \
+          _HL_SED="$(_comment_sed "$_hl_fam")" _HL_PAT="$1" \
+          sh -c '
+            sed -E "$_HL_SED" -- "$@" 2>/dev/null | grep -qaE "$_HL_PAT"
+            s=$?
+            [ "$s" -eq 0 ] && { printf M; exit 0; }
+            [ "$s" -eq 1 ] && exit 0
+            exit 255
+          ' sh 2>/dev/null)"
     GATE_STATUS=$?
     [ -n "$GATE_OUT" ] && return 0
     [ "$GATE_STATUS" -gt 1 ] && _hl_worst="$GATE_STATUS"

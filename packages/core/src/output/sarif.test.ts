@@ -1,9 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Ajv04 from 'ajv-draft-04';
 import addFormats from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
 import { DISCLAIMER } from '../claims.js';
 import { RULE_IDS } from '../rules.js';
+import { scan } from '../scan.js';
 import type { ScanResult } from '../types.js';
 import { toSarif } from './sarif.js';
 
@@ -116,5 +119,48 @@ describe('toSarif: confidence and suppression', () => {
 
   it('surfaces an assumed-lapsed adequacy run in run properties', () => {
     expect(sarif.runs[0].properties.assumedAdequacyLapsed).toEqual(['US:DPF']);
+  });
+});
+
+/**
+ * SARIF is the surface GitHub Code Scanning renders, and `docs/LIMITATIONS.md`
+ * says a consumer that shows a reference the way it shows a call site
+ * re-creates the defect the kind exists to prevent. The human and markdown
+ * formatters both have a case for this; SARIF did not.
+ */
+describe('toSarif marks a reference-only finding', () => {
+  const NOW = new Date('2026-09-06T12:00:00.000Z');
+
+  const scanOf = (source: string): ScanResult => {
+    const dir = mkdtempSync(join(tmpdir(), 'sarif-reference-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'r', version: '1.0.0', private: true }),
+    );
+    writeFileSync(join(dir, 'src', 'index.ts'), source);
+    return scan({
+      root: dir,
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      includeCallsites: true,
+      now: NOW,
+    });
+  };
+
+  const messages = (result: ScanResult): string[] =>
+    ((toSarif(result, { toolVersion: '0.1.0' }) as AnySarif).runs[0].results as AnySarif[]).map(
+      (r) => r.message.text as string,
+    );
+
+  it('says so when nothing observed a call', () => {
+    const texts = messages(scanOf("const u = new URL('https://api.stripe.com/v1');\n"));
+    expect(texts.some((t) => t.includes('Named, not called.'))).toBe(true);
+  });
+
+  it('and stays silent when a call site is present', () => {
+    const texts = messages(scanOf("await fetch('https://api.stripe.com/v1/charges');\n"));
+    expect(texts.length).toBeGreaterThan(0);
+    expect(texts.some((t) => t.includes('Named, not called.'))).toBe(false);
   });
 });

@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -64,6 +71,16 @@ const runScope = (cwd: string, env: NodeJS.ProcessEnv = {}): Run => {
   }
   return { lines, degraded, stdout, code };
 };
+
+/**
+ * A `grep` that fails only for one flag form and otherwise delegates to the
+ * real one. The real path is resolved here rather than hardcoded: grep is not
+ * at /usr/bin on every system, and a shim that cannot find it would fail these
+ * tests for a reason unrelated to what they check.
+ */
+const REAL_GREP = execFileSync('sh', ['-c', 'command -v grep'], { encoding: 'utf8' }).trim();
+const grepShim = (flag: string) =>
+  `#!/bin/sh\nfor a in "$@"; do case "$a" in ${flag}) exit 2 ;; esac; done\nexec ${REAL_GREP} "$@"\n`;
 
 const scratch = (tag: string) => mkdtempSync(join(tmpdir(), `egressa-scope-${tag}-`));
 
@@ -154,10 +171,7 @@ describe('an unhealthy gate is loud', () => {
     // the script's path keeps working, so the run is otherwise normal.
     const bin = scratch('bin');
     const shim = join(bin, 'grep');
-    writeFileSync(
-      shim,
-      '#!/bin/sh\nfor a in "$@"; do case "$a" in -lIE) exit 2 ;; esac; done\nexec /usr/bin/grep "$@"\n',
-    );
+    writeFileSync(shim, grepShim('-lIE'));
     chmodSync(shim, 0o755);
 
     const run = runScope(root, { PATH: `${bin}:${process.env.PATH}` });
@@ -167,6 +181,29 @@ describe('an unhealthy gate is loud', () => {
     expect(logging).toHaveLength(1);
     expect(logging[0]).toMatch(/^SCOPE_LOGGING exit=\d+$/);
     expect(logging[0]).not.toMatch(/exit=(0|1)$/);
+  });
+
+  // The case above drives a hits()-based gate. declared() is the only helper
+  // whose pipeline continues past the search, so its status was the one that
+  // could be masked by a downstream filter -- a real failure reading manifests
+  // reported a clean `false`. SCOPE_TRACKERS is its only caller.
+  it('reports SCOPE_DEGRADED for a manifest gate too, not just a content gate', () => {
+    const root = scratch('degraded-manifest');
+    plant(root, 'package.json', '{"name":"d","dependencies":{"posthog-js":"^1.0.0"}}\n');
+    fill(root, 3, 'export const go = () => 1;\n');
+
+    // Fail only the recursive manifest search; every other grep still works.
+    const bin = scratch('bin-manifest');
+    const shim = join(bin, 'grep');
+    writeFileSync(shim, grepShim('-rIlE'));
+    chmodSync(shim, 0o755);
+
+    const run = runScope(root, { PATH: `${bin}:${process.env.PATH}` });
+    expect(run.lines.SCOPE_END).toBe('ok');
+    expect(run.lines.SCOPE_TRACKERS).toBe('false');
+    const trackers = run.degraded.filter((d) => d.startsWith('SCOPE_TRACKERS '));
+    expect(trackers).toHaveLength(1);
+    expect(trackers[0]).not.toMatch(/exit=(0|1)$/);
   });
 });
 
@@ -265,5 +302,56 @@ describe('generated output is not read as evidence', () => {
     plant(root, 'src/replay.js', "import LogRocket from 'logrocket';\nLogRocket.init('x');\n");
     const run = runScope(root);
     expect(run.lines.SCOPE_SESSION_REPLAY).toBe('true');
+  });
+});
+
+/**
+ * A reviewed repository is arbitrary third-party source, and a filename is
+ * allowed to look exactly like an option. Both cases below were demonstrated
+ * against this script before the `--` terminators were added: the first
+ * rewrote the files it was asked to read, the second turned every content
+ * gate true on a repository containing none of the things they test for.
+ *
+ * The first is the one to keep: a review that edits the reviewed tree breaks
+ * the only promise the tool makes about itself.
+ */
+describe('a filename cannot be read as an option', () => {
+  const base = (root: string) => plant(root, 'package.json', '{"name":"h","private":true}\n');
+
+  it('does not let a file named -i.js turn sed into an in-place edit', () => {
+    const root = scratch('hostile-sed');
+    base(root);
+    const live = 'const x = 1;\n// a real comment that must survive\n';
+    plant(root, 'src/app.js', live);
+    plant(root, '-i.js', 'x\n');
+
+    const run = runScope(root);
+    expect(run.lines.SCOPE_END).toBe('ok');
+    // The review is read-only. Byte-identical, and no sed backup beside it.
+    expect(readFileSync(join(root, 'src/app.js'), 'utf8')).toBe(live);
+    expect(existsSync(join(root, 'src/app.js.js'))).toBe(false);
+  });
+
+  it('does not let a file named like a grep pattern flip the content gates', () => {
+    const root = scratch('hostile-grep');
+    base(root);
+    plant(root, 'src/app.js', 'const x = 1;\n');
+    plant(root, '--regexp=^|z.js', 'x\n');
+
+    const run = runScope(root);
+    expect(run.lines.SCOPE_END).toBe('ok');
+    for (const gate of [
+      'SCOPE_TRACKER_CODE',
+      'SCOPE_SESSION_REPLAY',
+      'SCOPE_CONSENT',
+      'SCOPE_CLIENT_STORAGE',
+      'SCOPE_LOGGING',
+      'SCOPE_CACHE',
+      'SCOPE_OPT_OUT',
+      'SCOPE_ERASURE',
+    ]) {
+      expect({ gate, value: run.lines[gate] }).toEqual({ gate, value: 'false' });
+    }
+    expect(run.degraded).toEqual([]);
   });
 });
