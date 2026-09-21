@@ -11,6 +11,17 @@ import { formatMarkdown } from '../format/markdown.js';
 import { applySuppressions } from '../suppress.js';
 import { TOOL_VERSION } from '../version.js';
 
+// citty (via its bundled mri-style parser) only turns a repeated flag into an
+// array once it sees a *second* occurrence -- one occurrence yields a plain
+// string, zero yields undefined. Verified empirically against the pinned
+// citty 0.1.6, not assumed: `parseArgs(['--exclude','a'])` returns a string,
+// `parseArgs(['--exclude','a','--exclude','b'])` returns an array.
+function toStringArray(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (Array.isArray(value)) return value.map(String);
+  return [String(value)];
+}
+
 function isDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory();
@@ -67,6 +78,12 @@ export const scanCommand = defineCommand({
     },
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
     config: { type: 'string', description: 'Path to .egressa.yml' },
+    exclude: {
+      type: 'string',
+      description:
+        'Glob to skip during discovery (repeatable: --exclude a/** --exclude b/**). ' +
+        'Adds to, not replacing, any exclude: in .egressa.yml; .egressaignore and .gitignore are honoured too.',
+    },
     color: {
       type: 'boolean',
       default: true,
@@ -86,6 +103,15 @@ export const scanCommand = defineCommand({
     }
 
     const config = loadConfig(root, args.config ? String(args.config) : undefined);
+    // citty collects a repeated string flag into an array itself (a second
+    // occurrence of --exclude turns the value from a string into string[]);
+    // it never appears as an array after exactly one occurrence, so this has
+    // to accept string, string[] or undefined. Config and flag are unioned,
+    // not one replacing the other -- .egressa.yml is typically the team's
+    // committed baseline (deprecated trees, generated output) and the flag is
+    // a one-off narrowing for a single invocation; a user who adds --exclude
+    // almost never means "and also stop honouring the team's file".
+    const exclude = [...(config.exclude ?? []), ...toStringArray(args.exclude)];
     // The flag wins over the file, but only when it was actually typed --
     // `--fail-on` carries a default, so its value alone cannot say which.
     const failOnGiven = rawArgs.some((a) => a === '--fail-on' || a.startsWith('--fail-on='));
@@ -99,7 +125,7 @@ export const scanCommand = defineCommand({
         root,
         toolVersion: TOOL_VERSION,
         ...(args.kb ? { kbPath: String(args.kb) } : {}),
-        ...(config.exclude ? { exclude: config.exclude } : {}),
+        ...(exclude.length > 0 ? { exclude } : {}),
         includeTransitive: Boolean(args['include-transitive']) || config.includeTransitive === true,
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,

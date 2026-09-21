@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
@@ -266,6 +266,80 @@ describe('negated flags actually change the scan', () => {
     );
     expect(declared.length).toBeGreaterThan(3);
     expect(declared.filter((name) => name?.startsWith('no-'))).toEqual([]);
+  });
+});
+
+describe('--exclude scopes discovery', () => {
+  const json = (args: string[]) => {
+    const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return JSON.parse(stdout) as ReturnType<typeof scan>;
+  };
+
+  // fixtures/repos/nextjs-analytics-heavy has a google-analytics finding backed
+  // by exactly one signal: the fetch() call in src/analytics.ts. It has no
+  // dependency entry, so excluding that file is the one way to make it
+  // disappear entirely rather than merely lose a signal.
+  const base = ['scan', 'fixtures/repos/nextjs-analytics-heavy', '--format', 'json', '--kb', 'kb'];
+
+  it('drops findings sourced only from the excluded path', () => {
+    const on = json(base);
+    expect(on.summary.findingCount).toBe(3);
+    expect(on.findings.some((f) => f.vendor?.id === 'google-analytics')).toBe(true);
+
+    const off = json([...base, '--exclude', 'src/analytics.ts']);
+    expect(off.summary.findingCount).toBe(2);
+    expect(off.findings.some((f) => f.vendor?.id === 'google-analytics')).toBe(false);
+    // openai and sentry are still declared in package.json, so their manifest
+    // signal survives losing the call site -- --exclude removes what it
+    // names, not the vendor everywhere it's mentioned.
+    expect(off.findings.some((f) => f.vendor?.id === 'openai')).toBe(true);
+    expect(off.findings.some((f) => f.vendor?.id === 'sentry')).toBe(true);
+  });
+
+  it('accepts the flag more than once and applies every glob', () => {
+    // Repeating --exclude has to collect into an array rather than the second
+    // occurrence silently overwriting the first (citty's own array handling
+    // for a repeated string flag, exercised end to end here).
+    const off = json([...base, '--exclude', 'src/analytics.ts', '--exclude', 'package.json']);
+    // Losing package.json as well removes the dependency signal that kept
+    // openai and sentry alive in the single-flag case above.
+    expect(off.summary.findingCount).toBe(0);
+  });
+
+  it('unions the flag with .egressa.yml rather than one replacing the other', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-exclude-'));
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(
+      join(dir, 'package.json'),
+      readFileSync('fixtures/repos/nextjs-analytics-heavy/package.json', 'utf8'),
+    );
+    writeFileSync(
+      join(dir, 'src', 'analytics.ts'),
+      readFileSync('fixtures/repos/nextjs-analytics-heavy/src/analytics.ts', 'utf8'),
+    );
+    // The config excludes the source file (dropping google-analytics, which
+    // has no other signal); the flag separately excludes the manifest
+    // (dropping the dependency signal that keeps openai and sentry alive).
+    // If either exclude silently replaced the other, one vendor would remain.
+    writeFileSync(join(dir, '.egressa.yml'), 'version: 1\nexclude: ["src/analytics.ts"]\n');
+
+    const withConfigOnly = json(['scan', dir, '--format', 'json', '--kb', 'kb']);
+    expect(withConfigOnly.summary.findingCount).toBe(2);
+
+    const withBoth = json([
+      'scan',
+      dir,
+      '--format',
+      'json',
+      '--kb',
+      'kb',
+      '--exclude',
+      'package.json',
+    ]);
+    expect(withBoth.summary.findingCount).toBe(0);
   });
 });
 

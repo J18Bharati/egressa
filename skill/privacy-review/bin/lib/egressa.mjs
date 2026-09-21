@@ -16200,6 +16200,11 @@ function expiredNote(finding, rule) {
 var TOOL_VERSION = "0.1.0";
 
 // src/commands/scan.ts
+function toStringArray(value) {
+  if (value === void 0) return [];
+  if (Array.isArray(value)) return value.map(String);
+  return [String(value)];
+}
 function isDirectory(path) {
   try {
     return statSync3(path).isDirectory();
@@ -16253,6 +16258,10 @@ var scanCommand = defineCommand({
     },
     kb: { type: "string", description: "Path to a knowledge base directory" },
     config: { type: "string", description: "Path to .egressa.yml" },
+    exclude: {
+      type: "string",
+      description: "Glob to skip during discovery (repeatable: --exclude a/** --exclude b/**). Adds to, not replacing, any exclude: in .egressa.yml; .egressaignore and .gitignore are honoured too."
+    },
     color: {
       type: "boolean",
       default: true,
@@ -16268,6 +16277,7 @@ var scanCommand = defineCommand({
       process.exit(EXIT.USAGE);
     }
     const config = loadConfig(root, args.config ? String(args.config) : void 0);
+    const exclude = [...config.exclude ?? [], ...toStringArray(args.exclude)];
     const failOnGiven = rawArgs.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
     const failOn = parseFailOn(
       failOnGiven ? String(args["fail-on"]) : config.failOn ?? String(args["fail-on"])
@@ -16278,7 +16288,7 @@ var scanCommand = defineCommand({
         root,
         toolVersion: TOOL_VERSION,
         ...args.kb ? { kbPath: String(args.kb) } : {},
-        ...config.exclude ? { exclude: config.exclude } : {},
+        ...exclude.length > 0 ? { exclude } : {},
         includeTransitive: Boolean(args["include-transitive"]) || config.includeTransitive === true,
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,

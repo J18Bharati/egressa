@@ -48,6 +48,24 @@ Read this before trusting a clean scan.
 A finding means your code *references* a vendor. It does not mean personal data was sent, that the
 data was personal, or that sending it was unlawful. See [docs/CLAIMS.md](docs/CLAIMS.md).
 
+## Scoping what gets scanned
+
+`node_modules` is never walked, in any mode. Beyond that, four mechanisms decide what's read, and
+they combine rather than compete:
+
+- **`.gitignore`** is honoured automatically.
+- **`.egressaignore`**, same syntax, for anything you want out of a scan without taking it out of
+  version control.
+- **`exclude:` in `.egressa.yml`** — a list of globs, the natural place for a team's standing
+  exclusions: a deprecated tree, generated output, a vendored copy nobody wants findings against.
+- **`--exclude <glob>`**, repeatable on the command line, for narrowing a single run. It's added to
+  whatever `exclude:` already lists, not swapped in for it — the common case is "also skip this,
+  just this once," not "stop honouring what the team committed."
+
+```bash
+egressa scan . --exclude 'legacy/**' --exclude '**/*.generated.ts'
+```
+
 ## The surfaces
 
 One engine. All of these consume the same versioned findings schema.
