@@ -245,6 +245,22 @@ describe('cli end to end', () => {
     expect(parsed.disclaimer).toContain('does not assess or certify');
   });
 
+  it('answers --version with the tool version', () => {
+    // It was in PASS_THROUGH and exited 1 with "No version specified", because
+    // the root command's meta carried no version for citty to print.
+    //
+    // citty prints it through consola, which silences itself when the
+    // environment says a test runner is active -- and the child inherits
+    // vitest's. Without these removed the version is printed nowhere.
+    const { NODE_ENV, TEST, VITEST, ...env } = process.env;
+    const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', '--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    });
+    expect(stdout.trim()).toBe(readFileSync('VERSION', 'utf8').trim());
+  });
+
   it('explains a rule without needing a scan', () => {
     const { stdout } = run(['explain', 'transfer/third-country-egress']);
     expect(stdout).toContain('Chapter V');

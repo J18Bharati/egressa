@@ -311,15 +311,27 @@ the published binaries cannot resolve it. Note pnpm keeps it under `packages/cli
 the workspace root, so anything running from elsewhere in the tree will not find it and will report
 `engine.degraded`.
 
-**The CLI banner is load-bearing.** `packages/cli/tsup.config.ts` emits the shebang *and* a
-`createRequire` shim, and `cli.ts` no longer carries a shebang of its own — a banner is written
-above the entry's first line, and a shebang only counts as the first bytes of the file.
+**The binary banner is load-bearing, for both binaries.** `tsup.banner.ts` at the root defines it
+once, and `packages/cli/tsup.config.ts` and `packages/mcp/tsup.config.ts` both import it. It emits
+the shebang *and* a `createRequire` shim, and neither `cli.ts` nor `server.ts` carries a shebang of
+its own — a banner is written above the entry's first line, and a shebang only counts as the first
+bytes of the file.
 
-The `require` shim is there because `citty` and `yaml` are inlined (`noExternal`), and the CommonJS
-inside them calls `require()` at run time. esbuild rewrites those to a `__require` shim whose first
-branch is `typeof require !== "undefined" ? require : <throw>`; in an ESM bundle nothing defines it,
-so the binary threw `Dynamic require of "process" is not supported` the moment it ran outside a
-`node_modules` tree. Defining `require` above the shim is the supported fix.
+The `require` shim is there because both bundles inline `@egressa/core`, and through it CommonJS
+(`yaml`, and `citty` in the CLI) that calls `require()` at run time. esbuild rewrites those to a
+`__require` shim whose first branch is `typeof require !== "undefined" ? require : <throw>`; in an
+ESM bundle nothing defines it, so the binary threw `Dynamic require of "process" is not supported`
+the moment it ran outside a `node_modules` tree. Defining `require` above the shim is the supported
+fix. The MCP server shipped without it once, because its config assumed the banner carried only the
+shebang — which is why there is now one definition rather than two.
+
+**`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`
+and connects an MCP client to `egressa-mcp`, and fails the build if either cannot start. Nothing in
+`pnpm test` can catch a bundle that does not boot, since vitest aliases every package to source.
+The script resolves the MCP SDK from the package beside the binary, never by bare import: from
+`scripts/` a bare import finds whatever copy sits in a parent directory, or none on a fresh clone.
+`pnpm smoke:pack` runs the same check against the packed tarballs installed in a clean
+`node:20-slim` container. It needs Docker and the network, so it is manual and not in CI.
 
 `splitting: false` on the CLI, because the dynamic `import('oxc-parser')` gave tsup a split point
 and the emitted chunks broke any consumer that copies `cli.js` alone.

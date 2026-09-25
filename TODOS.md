@@ -386,7 +386,13 @@ this service send?" can be answered only from the JSON today.
 git ref rather than a registry. There is no `.changeset`, no `.npmrc`, and `.github/workflows/` holds
 only `ci.yml`, `kb-validate.yml` and `link-check.yml`. `SECURITY.md` describes the provenance
 verification step as future, and must be updated when this lands. The published tarball needs a smoke
-test from a clean container, since the bundle's shape has changed twice.
+test from a clean container, since the bundle's shape has changed twice. `pnpm smoke:pack` now does that
+for all four tarballs installed together in `node:20-slim`, by running `scripts/smoke-dist.mjs`
+against the installed binaries. Wire it into the release workflow rather than writing a second
+check. It installs all four because `egressa` and `@egressa/mcp` declare `@egressa/core` and
+`@egressa/kb` as runtime dependencies although tsup bundles them, so a tarball published alone
+would try to fetch packages that do not exist on the registry. Decide that before the first
+publish.
 
 **Effort:** M
 **Priority:** P2

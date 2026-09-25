@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { binaryBanner } from '../../tsup.banner.js';
 
 export default defineConfig({
   entry: ['src/cli.ts'],
@@ -19,23 +20,6 @@ export default defineConfig({
   // imports rather than one, and could not run outside a node_modules tree.
   external: ['oxc-parser'],
   noExternal: [/@egressa\//, 'citty', 'yaml'],
-  // The banner carries two things that must precede all bundled code.
-  //
-  // The shebang, which used to live in cli.ts -- it cannot stay there now,
-  // because a banner is emitted above the entry's own first line and a shebang
-  // is only honoured as the very first bytes of the file.
-  //
-  // And a real `require`. Inlining citty and yaml pulls in CommonJS that calls
-  // require() at run time; esbuild replaces those with a __require shim whose
-  // first branch is `typeof require !== "undefined" ? require : <throw>`. In an
-  // ESM bundle nothing defines it, so the shim threw "Dynamic require of
-  // \"process\" is not supported" on the first call. Defining require here, above
-  // the shim, is the supported fix.
-  banner: {
-    js: [
-      '#!/usr/bin/env node',
-      "import { createRequire as __egressaCreateRequire } from 'node:module';",
-      'const require = __egressaCreateRequire(import.meta.url);',
-    ].join('\n'),
-  },
+  // Shebang plus a real `require`; see tsup.banner.ts for why both are needed.
+  banner: { js: binaryBanner },
 });

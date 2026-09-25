@@ -7,7 +7,7 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "build": "pnpm -r --filter './packages/**' build && node scripts/copy-kb.mjs",
+    "build": "pnpm -r --filter './packages/**' build && node scripts/copy-kb.mjs && node scripts/smoke-dist.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --pretty",
@@ -17,7 +17,8 @@
     "kb:coverage": "tsx packages/kb-loader/scripts/coverage.ts",
     "schema:check": "tsx scripts/check-schemas.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm kb:validate && pnpm schema:check && pnpm test",
-    "skill:bundle": "node scripts/bundle-skill-cli.mjs"
+    "skill:bundle": "node scripts/bundle-skill-cli.mjs",
+    "smoke:pack": "node scripts/smoke-pack.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
