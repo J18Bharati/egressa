@@ -1,9 +1,10 @@
-import { defineCommand, runMain } from 'citty';
+import { type ArgsDef, defineCommand, runMain } from 'citty';
 import { explainCommand } from './commands/explain.js';
 import { scanCommand } from './commands/scan.js';
 import { schemaCommand } from './commands/schema.js';
 import { vendorsCommand } from './commands/vendors.js';
 import { EXIT } from './exit-codes.js';
+import { unknownFlags } from './flags.js';
 import { TOOL_VERSION } from './version.js';
 
 const subCommands = {
@@ -54,7 +55,22 @@ export function withDefaultCommand(argv: string[]): string[] {
   return ['scan', ...argv];
 }
 
-runMain(main, { rawArgs: withDefaultCommand(process.argv.slice(2)) }).catch((error: unknown) => {
+const rawArgs = withDefaultCommand(process.argv.slice(2));
+const command = rawArgs[0];
+if (command !== undefined && Object.hasOwn(subCommands, command)) {
+  const unknown = unknownFlags(
+    rawArgs.slice(1),
+    subCommands[command as keyof typeof subCommands].args as ArgsDef,
+  );
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `egressa: unknown option ${unknown.join(', ')}. Run \`egressa ${command} --help\` for the options.\n`,
+    );
+    process.exit(EXIT.USAGE);
+  }
+}
+
+runMain(main, { rawArgs }).catch((error: unknown) => {
   process.stderr.write(`egressa: ${(error as Error).message}\n`);
   process.exit(EXIT.INTERNAL);
 });

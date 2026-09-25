@@ -112,6 +112,15 @@ export const scanCommand = defineCommand({
     // a one-off narrowing for a single invocation; a user who adds --exclude
     // almost never means "and also stop honouring the team's file".
     const exclude = [...(config.exclude ?? []), ...toStringArray(args.exclude)];
+    // Discovery has no negation, so `!glob` would be accepted and do nothing --
+    // the same silent widening as a mistyped flag. Refuse it, from either source.
+    const negated = exclude.filter((glob) => glob.startsWith('!'));
+    if (negated.length > 0) {
+      process.stderr.write(
+        `egressa: exclude globs cannot be negated (${negated.join(', ')}); list only what to skip\n`,
+      );
+      process.exit(EXIT.USAGE);
+    }
     // The flag wins over the file, but only when it was actually typed --
     // `--fail-on` carries a default, so its value alone cannot say which.
     const failOnGiven = rawArgs.some((a) => a === '--fail-on' || a.startsWith('--fail-on='));

@@ -263,24 +263,6 @@ properly means forcing colour on — a pseudo-terminal, or a seam in `formatHuma
 **Priority:** P3
 **Depends on:** None
 
-### Reject a flag the CLI cannot honour
-
-**What:** Exit `2` on an unknown flag name, and on an `--exclude` glob starting with `!`.
-
-**Why:** `egressa scan . --exlude 'legacy/**'` exits `0` and scans everything, because citty does not
-reject unknown arguments and `packages/cli/src/cli.ts` has no post-parse guard. Values are validated
-(`--fail-on bogus` exits `2`). Flag names are not. A typo in CI widens the scan silently, which
-undercuts the reason `--exclude` is recorded in the output at all. A negated glob is accepted and
-does nothing, which is the same failure.
-
-**Context:** E9 and E11 in `docs/reviews/2026-09-25-live-run-triage.md`. Compare the parsed args
-with the command's declared `args`, including citty's `no-` forms. The structural guard in
-`cli.test.ts` already walks those declarations.
-
-**Effort:** S
-**Priority:** P1
-**Depends on:** None
-
 ### Read Python dependency manifests
 
 **What:** A `pyproject.toml` / `requirements.txt` reader in `packages/core/src/manifests/`, plus
@@ -563,6 +545,14 @@ in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Reject a flag the CLI cannot honour
+**Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/cli/src/flags.ts` checks every flag
+against the matched command's declared `args` before citty runs, and an unknown one exits `2` with
+its name. It accepts both spellings, `--no-` negation, aliases, `--name=value`, and a string flag's
+value even when that value starts with `-`. A negated `exclude` glob, from the flag or from
+`.egressa.yml`, now exits `2` too. Every flag the skills, docs and action pass was checked against
+the declarations first.
 
 ### Start a CHANGELOG
 **Completed:** gate-layer-fixes (2026-09-22) -- written at 0.2.0 rather than waiting for the first

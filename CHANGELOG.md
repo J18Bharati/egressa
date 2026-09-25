@@ -29,6 +29,9 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
 
 ### Fixed
 
+- **An unknown flag was accepted and ignored.** `egressa scan . --exlude 'legacy/**'` scanned
+  everything and exited 0. An undeclared flag is now a usage error (exit `2`) that names it, and so
+  is a negated `exclude` glob, which discovery never honoured.
 - **The MCP server could not start.** `dist/server.js` threw `Dynamic require of "process" is not
   supported` at import, because its build dropped the `createRequire` banner the CLI carries for
   exactly that error. Both builds now import one banner from `tsup.banner.ts`.

@@ -260,6 +260,16 @@ describe('cli end to end', () => {
     expect(parsed.disclaimer).toContain('does not assess or certify');
   });
 
+  it('refuses a mistyped flag as a usage error instead of scanning everything', () => {
+    const { code } = run(['scan', 'fixtures/repos/clean-eu-only', '--exlude', 'x/**']);
+    expect(code).toBe(EXIT.USAGE);
+  });
+
+  it('refuses a negated exclude glob, which discovery cannot honour', () => {
+    const { code } = run(['scan', 'fixtures/repos/clean-eu-only', '--exclude', '!x/**']);
+    expect(code).toBe(EXIT.USAGE);
+  });
+
   it('answers --version with the tool version', () => {
     // It was in PASS_THROUGH and exited 1 with "No version specified", because
     // the root command's meta carried no version for citty to print.
