@@ -59,4 +59,48 @@ describe('an unmapped region is marked on its evidence', () => {
     const flagged = findings[0]?.evidence.filter((e) => e.regionUnmapped);
     expect(flagged?.map((e) => e.file)).toEqual(['main.tf']);
   });
+
+  it('records the unmapped region in the audit trail whatever order the signals arrive in', () => {
+    // scan() pushes dependency signals before infrastructure ones, and the
+    // audit trail used to come from whichever signal was read first.
+    const dep = signal({
+      kind: 'dependency',
+      matchedOn: '@aws-sdk/client-s3',
+      location: { file: 'package.json', startLine: 5, startColumn: 5, endLine: 5, endColumn: 30 },
+      snippet: '"@aws-sdk/client-s3": "^3.0.0"',
+    });
+    const infra = signal({ region: 'eu-wset-1' });
+    for (const order of [
+      [dep, infra],
+      [infra, dep],
+    ]) {
+      const [finding] = mergeSignals(order, { kb });
+      expect(finding?.exposure?.inputs).toContain('region:eu-wset-1');
+      expect(finding?.exposure?.inputs).toContain('regionSource:unmapped');
+      expect(finding?.exposure?.inputs).not.toContain('regionSource:none');
+    }
+  });
+
+  it('records every unmapped region, not only the first', () => {
+    const [finding] = mergeSignals(
+      [signal({ region: 'eu-wset-1' }), signal({ region: 'us-esat-1', snippet: 'b' })],
+      { kb },
+    );
+    expect(finding?.exposure?.inputs).toEqual(
+      expect.arrayContaining(['region:eu-wset-1', 'region:us-esat-1', 'regionSource:unmapped']),
+    );
+  });
+
+  it('marks a region on a vendor with no map, since nothing resolved it', () => {
+    const [evidence] = evidenceOf([
+      signal({ vendorId: 'vercel', matchedOn: 'vercel', region: 'iad1' }),
+    ]);
+    expect(evidence).toMatchObject({ region: 'iad1', regionUnmapped: true });
+  });
+
+  it('never flags an empty region', () => {
+    const [evidence] = evidenceOf([signal({ region: '' })]);
+    expect(evidence).not.toHaveProperty('regionUnmapped');
+    expect(evidence).not.toHaveProperty('region');
+  });
 });

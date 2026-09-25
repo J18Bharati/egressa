@@ -47,6 +47,9 @@ const PASS_THROUGH = new Set(['--help', '-h', '--version', '-v']);
 export function withDefaultCommand(argv: string[]): string[] {
   const first = argv[0];
   if (first === undefined) return ['scan'];
+  // citty answers a version request only when argv is exactly `['--version']`,
+  // so `-v` printed usage and exited 1 -- the "findings" code.
+  if (first === '-v' && argv.length === 1) return ['--version'];
   if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv;
   return ['scan', ...argv];
 }

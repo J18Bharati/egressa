@@ -34,15 +34,17 @@ export function resolveRegion(vendor: VendorEntry, raw: string): AppliedRegion |
 }
 
 /**
- * Whether a region was read for a vendor whose map does not know it.
+ * Whether a region was read for a knowledge base vendor and could not be
+ * resolved to a country -- because the vendor's map lacks it, or because the
+ * vendor has no map yet. Either way it narrowed nothing.
  *
- * True only when there is a vendor and a region and the map has no entry. A
- * signal with no knowledge base vendor has no map to be absent from, so it is
- * never flagged. One predicate, used by grouping and by evidence alike, so a
- * finding's audit trail and its evidence cannot disagree about the same region.
+ * False when there is no vendor (nothing to resolve against) and for an empty
+ * identifier, which no reader reports as a region. The single predicate behind
+ * both `regionSource:unmapped` in a finding's audit trail and `regionUnmapped`
+ * on its evidence, so the two cannot disagree.
  */
 export function isUnmappedRegion(vendor: VendorEntry | null, raw: string | undefined): boolean {
-  return vendor !== null && raw !== undefined && resolveRegion(vendor, raw) === null;
+  return vendor !== null && !!raw?.trim() && resolveRegion(vendor, raw) === null;
 }
 
 /**

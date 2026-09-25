@@ -268,12 +268,17 @@ describe('cli end to end', () => {
     // environment says a test runner is active -- and the child inherits
     // vitest's. Without these removed the version is printed nowhere.
     const { NODE_ENV, TEST, VITEST, ...env } = process.env;
-    const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', '--version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    });
-    expect(stdout.trim()).toBe(readFileSync('VERSION', 'utf8').trim());
+    for (const flag of ['--version', '-v']) {
+      const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', flag], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      });
+      expect({ flag, out: stdout.trim() }).toEqual({
+        flag,
+        out: readFileSync('VERSION', 'utf8').trim(),
+      });
+    }
   });
 
   it('explains a rule without needing a scan', () => {

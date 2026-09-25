@@ -601,7 +601,7 @@
                   },
                   "regionUnmapped": {
                     "const": true,
-                    "description": "Present when region matched no entry in the vendor's regions map, so it narrowed nothing. The identifier is still what the configuration declares."
+                    "description": "Present when region could not be resolved to a country -- the vendor's regions map lacks it, or the vendor has no map yet -- so it narrowed nothing. The identifier is still what the configuration declares."
                   }
                 }
               }

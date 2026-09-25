@@ -154,7 +154,7 @@ describe('classifyExposure: a region selects which jurisdiction applies', () => 
 
   it('does not narrow on an unknown region, and says so', () => {
     expect(resolveRegion(aws, 'mars-north-1')).toBeNull();
-    const inputs = classifyExposure(aws, kb, { unmappedRegion: 'mars-north-1' }).exposure.inputs;
+    const inputs = classifyExposure(aws, kb, { unmappedRegions: ['mars-north-1'] }).exposure.inputs;
     expect(inputs).toContain('regionSource:unmapped');
     expect(inputs.some((i) => i.startsWith('narrowedTo:'))).toBe(false);
   });

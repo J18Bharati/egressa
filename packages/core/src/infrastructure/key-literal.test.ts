@@ -61,6 +61,79 @@ describe('the key must stand alone', () => {
   });
 });
 
+describe('only code counts, not strings or comments', () => {
+  // Each of these reported a region the file does not declare, after the
+  // first rewrite started reading every match on a line.
+  it('ignores a region in a trailing comment', () => {
+    const text = 'provider "aws" {\n  region = "eu-west-1" # was region = "us-east-1"\n}';
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+
+  it('ignores a commented default after a variable', () => {
+    const text = 'provider "aws" {\n  region = var.region // default region = "us-east-1"\n}';
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('ignores a region in a trailing comment in fly.toml', () => {
+    const records = fly('primary_region = "ams" # primary_region = "iad"\n');
+    expect(records.map((r) => r.region)).toEqual(['ams']);
+  });
+
+  it('ignores a block comment, including one spanning lines', () => {
+    const text = [
+      'provider "aws" {',
+      '  /* region = "us-east-1" */ region = "eu-west-1"',
+      '  /*',
+      '  region = "us-west-2"',
+      '  */',
+      '}',
+    ].join('\n');
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+
+  it('does not let braces inside a tag value move the depth', () => {
+    // `}}` in a string made the nested tag read as the provider's own region,
+    // and dropped the real one.
+    const text = [
+      'provider "aws" {',
+      '  default_tags {',
+      '    tags = { note = "}}", region = "emea" }',
+      '  }',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+
+  it('does not leave the block early on a lone brace in a string', () => {
+    const text = [
+      'provider "aws" {',
+      '  default_tags {',
+      '    tags = { Owner = "team}" }',
+      '  }',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+
+  it('does not count braces inside an interpolation', () => {
+    const text = [
+      'provider "aws" {',
+      '  profile = "${lookup(var.profiles, "a")}-${var.env}"',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+
+  it('ends the block at the brace that closes it, not at the end of the line', () => {
+    const text =
+      'provider "aws" {\n  region = "eu-west-1" }  resource "x" "y" { region = "us-east-1" }';
+    expect(tf(text).map((r) => r.region)).toEqual(['eu-west-1']);
+  });
+});
+
 describe('what the rewrite must keep doing', () => {
   it('reads fly.toml primary_region, attributed to fly', () => {
     const records = fly('app = "demo"\nprimary_region = "ams"\n');
