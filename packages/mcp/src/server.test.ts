@@ -207,4 +207,13 @@ describe('vendor lookups', () => {
     expect(result.found).toBe(true);
     expect(result.fullDescription).toContain('Chapter V');
   });
+
+  it('refuses a negated exclude glob as a tool error rather than ignoring it', async () => {
+    const response = (await client.callTool({
+      name: 'scan_repository',
+      arguments: { path: 'fixtures/repos/clean-eu-only', exclude: ['!x/**'] },
+    })) as { isError?: boolean; content: { text: string }[] };
+    expect(response.isError).toBe(true);
+    expect(response.content[0]?.text).toContain('cannot be negated');
+  });
 });

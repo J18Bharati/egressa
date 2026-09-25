@@ -77,9 +77,16 @@ is. Nothing later in this step, including the "no gate fires" case below, descri
 under which Transfers is skipped; if you find yourself asking whether it still runs, the answer is
 always yes.
 
-**Not every gate selects a specialist.** Four are context, passed to specialists to inform severity
-and to the summary, but never used to dispatch: `SCOPE_FRONTEND`, `SCOPE_BACKEND`, `SCOPE_CONSENT`
-and `SCOPE_ERASURE`. A true value on any of them is not an unrouted finding and not a bug.
+**Not every gate selects a specialist.** Five are context, passed to specialists to inform severity
+and to the summary, but never used to dispatch: `SCOPE_FRONTEND`, `SCOPE_BACKEND`, `SCOPE_CONSENT`,
+`SCOPE_OPT_OUT` and `SCOPE_ERASURE`. A true value on any of them is not an unrouted finding and not
+a bug.
+
+`SCOPE_OPT_OUT` says whether opt-out handling code exists — a GPC or Do Not Track read, or any
+`opt_out`. It does not dispatch the opt-out signals specialist: that checklist covers the preference
+signals owed by a business that sells or shares data, and its first rule is to emit nothing when no
+advertising or cross-context tracker is present, which is what the tracker gates already test. Pass
+it to that specialist when it runs, so it knows whether there is a handler to follow.
 
 `SCOPE_ERASURE` in particular fires on any `delete`-shaped function or the word `GDPR`, so it goes
 true on almost any codebase including ones with nothing to report. It is there to tell a specialist

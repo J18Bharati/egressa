@@ -13,10 +13,18 @@ describes the state of the repository rather than an artifact anyone can install
 
 ## [Unreleased]
 
-Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in place.
+Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 
 ### Added
 
+- **Python dependency manifests are read.** `requirements*.txt` and `pyproject.toml` (PEP 621
+  dependencies and extras, PEP 735 groups, Poetry tables), with PEP 503 name normalisation and
+  dev-only detection. Both field tests missed Twilio in five production files because no Python
+  manifest was read. Declared dependencies only: no Python lockfile, and no Python call sites.
+  Installed packages are not read, for the same reason as `node_modules`: `site-packages`,
+  `dist-packages`, `__pypackages__`, any dot directory, and any directory holding a `pyvenv.cfg`,
+  whatever it is named. A `pyproject.toml` is read with a small TOML tokeniser, so a multi-line
+  string, an array of tables or an inline table cannot be read as a dependency.
 - **`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`,
   connects an MCP client to `egressa-mcp`, and has each one scan a small repository. It fails the
   build unless both scans used the native parser and the knowledge base shipped beside that binary.
@@ -29,6 +37,20 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
 
 ### Fixed
 
+- **`SCOPE_OPT_OUT` was computed and used for nothing**, and SKILL.md did not say so. It is now
+  documented as a context gate. The opt-out signals checklist stays routed on the tracker gates,
+  because its own scope rule is to report nothing without an advertising tracker. A test fails on
+  any future gate that is neither routed nor listed as context.
+- **A flag citty would ignore was accepted.** `egressa scan . --exlude 'legacy/**'` scanned
+  everything and exited 0. The CLI now accepts exactly what citty honours, and anything else is a
+  usage error (exit `2`) that names it. That includes the camelCase spelling (`--failOn note` was
+  accepted and ignored), `=value` on a boolean, and a string flag whose next token starts with `-`,
+  which citty does not take as its value — write `--exclude=-legacy/**`.
+- **An `exclude` glob that cannot be honoured is refused on every surface.** A negated glob
+  (`!legacy/**`) or a non-string entry is a usage error in the CLI, a tool error in MCP, and a
+  `TypeError` from `scan()`. A single-glob `exclude:` in `.egressa.yml` is now one glob; it used to be
+  spread into single characters and excluded nothing. Every `.egressa.yml` error now exits `2`
+  rather than `3`.
 - **The MCP server could not start.** `dist/server.js` threw `Dynamic require of "process" is not
   supported` at import, because its build dropped the `createRequire` banner the CLI carries for
   exactly that error. Both builds now import one banner from `tsup.banner.ts`.
@@ -53,6 +75,13 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
   checked against a primary source. Datadog's default has changed across major versions
   (`mask-user-input`, then `mask`, then `mask-user-input`). Every documented version masks inputs,
   and the row records the history rather than a single value.
+
+### Knowledge base — `2026.09.21` → `2026.09.26`
+
+- `pypi` aliases for Twilio (`twilio`) and AWS (`boto3`, `botocore`), each checked against the
+  publisher on PyPI.
+- `kb:validate` rejects a `pypi` alias that is not in PEP 503 normalised form, which could never
+  match, and a `pypi` wildcard, since PyPI has no namespaces.
 
 ## [0.2.0] — 2026-09-22
 

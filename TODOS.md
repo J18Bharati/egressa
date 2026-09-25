@@ -141,23 +141,29 @@ same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
 **Priority:** P2
 **Depends on:** None
 
-### Route the opt-out specialist on `SCOPE_OPT_OUT`
+### Decide whether the review should check objection and direct-marketing opt-outs
 
-**What:** Add `SCOPE_OPT_OUT` to the opt-out-signals dispatch condition at `SKILL.md:71`, so the row
-reads `SCOPE_TRACKERS`, `SCOPE_TRACKER_CODE` or `SCOPE_OPT_OUT`.
+**What:** Decide whether privacy-review gets a checklist for honouring an objection or an
+unsubscribe: an `opt_out` or `stop_contacting` state that is recorded but never acted on, and
+outreach to people who never signed up. If yes, add the provisions to
+`references/legal-basis.md` first.
 
-**Why:** `scope.sh` computes the gate, but no row dispatches on it and the context-only list at
-`SKILL.md:81` does not name it, so it has no effect. In the 2026-09-25 field test, the backend repo
-set it `true`. The skill did not dispatch the specialist. A dispatch made by hand, outside the
-routing, returned three substantive Art 21(1) findings.
+**Why:** In the 2026-09-25 field test, an ad-hoc dispatch outside the skill's routing returned three
+substantive findings of this kind against a backend that emails debtors. One was an `opt_out`
+auto-action that no code path executes. No shipped checklist covers this. `opt-out-signals.md` is
+about GPC and similar signals owed by a business that sells or shares data, and it correctly stays
+silent without advertising trackers. The findings cited Art 21(1), which `legal-basis.md` does not
+carry. Under this skill's rules, nothing may be cited until it does.
 
-**Context:** The specialist is one of the two never validated (see the item above), so this sends
-more traffic to an unvalidated checklist. Do both. A `scope-gates.test.ts` case is not enough on its
-own because routing lives in `SKILL.md` prose. Assert the table row in `claims-contract.test.ts`, or
-in a small routing test. Triage F2 in `docs/reviews/2026-09-25-live-run-triage.md`.
+**Context:** F2 in `docs/reviews/2026-09-25-live-run-triage.md`. The triage first recommended
+routing `opt-out-signals.md` on `SCOPE_OPT_OUT`. That was wrong, because the checklist's own scope
+rule would then emit nothing. `SCOPE_OPT_OUT` is now documented as a context gate, and
+`scope-gates.test.ts` fails on any gate that is neither routed nor listed as context. A new
+checklist is a product-scope decision, so record it in `docs/ROADMAP.md` too. It also needs the
+cold-context validation the other specialists had.
 
-**Effort:** S
-**Priority:** P1
+**Effort:** M
+**Priority:** P2
 **Depends on:** None
 
 ### Decide whether replay inside a general SDK needs consent routing
@@ -263,42 +269,6 @@ properly means forcing colour on — a pseudo-terminal, or a seam in `formatHuma
 **Priority:** P3
 **Depends on:** None
 
-### Reject a flag the CLI cannot honour
-
-**What:** Exit `2` on an unknown flag name, and on an `--exclude` glob starting with `!`.
-
-**Why:** `egressa scan . --exlude 'legacy/**'` exits `0` and scans everything, because citty does not
-reject unknown arguments and `packages/cli/src/cli.ts` has no post-parse guard. Values are validated
-(`--fail-on bogus` exits `2`). Flag names are not. A typo in CI widens the scan silently, which
-undercuts the reason `--exclude` is recorded in the output at all. A negated glob is accepted and
-does nothing, which is the same failure.
-
-**Context:** E9 and E11 in `docs/reviews/2026-09-25-live-run-triage.md`. Compare the parsed args
-with the command's declared `args`, including citty's `no-` forms. The structural guard in
-`cli.test.ts` already walks those declarations.
-
-**Effort:** S
-**Priority:** P1
-**Depends on:** None
-
-### Read Python dependency manifests
-
-**What:** A `pyproject.toml` / `requirements.txt` reader in `packages/core/src/manifests/`, plus
-`pypi` aliases for `twilio` and `boto3`.
-
-**Why:** Across two field tests, `twilio`, a vendor already in the knowledge base, was missed in five
-production files, because 11 Python manifests were never read. `boto3` hides AWS whenever
-`@aws-sdk/*` is absent. The privacy-review skill's `STACK:` line reports `python` on the same tree,
-so the two halves disagree.
-
-**Context:** T21 in the 2026-09-21 triage, which was accepted and never tracked here. The index side
-already exists at `kb-loader/src/index.ts:24`. Python *call-site* analysis stays in
-`docs/ROADMAP.md`. This item is the manifest half only.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
-
 ### Let `unmatched` be filtered
 
 **What:** Apply `--min-confidence` to `unmatched`, or add `--no-unmatched` / `--only-unmatched`.
@@ -396,6 +366,43 @@ security pass reproduced this with `od -c`. The same stance already governs `sco
 
 **Context:** Found by the branch review of `field-test-2-fixes` (finding 7). The issue predates
 that branch, but the branch edited the render path. SARIF and JSON escape by construction.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Finish the Python surface: lookups, `unmatched`, constraints
+
+**What:** Four gaps left by the manifest reader, found by the branch review of
+`cli-and-routing-fixes`:
+- `egressa vendors show boto3` and MCP `lookup_vendor` look up npm only, and MCP `check_package`
+  does not normalise a pypi name.
+- `unmatched.packages` is one set across ecosystems, so an npm and a pypi package with the same
+  name are indistinguishable.
+- A file referenced by `-c` from a requirements file pins versions and installs nothing. Only
+  `constraints*.txt` is skipped by name today.
+- The `kb:validate` pypi rule has no negative test, and it re-implements `normalisePypiName`.
+
+**Why:** `docs/LIMITATIONS.md` now points a user at `unmatched` for missing Python aliases, and
+the lookup commands are how they would check one.
+
+**Context:** Keying `unmatched` by ecosystem changes the findings schema. That is free before the
+first release and needs a new schema file after it.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Refuse a manifest reached through a symlink out of the scan root
+
+**What:** Skip any discovered manifest whose real path is outside the root.
+
+**Why:** `manifests/index.ts` reads whatever path discovery returns, and a symlink in a reviewed
+repository can point anywhere on the machine. The problem predates the Python reader, but the new
+patterns widen it. The security pass reproduced it.
+
+**Context:** Branch review of `cli-and-routing-fixes`. `egressa schema` also resolves `schemas/`
+against the working directory rather than the package, which is the same class of assumption.
 
 **Effort:** S
 **Priority:** P2
@@ -563,6 +570,21 @@ in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Read Python dependency manifests
+**Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/core/src/manifests/python.ts` reads
+`requirements*.txt` and `pyproject.toml` (PEP 621, PEP 735, Poetry), with `pypi` aliases for Twilio
+and AWS and a `kb:validate` rule that keeps them PEP 503 normalised. On the field-test target Twilio
+is now reported where it was missed. Python call sites and lockfiles remain on the roadmap. Other
+vendors' Python SDKs need their own `pypi` aliases, each checked against its publisher.
+
+### Reject a flag the CLI cannot honour
+**Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/cli/src/flags.ts` checks every flag
+against the matched command's declared `args` before citty runs, and an unknown one exits `2` with
+its name. It accepts both spellings, `--no-` negation, aliases, `--name=value`, and a string flag's
+value even when that value starts with `-`. A negated `exclude` glob, from the flag or from
+`.egressa.yml`, now exits `2` too. Every flag the skills, docs and action pass was checked against
+the declarations first.
 
 ### Start a CHANGELOG
 **Completed:** gate-layer-fixes (2026-09-22) -- written at 0.2.0 rather than waiting for the first

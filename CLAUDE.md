@@ -365,7 +365,7 @@ framing was rejected, and the ordered publish steps. Read it before proposing pr
 records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is that
 no git remote exists, so every documented plugin install path currently resolves to nothing.
 
-`docs/ROADMAP.md` records what v1 deliberately excludes (Python, cross-module constants, HTML
+`docs/ROADMAP.md` records what v1 deliberately excludes (Python call sites, cross-module constants, HTML
 `<script src>`, tag managers, PII data-flow) and what is not planned at all. Infrastructure as code
 has moved out of that list: `packages/core/src/infrastructure/` reads Terraform, Serverless and
 Vercel configuration for the regions a repository declares.

@@ -260,6 +260,78 @@ describe('cli end to end', () => {
     expect(parsed.disclaimer).toContain('does not assess or certify');
   });
 
+  /** Like run(), but keeps stderr, so a usage error is checked for what it says. */
+  const runErr = (args: string[]) => {
+    try {
+      execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, stderr: '' };
+    } catch (error) {
+      const e = error as { status: number; stderr: string };
+      return { code: e.status, stderr: e.stderr ?? '' };
+    }
+  };
+
+  it('refuses a mistyped flag as a usage error instead of scanning everything', () => {
+    const { code, stderr } = runErr(['scan', 'fixtures/repos/clean-eu-only', '--exlude', 'x/**']);
+    expect(code).toBe(EXIT.USAGE);
+    expect(stderr).toContain('unknown option --exlude');
+  });
+
+  it('refuses a mistyped flag with no subcommand too', () => {
+    const { code, stderr } = runErr(['fixtures/repos/clean-eu-only', '--failOn', 'note']);
+    expect(code).toBe(EXIT.USAGE);
+    expect(stderr).toContain('--failOn');
+  });
+
+  it('refuses a negated exclude glob, which discovery cannot honour', () => {
+    const { code, stderr } = runErr(['scan', 'fixtures/repos/clean-eu-only', '--exclude=!x/**']);
+    expect(code).toBe(EXIT.USAGE);
+    expect(stderr).toContain('cannot be negated');
+  });
+
+  describe('an exclude list in .egressa.yml', () => {
+    const repo = (config: string) => {
+      const dir = mkdtempSync(join(tmpdir(), 'egressa-cfg-'));
+      writeFileSync(join(dir, '.egressa.yml'), config);
+      return dir;
+    };
+
+    it('refuses a negated glob there as well', () => {
+      const { code, stderr } = runErr(['scan', repo('exclude:\n  - "!legacy/**"\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('cannot be negated');
+    });
+
+    it('refuses an entry YAML read as a number, instead of crashing', () => {
+      const { code, stderr } = runErr(['scan', repo('exclude:\n  - legacy/**\n  - 2024\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('must be glob strings');
+    });
+
+    it('reads a single glob as one glob, not a list of characters', () => {
+      const dir = repo('exclude: legacy/**\n');
+      mkdirSync(join(dir, 'legacy'));
+      writeFileSync(join(dir, 'legacy', 'pay.ts'), "fetch('https://api.stripe.com/v1/x');\n");
+      const { code, stdout } = run(['scan', dir, '--format', 'json']);
+      expect(code).toBe(EXIT.CLEAN);
+      const doc = JSON.parse(stdout);
+      expect(doc.scan.exclude).toEqual(['legacy/**']);
+      expect(doc.summary.findingCount).toBe(0);
+    });
+
+    it('reports a suppression with no reason as a usage error', () => {
+      const { code, stderr } = runErr([
+        'scan',
+        repo('suppressions:\n  - vendor: stripe\n    reason: ""\n'),
+      ]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('must say why');
+    });
+  });
+
   it('answers --version with the tool version', () => {
     // It was in PASS_THROUGH and exited 1 with "No version specified", because
     // the root command's meta carried no version for citty to print.

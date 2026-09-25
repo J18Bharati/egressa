@@ -78,6 +78,18 @@
           "kind": "framework-integration",
           "detectTransitive": false
         }
+      ],
+      "pypi": [
+        {
+          "name": "boto3",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "botocore",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
       ]
     },
     "hosts": [

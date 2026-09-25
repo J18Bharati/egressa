@@ -1,6 +1,6 @@
 import { statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { type ScanResult, scan, toSarif } from '@egressa/core';
+import { type ScanResult, excludeProblem, scan, toSarif } from '@egressa/core';
 import type { Confidence, Severity } from '@egressa/core';
 import { defineCommand } from 'citty';
 import { loadConfig } from '../config.js';
@@ -102,7 +102,15 @@ export const scanCommand = defineCommand({
       process.exit(EXIT.USAGE);
     }
 
-    const config = loadConfig(root, args.config ? String(args.config) : undefined);
+    // A config that cannot be honoured is a usage error, like a bad flag -- not
+    // an internal failure (exit 3), which is where its throw used to land.
+    let config: ReturnType<typeof loadConfig>;
+    try {
+      config = loadConfig(root, args.config ? String(args.config) : undefined);
+    } catch (error) {
+      process.stderr.write(`egressa: ${(error as Error).message}\n`);
+      process.exit(EXIT.USAGE);
+    }
     // citty collects a repeated string flag into an array itself (a second
     // occurrence of --exclude turns the value from a string into string[]);
     // it never appears as an array after exactly one occurrence, so this has
@@ -112,6 +120,11 @@ export const scanCommand = defineCommand({
     // a one-off narrowing for a single invocation; a user who adds --exclude
     // almost never means "and also stop honouring the team's file".
     const exclude = [...(config.exclude ?? []), ...toStringArray(args.exclude)];
+    const excludeError = excludeProblem(exclude);
+    if (excludeError) {
+      process.stderr.write(`egressa: ${excludeError}\n`);
+      process.exit(EXIT.USAGE);
+    }
     // The flag wins over the file, but only when it was actually typed --
     // `--fail-on` carries a default, so its value alone cannot say which.
     const failOnGiven = rawArgs.some((a) => a === '--fail-on' || a.startsWith('--fail-on='));

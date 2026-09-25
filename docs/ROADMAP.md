@@ -5,10 +5,12 @@ omission, and so contributors know what is already planned.
 
 ## Next
 
-**Python ecosystem.** `requirements.txt`, `pyproject.toml`, `poetry.lock`, plus `requests` and
-`httpx` call sites. The knowledge base is already keyed by vendor identity with per-ecosystem
-package aliases and the schema already has a `pypi` slot, so this is a manifest parser, a sink
-table and alias entries — not a redesign.
+**Python call sites and lockfiles.** Declared Python dependencies are read now —
+`requirements*.txt` and `pyproject.toml` (PEP 621, PEP 735 groups, Poetry) — with `pypi` aliases for
+the vendors whose Python SDK has been checked. What remains is `requests` and `httpx` call sites,
+which need a Python parser and a sink table, and `poetry.lock` / `uv.lock` for
+`--include-transitive`. Neither is a redesign: the knowledge base is keyed by vendor identity with
+per-ecosystem aliases.
 
 **Cross-module constant resolution.** Today `import { API_BASE } from './config'` is unresolved.
 A whole-program constant table keyed on resolved relative specifiers would close the most common

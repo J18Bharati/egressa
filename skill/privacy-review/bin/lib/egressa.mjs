@@ -12011,7 +12011,7 @@ function parseRawArgs(args = [], opts = {}) {
   }
   return out;
 }
-function parseArgs(rawArgs, argsDef) {
+function parseArgs(rawArgs2, argsDef) {
   const parseOptions = {
     boolean: [],
     string: [],
@@ -12036,7 +12036,7 @@ function parseArgs(rawArgs, argsDef) {
       parseOptions.alias[arg.name] = arg.alias;
     }
   }
-  const parsed = parseRawArgs(rawArgs, parseOptions);
+  const parsed = parseRawArgs(rawArgs2, parseOptions);
   const [...positionalArguments] = parsed._;
   const parsedArgsProxy = new Proxy(parsed, {
     get(target, prop) {
@@ -12123,16 +12123,16 @@ async function runCommand(cmd, opts) {
   }
   return { result };
 }
-async function resolveSubCommand(cmd, rawArgs, parent) {
+async function resolveSubCommand(cmd, rawArgs2, parent) {
   const subCommands2 = await resolveValue(cmd.subCommands);
   if (subCommands2 && Object.keys(subCommands2).length > 0) {
-    const subCommandArgIndex = rawArgs.findIndex((arg) => !arg.startsWith("-"));
-    const subCommandName = rawArgs[subCommandArgIndex];
+    const subCommandArgIndex = rawArgs2.findIndex((arg) => !arg.startsWith("-"));
+    const subCommandName = rawArgs2[subCommandArgIndex];
     const subCommand = await resolveValue(subCommands2[subCommandName]);
     if (subCommand) {
       return resolveSubCommand(
         subCommand,
-        rawArgs.slice(subCommandArgIndex + 1),
+        rawArgs2.slice(subCommandArgIndex + 1),
         cmd
       );
     }
@@ -12228,20 +12228,20 @@ async function renderUsage(cmd, parent) {
   return usageLines.filter((l2) => typeof l2 === "string").join("\n");
 }
 async function runMain(cmd, opts = {}) {
-  const rawArgs = opts.rawArgs || process.argv.slice(2);
+  const rawArgs2 = opts.rawArgs || process.argv.slice(2);
   const showUsage$1 = opts.showUsage || showUsage;
   try {
-    if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-      await showUsage$1(...await resolveSubCommand(cmd, rawArgs));
+    if (rawArgs2.includes("--help") || rawArgs2.includes("-h")) {
+      await showUsage$1(...await resolveSubCommand(cmd, rawArgs2));
       process.exit(0);
-    } else if (rawArgs.length === 1 && rawArgs[0] === "--version") {
+    } else if (rawArgs2.length === 1 && rawArgs2[0] === "--version") {
       const meta = typeof cmd.meta === "function" ? await cmd.meta() : await cmd.meta;
       if (!meta?.version) {
         throw new CLIError("No version specified", "E_NO_VERSION");
       }
       consola.log(meta.version);
     } else {
-      await runCommand(cmd, { rawArgs });
+      await runCommand(cmd, { rawArgs: rawArgs2 });
     }
   } catch (error) {
     const isCLIError = error instanceof CLIError;
@@ -12249,7 +12249,7 @@ async function runMain(cmd, opts = {}) {
       consola.error(error, "\n");
     }
     if (isCLIError) {
-      await showUsage$1(...await resolveSubCommand(cmd, rawArgs));
+      await showUsage$1(...await resolveSubCommand(cmd, rawArgs2));
     }
     consola.error(error.message);
     process.exit(1);
@@ -14450,6 +14450,260 @@ function addNames(target, node) {
     if ((0, import_yaml.isPair)(item) && (0, import_yaml.isScalar)(item.key)) target.add(String(item.key.value));
   }
 }
+function normalisePypiName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+var DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
+function requirementName(text) {
+  const match = /^(\s*)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(\[[^\]]*\])?\s*(.*)$/s.exec(
+    text
+  );
+  if (!match) return null;
+  const rest = (match[4] ?? "").trim();
+  if (rest !== "" && !/^(?:[=<>!~;@]|\(\s*[=<>!~])/.test(rest)) return null;
+  return {
+    name: normalisePypiName(match[2]),
+    at: (match[1] ?? "").length,
+    spec: (rest.split(";")[0] ?? "").trim()
+  };
+}
+function record(index, path, offset, length, name, version, dev) {
+  return {
+    name,
+    version,
+    ecosystem: "pypi",
+    manifestPath: path,
+    loc: index.locationAt(path, offset, length),
+    snippet: index.snippetAt(offset),
+    direct: true,
+    dev
+  };
+}
+function isRequirementsFile(path) {
+  const parts = path.split("/");
+  const file = parts.at(-1) ?? "";
+  if (!file.toLowerCase().endsWith(".txt")) return false;
+  if (/^constraints/i.test(file)) return false;
+  if (/^requirements([-_.].*)?\.txt$/i.test(file)) return true;
+  return parts.at(-2) === "requirements" && !/^(readme|license|licence|notes?|changelog|constraints)/i.test(file);
+}
+function isDevRequirementsFile(path) {
+  const file = path.split("/").pop() ?? "";
+  const stem = file.replace(/\.txt$/i, "").replace(/^requirements[-_.]?/i, "");
+  return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
+}
+function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  let offset = 0;
+  let continuation = false;
+  for (const physical of text.split("\n")) {
+    const lineOffset = offset;
+    offset += physical.length + 1;
+    const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
+    const continued = continuation;
+    continuation = raw.trimEnd().endsWith("\\");
+    if (continued) continue;
+    const line = raw.replace(/(^|\s)#.*$/, "").replace(/\\\s*$/, "");
+    if (line.trim() === "" || line.trim().startsWith("-")) continue;
+    const requirement = requirementName(line);
+    if (!requirement) continue;
+    const at = lineOffset + requirement.at;
+    const written = line.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+    dependencies.push(
+      record(index, path, at, written.length, requirement.name, requirement.spec, dev)
+    );
+  }
+  return { dependencies, errors: [] };
+}
+function tokenise(text) {
+  const tokens = [];
+  let i2 = 0;
+  while (i2 < text.length) {
+    const ch = text[i2];
+    if (ch === "\n") {
+      tokens.push({ t: "nl" });
+      i2++;
+    } else if (ch === " " || ch === "	" || ch === "\r") {
+      i2++;
+    } else if (ch === "#") {
+      while (i2 < text.length && text[i2] !== "\n") i2++;
+    } else if (text.startsWith('"""', i2) || text.startsWith("'''", i2)) {
+      const quote = text.slice(i2, i2 + 3);
+      let end = i2 + 3;
+      while (end < text.length && !text.startsWith(quote, end)) {
+        end += quote === '"""' && text[end] === "\\" ? 2 : 1;
+      }
+      let close = end + 3;
+      while (close < text.length && text[close] === quote[0] && close < end + 5) close++;
+      tokens.push({ t: "str", v: text.slice(i2 + 3, end), start: i2, multiline: true });
+      for (let k2 = i2; k2 < Math.min(close, text.length); k2++) {
+        if (text[k2] === "\n") tokens.push({ t: "nl" });
+      }
+      i2 = close;
+    } else if (ch === '"' || ch === "'") {
+      let end = i2 + 1;
+      while (end < text.length && text[end] !== ch && text[end] !== "\n") {
+        end += ch === '"' && text[end] === "\\" ? 2 : 1;
+      }
+      tokens.push({ t: "str", v: text.slice(i2 + 1, end), start: i2, multiline: false });
+      i2 = text[end] === ch ? end + 1 : end;
+    } else if ("[]{}=,.".includes(ch)) {
+      tokens.push({ t: "punct", v: ch, start: i2 });
+      i2++;
+    } else if (/[A-Za-z0-9_-]/.test(ch)) {
+      let end = i2 + 1;
+      while (end < text.length && /[A-Za-z0-9_-]/.test(text[end])) end++;
+      tokens.push({ t: "bare", v: text.slice(i2, end), start: i2 });
+      i2 = end;
+    } else {
+      tokens.push({ t: "other", start: i2 });
+      i2++;
+    }
+  }
+  return tokens;
+}
+function tableKind(table) {
+  if (table === "project") return { kind: "array-key", key: "dependencies", dev: () => false };
+  if (table === "project.optional-dependencies") {
+    return { kind: "array-key", key: null, dev: (k2) => DEV_NAME.test(k2) };
+  }
+  if (table === "dependency-groups") return { kind: "array-key", key: null, dev: () => true };
+  if (table === "tool.poetry.dependencies") return { kind: "poetry", dev: false };
+  if (table === "tool.poetry.dev-dependencies") return { kind: "poetry", dev: true };
+  const group = /^tool\.poetry\.group\.([^.]+)\.dependencies$/.exec(table);
+  if (group) return { kind: "poetry", dev: DEV_NAME.test(group[1]) };
+  return null;
+}
+function parsePyprojectToml(text, path) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  const tokens = tokenise(text);
+  let table = null;
+  let i2 = 0;
+  const toLineEnd = () => {
+    while (i2 < tokens.length && tokens[i2]?.t !== "nl") i2++;
+  };
+  const valueEnd = (from) => {
+    const first = tokens[from];
+    if (first?.t === "punct" && (first.v === "[" || first.v === "{")) {
+      let depth = 0;
+      for (let k22 = from; k22 < tokens.length; k22++) {
+        const tok = tokens[k22];
+        if (tok?.t !== "punct") continue;
+        if (tok.v === "[" || tok.v === "{") depth++;
+        else if (tok.v === "]" || tok.v === "}") depth--;
+        if (depth === 0) return k22 + 1;
+      }
+      return tokens.length;
+    }
+    let k2 = from;
+    while (k2 < tokens.length && tokens[k2]?.t !== "nl") k2++;
+    return k2;
+  };
+  const readArray = (from, to, dev) => {
+    let depth = 0;
+    for (let k2 = from; k2 < to; k2++) {
+      const tok = tokens[k2];
+      if (tok?.t === "punct" && (tok.v === "[" || tok.v === "{")) depth++;
+      else if (tok?.t === "punct" && (tok.v === "]" || tok.v === "}")) depth--;
+      else if (tok?.t === "str" && depth === 1 && !tok.multiline) {
+        const requirement = requirementName(tok.v);
+        if (!requirement) continue;
+        const written = tok.v.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            tok.start + 1 + requirement.at,
+            written.length,
+            requirement.name,
+            requirement.spec,
+            dev
+          )
+        );
+      }
+    }
+  };
+  while (i2 < tokens.length) {
+    const tok = tokens[i2];
+    if (tok?.t === "nl") {
+      i2++;
+      continue;
+    }
+    if (tok?.t === "punct" && tok.v === "[") {
+      const next = tokens[i2 + 1];
+      if (next?.t === "punct" && next.v === "[") {
+        table = null;
+        toLineEnd();
+        continue;
+      }
+      const name = [];
+      let k22 = i2 + 1;
+      let ok = true;
+      for (; k22 < tokens.length; k22++) {
+        const part = tokens[k22];
+        if (part?.t === "punct" && part.v === "]") break;
+        if (part?.t === "bare" || part?.t === "str" && !part.multiline) name.push(part.v);
+        else if (!(part?.t === "punct" && part.v === ".")) {
+          ok = false;
+          break;
+        }
+      }
+      table = ok ? tableKind(name.join(".")) : null;
+      toLineEnd();
+      continue;
+    }
+    const parts = [];
+    let k2 = i2;
+    while (k2 < tokens.length) {
+      const part = tokens[k2];
+      if (part?.t === "bare" || part?.t === "str" && !part.multiline) {
+        parts.push({ v: part.v, start: part.start + (part.t === "str" ? 1 : 0) });
+        k2++;
+        const dot = tokens[k2];
+        if (dot?.t === "punct" && dot.v === ".") {
+          k2++;
+          continue;
+        }
+      }
+      break;
+    }
+    const equals = tokens[k2];
+    if (parts.length === 0 || !(equals?.t === "punct" && equals.v === "=")) {
+      toLineEnd();
+      continue;
+    }
+    const valueStart = k2 + 1;
+    const end = valueEnd(valueStart);
+    const head = parts[0];
+    if (table?.kind === "poetry") {
+      if (head.v !== "python") {
+        const value = tokens[valueStart];
+        const version = parts.length === 1 && value?.t === "str" ? value.v : "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            head.start,
+            head.v.length,
+            normalisePypiName(head.v),
+            version,
+            table.dev
+          )
+        );
+      }
+    } else if (table?.kind === "array-key" && parts.length === 1) {
+      const value = tokens[valueStart];
+      if ((table.key === null || head.v === table.key) && value?.t === "punct" && value.v === "[") {
+        readArray(valueStart, end, table.dev(head.v));
+      }
+    }
+    i2 = end;
+    toLineEnd();
+  }
+  return { dependencies, errors: [] };
+}
 var CLASSIC_HEADER = /^(?!\s)(.+):\s*$/;
 var CLASSIC_VERSION = /^\s+version\s+"?([^"\s]+)"?\s*$/;
 function parseYarnClassicLock(text, manifestPath) {
@@ -14564,21 +14818,27 @@ function analyzeManifests(options) {
       errors.push(...result2.errors);
       continue;
     }
+    if (file === "pyproject.toml" || isRequirementsFile(path)) {
+      const python = file === "pyproject.toml" ? parsePyprojectToml(text, path) : parseRequirementsTxt(text, path);
+      manifestRecords.push(...python.dependencies);
+      errors.push(...python.errors);
+      continue;
+    }
     const result = file === "pnpm-lock.yaml" ? parsePnpmLock(text, path) : file === "yarn.lock" ? isBerry(text) ? parseYarnBerryLock(text, path) : parseYarnClassicLock(text, path) : parseNpmLock(text, path);
     lockRecords.push(...result.dependencies);
     errors.push(...result.errors);
   }
-  for (const record of lockRecords) {
-    const declaration = declared.get(record.name);
+  for (const record2 of lockRecords) {
+    const declaration = declared.get(record2.name);
     if (declaration) {
-      record.direct = true;
-      record.dev = declaration.dev;
+      record2.direct = true;
+      record2.dev = declaration.dev;
     }
   }
   const all = [...manifestRecords, ...lockRecords];
-  const filtered = all.filter((record) => {
-    if (!includeTransitive && !record.direct) return false;
-    if (!includeDev && record.dev) return false;
+  const filtered = all.filter((record2) => {
+    if (!includeTransitive && !record2.direct) return false;
+    if (!includeDev && record2.dev) return false;
     return true;
   });
   return {
@@ -14591,11 +14851,11 @@ function analyzeManifests(options) {
 function dedupe(records) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const record of records) {
-    const key = `${record.name}|${record.manifestPath}|${record.loc.startLine}`;
+  for (const record2 of records) {
+    const key = `${record2.name}|${record2.manifestPath}|${record2.loc.startLine}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(record);
+    out.push(record2);
   }
   return out.sort(
     (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
@@ -14611,6 +14871,15 @@ var DEFAULT_EXCLUDES = [
   "**/.svelte-kit/**",
   "**/coverage/**",
   "**/vendor/**",
+  // Installed Python packages, for the same reason as node_modules: they hold
+  // every dependency's own manifests, which describe what *those* use, and an
+  // editable install's pyproject.toml reads as this repository's own. Dot
+  // directories (.venv, .tox, .nox) are never walked at all, and a virtualenv
+  // under any other name is pruned by its pyvenv.cfg in walk().
+  "**/venv/**",
+  "**/site-packages/**",
+  "**/dist-packages/**",
+  "**/__pypackages__/**",
   "**/*.min.js",
   "**/*.bundle.js",
   "**/*.map"
@@ -14620,7 +14889,12 @@ var MANIFEST_PATTERNS = [
   "**/package-lock.json",
   "**/npm-shrinkwrap.json",
   "**/pnpm-lock.yaml",
-  "**/yarn.lock"
+  "**/yarn.lock",
+  "**/pyproject.toml",
+  "**/requirements.txt",
+  "**/requirements-*.txt",
+  "**/requirements_*.txt",
+  "**/requirements/*.txt"
 ];
 var SOURCE_PATTERNS = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
 var INFRA_PATTERNS = [
@@ -14629,9 +14903,27 @@ var INFRA_PATTERNS = [
   "**/fly.toml",
   "**/*.tf"
 ];
+function excludeProblem(globs) {
+  const notString = globs.filter((glob) => typeof glob !== "string");
+  if (notString.length > 0) {
+    return `exclude entries must be glob strings, got ${notString.map((g3) => JSON.stringify(g3)).join(", ")}`;
+  }
+  const negated = globs.filter((glob) => glob.startsWith("!"));
+  if (negated.length > 0) {
+    return `exclude globs cannot be negated (${negated.join(", ")}); list only what to skip`;
+  }
+  return null;
+}
 function walk(options) {
   const { root, exclude = [], respectIgnoreFiles = true } = options;
-  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude];
+  const virtualenvs = globSync("**/pyvenv.cfg", {
+    cwd: root,
+    ignore: [...DEFAULT_EXCLUDES, ...exclude],
+    dot: false
+  }).map(
+    (p) => p.split(sep3).join("/").replace(/\/?pyvenv\.cfg$/, "")
+  ).filter((dir) => dir !== "").map((dir) => `${dir}/**`);
+  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
   const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
   return {
@@ -14959,9 +15251,9 @@ var CONFIDENCE_BONUS = { high: 20, medium: 10, low: 0 };
 function toRank(severity, confidence) {
   return Math.min(100, SEVERITY_RANK[severity] + CONFIDENCE_BONUS[confidence]);
 }
-function confidenceForDependency(record, alias) {
-  if (!record.direct) return "low";
-  if (record.dev) return "medium";
+function confidenceForDependency(record2, alias) {
+  if (!record2.direct) return "low";
+  if (record2.dev) return "medium";
   return alias.kind === "official-sdk" ? "high" : "medium";
 }
 var ORDER = { low: 0, medium: 1, high: 2 };
@@ -15902,6 +16194,8 @@ function scan(options) {
   const signals = [];
   const unmatchedPackages = /* @__PURE__ */ new Set();
   const unmatchedHosts = /* @__PURE__ */ new Set();
+  const excludeError = excludeProblem(options.exclude ?? []);
+  if (excludeError) throw new TypeError(excludeError);
   const rootUsable = isReadableDirectory(root);
   if (!rootUsable) {
     errors.push({
@@ -15930,22 +16224,22 @@ function scan(options) {
     });
     manifestsScanned = analysis.manifestsScanned;
     errors.push(...analysis.errors);
-    for (const record of analysis.dependencies) {
-      const match = kb.lookupPackage(record.ecosystem, record.name);
+    for (const record2 of analysis.dependencies) {
+      const match = kb.lookupPackage(record2.ecosystem, record2.name);
       if (!match) {
-        if (record.direct) unmatchedPackages.add(record.name);
+        if (record2.direct) unmatchedPackages.add(record2.name);
         continue;
       }
-      if (!record.direct && match.alias.detectTransitive !== true) continue;
+      if (!record2.direct && match.alias.detectTransitive !== true) continue;
       signals.push({
         kind: "dependency",
         vendorId: match.vendor.id,
-        matchedOn: record.name,
-        confidence: confidenceForDependency(record, match.alias),
-        location: record.loc,
-        snippet: record.snippet,
-        ...record.dev ? { devOnly: true } : {},
-        ...record.transitiveVia ? { transitiveVia: record.transitiveVia } : {}
+        matchedOn: record2.name,
+        confidence: confidenceForDependency(record2, match.alias),
+        location: record2.loc,
+        snippet: record2.snippet,
+        ...record2.dev ? { devOnly: true } : {},
+        ...record2.transitiveVia ? { transitiveVia: record2.transitiveVia } : {}
       });
     }
   }
@@ -16010,17 +16304,17 @@ function scan(options) {
   if (includeInfrastructure) {
     const infra = analyzeInfrastructure({ root, configPaths: infrastructure });
     errors.push(...infra.errors);
-    for (const record of infra.regions) {
-      const vendor = kb.byId.get(record.provider);
-      if (!vendor) unmatchedHosts.add(record.provider);
+    for (const record2 of infra.regions) {
+      const vendor = kb.byId.get(record2.provider);
+      if (!vendor) unmatchedHosts.add(record2.provider);
       signals.push({
         kind: "infrastructure",
         vendorId: vendor?.id ?? null,
-        matchedOn: record.region,
+        matchedOn: record2.region,
         confidence: "high",
-        location: record.loc,
-        snippet: record.snippet,
-        region: record.region
+        location: record2.loc,
+        snippet: record2.snippet,
+        region: record2.region
       });
     }
   }
@@ -16147,6 +16441,11 @@ function loadConfig(root, explicitPath) {
   if (!existsSync(path)) return {};
   const parsed = (0, import_yaml4.parse)(readFileSync5(path, "utf8"));
   if (!parsed || typeof parsed !== "object") return {};
+  const exclude = parsed.exclude;
+  if (typeof exclude === "string") parsed.exclude = [exclude];
+  else if (exclude !== void 0 && exclude !== null && !Array.isArray(exclude)) {
+    throw new Error(`${path}: exclude must be a glob or a list of globs`);
+  }
   for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
     if (!suppression.reason || suppression.reason.trim() === "") {
       throw new Error(
@@ -16508,16 +16807,29 @@ var scanCommand = defineCommand({
     },
     quiet: { type: "boolean", default: false }
   },
-  async run({ args, rawArgs }) {
+  async run({ args, rawArgs: rawArgs2 }) {
     const root = resolve4(String(args.path ?? "."));
     if (!isDirectory(root)) {
       process.stderr.write(`egressa: ${root} is not a directory
 `);
       process.exit(EXIT.USAGE);
     }
-    const config = loadConfig(root, args.config ? String(args.config) : void 0);
+    let config;
+    try {
+      config = loadConfig(root, args.config ? String(args.config) : void 0);
+    } catch (error) {
+      process.stderr.write(`egressa: ${error.message}
+`);
+      process.exit(EXIT.USAGE);
+    }
     const exclude = [...config.exclude ?? [], ...toStringArray(args.exclude)];
-    const failOnGiven = rawArgs.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
+    const excludeError = excludeProblem(exclude);
+    if (excludeError) {
+      process.stderr.write(`egressa: ${excludeError}
+`);
+      process.exit(EXIT.USAGE);
+    }
+    const failOnGiven = rawArgs2.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
     const failOn = parseFailOn(
       failOnGiven ? String(args["fail-on"]) : config.failOn ?? String(args["fail-on"])
     );
@@ -16673,6 +16985,45 @@ var vendorsCommand = defineCommand({
   }
 });
 
+// src/flags.ts
+function flagProblems(argv2, args) {
+  const booleans = /* @__PURE__ */ new Set(["help"]);
+  const strings = /* @__PURE__ */ new Set();
+  const short = /* @__PURE__ */ new Set(["h"]);
+  for (const [name, def] of Object.entries(args)) {
+    if (def.type === "positional") continue;
+    if (def.type === "boolean") booleans.add(name).add(`no-${name}`);
+    else strings.add(name);
+    for (const alias of ["alias" in def ? def.alias ?? [] : []].flat()) {
+      if (alias.length === 1) short.add(alias);
+      else if (def.type === "boolean") booleans.add(alias);
+      else strings.add(alias);
+    }
+  }
+  const problems = { unknown: [], missingValue: [] };
+  for (let i2 = 0; i2 < argv2.length; i2++) {
+    const token = argv2[i2];
+    if (token === "--") break;
+    if (token.startsWith("--")) {
+      const eq = token.indexOf("=");
+      const name = eq === -1 ? token.slice(2) : token.slice(2, eq);
+      if (strings.has(name)) {
+        if (eq !== -1) continue;
+        const next = argv2[i2 + 1];
+        if (next === void 0 || next.startsWith("-")) problems.missingValue.push(`--${name}`);
+        else i2++;
+      } else if (!booleans.has(name) || eq !== -1) {
+        problems.unknown.push(eq === -1 ? `--${name}` : token);
+      }
+    } else if (/^-[A-Za-z]/.test(token)) {
+      if (![...token.slice(1)].every((letter) => short.has(letter))) {
+        problems.unknown.push(token);
+      }
+    }
+  }
+  return problems;
+}
+
 // src/cli.ts
 var subCommands = {
   scan: scanCommand,
@@ -16700,7 +17051,29 @@ function withDefaultCommand(argv2) {
   if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv2;
   return ["scan", ...argv2];
 }
-runMain(main, { rawArgs: withDefaultCommand(process.argv.slice(2)) }).catch((error) => {
+var rawArgs = withDefaultCommand(process.argv.slice(2));
+var command = rawArgs[0];
+if (command !== void 0 && Object.hasOwn(subCommands, command)) {
+  const { unknown, missingValue } = flagProblems(
+    rawArgs.slice(1),
+    subCommands[command].args
+  );
+  if (unknown.length > 0 || missingValue.length > 0) {
+    const lines = [
+      ...unknown.length > 0 ? [`unknown option ${unknown.join(", ")}`] : [],
+      ...missingValue.map(
+        (flag) => `${flag} needs a value; one starting with "-" must be written ${flag}=<value>`
+      )
+    ];
+    process.stderr.write(
+      `${lines.map((l2) => `egressa: ${l2}`).join("\n")}
+Run \`egressa ${command} --help\` for the options.
+`
+    );
+    process.exit(EXIT.USAGE);
+  }
+}
+runMain(main, { rawArgs }).catch((error) => {
   process.stderr.write(`egressa: ${error.message}
 `);
   process.exit(EXIT.INTERNAL);
