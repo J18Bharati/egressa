@@ -12011,7 +12011,7 @@ function parseRawArgs(args = [], opts = {}) {
   }
   return out;
 }
-function parseArgs(rawArgs, argsDef) {
+function parseArgs(rawArgs2, argsDef) {
   const parseOptions = {
     boolean: [],
     string: [],
@@ -12036,7 +12036,7 @@ function parseArgs(rawArgs, argsDef) {
       parseOptions.alias[arg.name] = arg.alias;
     }
   }
-  const parsed = parseRawArgs(rawArgs, parseOptions);
+  const parsed = parseRawArgs(rawArgs2, parseOptions);
   const [...positionalArguments] = parsed._;
   const parsedArgsProxy = new Proxy(parsed, {
     get(target, prop) {
@@ -12123,16 +12123,16 @@ async function runCommand(cmd, opts) {
   }
   return { result };
 }
-async function resolveSubCommand(cmd, rawArgs, parent) {
+async function resolveSubCommand(cmd, rawArgs2, parent) {
   const subCommands2 = await resolveValue(cmd.subCommands);
   if (subCommands2 && Object.keys(subCommands2).length > 0) {
-    const subCommandArgIndex = rawArgs.findIndex((arg) => !arg.startsWith("-"));
-    const subCommandName = rawArgs[subCommandArgIndex];
+    const subCommandArgIndex = rawArgs2.findIndex((arg) => !arg.startsWith("-"));
+    const subCommandName = rawArgs2[subCommandArgIndex];
     const subCommand = await resolveValue(subCommands2[subCommandName]);
     if (subCommand) {
       return resolveSubCommand(
         subCommand,
-        rawArgs.slice(subCommandArgIndex + 1),
+        rawArgs2.slice(subCommandArgIndex + 1),
         cmd
       );
     }
@@ -12228,20 +12228,20 @@ async function renderUsage(cmd, parent) {
   return usageLines.filter((l2) => typeof l2 === "string").join("\n");
 }
 async function runMain(cmd, opts = {}) {
-  const rawArgs = opts.rawArgs || process.argv.slice(2);
+  const rawArgs2 = opts.rawArgs || process.argv.slice(2);
   const showUsage$1 = opts.showUsage || showUsage;
   try {
-    if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-      await showUsage$1(...await resolveSubCommand(cmd, rawArgs));
+    if (rawArgs2.includes("--help") || rawArgs2.includes("-h")) {
+      await showUsage$1(...await resolveSubCommand(cmd, rawArgs2));
       process.exit(0);
-    } else if (rawArgs.length === 1 && rawArgs[0] === "--version") {
+    } else if (rawArgs2.length === 1 && rawArgs2[0] === "--version") {
       const meta = typeof cmd.meta === "function" ? await cmd.meta() : await cmd.meta;
       if (!meta?.version) {
         throw new CLIError("No version specified", "E_NO_VERSION");
       }
       consola.log(meta.version);
     } else {
-      await runCommand(cmd, { rawArgs });
+      await runCommand(cmd, { rawArgs: rawArgs2 });
     }
   } catch (error) {
     const isCLIError = error instanceof CLIError;
@@ -12249,7 +12249,7 @@ async function runMain(cmd, opts = {}) {
       consola.error(error, "\n");
     }
     if (isCLIError) {
-      await showUsage$1(...await resolveSubCommand(cmd, rawArgs));
+      await showUsage$1(...await resolveSubCommand(cmd, rawArgs2));
     }
     consola.error(error.message);
     process.exit(1);
@@ -14450,6 +14450,150 @@ function addNames(target, node) {
     if ((0, import_yaml.isPair)(item) && (0, import_yaml.isScalar)(item.key)) target.add(String(item.key.value));
   }
 }
+function normalisePypiName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+function requirementName(text) {
+  const match = /^(\s*)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(\[[^\]]*\])?\s*(.*)$/s.exec(
+    text
+  );
+  if (!match) return null;
+  const rest = (match[4] ?? "").trim();
+  if (rest !== "" && !/^[=<>!~;@,(]/.test(rest)) return null;
+  return {
+    name: normalisePypiName(match[2]),
+    at: (match[1] ?? "").length,
+    spec: (rest.split(";")[0] ?? "").trim()
+  };
+}
+function record(index, path, offset, length, name, version, dev) {
+  return {
+    name,
+    version,
+    ecosystem: "pypi",
+    manifestPath: path,
+    loc: index.locationAt(path, offset, length),
+    snippet: index.snippetAt(offset),
+    direct: true,
+    dev
+  };
+}
+function isDevRequirementsFile(path) {
+  const file = path.split("/").pop() ?? "";
+  const stem = file.replace(/\.txt$/, "").replace(/^requirements/, "");
+  return /(^|[-_.])(dev|develop|test|tests|testing|lint|docs|typing)$/.test(stem);
+}
+function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  let offset = 0;
+  for (const raw of text.split("\n")) {
+    const lineOffset = offset;
+    offset += raw.length + 1;
+    const line = raw.replace(/(^|\s)#.*$/, "");
+    if (line.trim() === "" || line.trim().startsWith("-")) continue;
+    const requirement = requirementName(line);
+    if (!requirement) continue;
+    const at = lineOffset + requirement.at;
+    const written = line.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+    dependencies.push(
+      record(index, path, at, written.length, requirement.name, requirement.spec, dev)
+    );
+  }
+  return { dependencies, errors: [] };
+}
+var DEV_GROUP = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
+function tableKind(table) {
+  if (table === "project") return { kind: "array-key", key: "dependencies", dev: () => false };
+  if (table === "project.optional-dependencies") {
+    return { kind: "array-key", key: null, dev: (k2) => DEV_GROUP.test(k2) };
+  }
+  if (table === "dependency-groups") return { kind: "array-key", key: null, dev: () => true };
+  if (table === "tool.poetry.dependencies") return { kind: "poetry", dev: false };
+  if (table === "tool.poetry.dev-dependencies") return { kind: "poetry", dev: true };
+  if (/^tool\.poetry\.group\.[^.]+\.dependencies$/.test(table))
+    return { kind: "poetry", dev: true };
+  return null;
+}
+function parsePyprojectToml(text, path) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  let table = null;
+  let arrayDev = null;
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const lineOffset = offset;
+    offset += line.length + 1;
+    if (arrayDev !== null) {
+      arrayDev = readArray(line, 0, lineOffset, arrayDev) ? arrayDev : null;
+      continue;
+    }
+    const header = /^\s*\[\s*([^\]\s][^\]]*?)\s*\]\s*(#.*)?$/.exec(line);
+    if (header) {
+      table = tableKind(header[1].replace(/\s+/g, "").replace(/["']/g, ""));
+      continue;
+    }
+    if (!table) continue;
+    const assignment = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9._-]+))\s*=\s*/.exec(line);
+    if (!assignment) continue;
+    const key = assignment[1] ?? assignment[2] ?? assignment[3];
+    const valueAt = assignment[0].length;
+    if (table.kind === "poetry") {
+      if (key === "python") continue;
+      const keyAt = line.indexOf(key);
+      const version = /^"([^"]*)"/.exec(line.slice(valueAt))?.[1] ?? "";
+      dependencies.push(
+        record(
+          index,
+          path,
+          lineOffset + keyAt,
+          key.length,
+          normalisePypiName(key),
+          version,
+          table.dev
+        )
+      );
+      continue;
+    }
+    if (table.key !== null && key !== table.key) continue;
+    if (line[valueAt] !== "[") continue;
+    const dev = table.dev(key);
+    if (readArray(line, valueAt + 1, lineOffset, dev)) arrayDev = dev;
+  }
+  function readArray(line, from, lineOffset, dev) {
+    let i2 = from;
+    while (i2 < line.length) {
+      const ch = line[i2];
+      if (ch === "#") return true;
+      if (ch === "]") return false;
+      if (ch === '"' || ch === "'") {
+        const close = line.indexOf(ch, i2 + 1);
+        if (close === -1) return true;
+        const body = line.slice(i2 + 1, close);
+        const requirement = requirementName(body);
+        if (requirement) {
+          const written = body.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+          dependencies.push(
+            record(
+              index,
+              path,
+              lineOffset + i2 + 1 + requirement.at,
+              written.length,
+              requirement.name,
+              requirement.spec,
+              dev
+            )
+          );
+        }
+        i2 = close + 1;
+        continue;
+      }
+      i2++;
+    }
+    return true;
+  }
+  return { dependencies, errors: [] };
+}
 var CLASSIC_HEADER = /^(?!\s)(.+):\s*$/;
 var CLASSIC_VERSION = /^\s+version\s+"?([^"\s]+)"?\s*$/;
 function parseYarnClassicLock(text, manifestPath) {
@@ -14564,21 +14708,27 @@ function analyzeManifests(options) {
       errors.push(...result2.errors);
       continue;
     }
+    if (file === "pyproject.toml" || file.endsWith(".txt")) {
+      const python = file === "pyproject.toml" ? parsePyprojectToml(text, path) : parseRequirementsTxt(text, path);
+      manifestRecords.push(...python.dependencies);
+      errors.push(...python.errors);
+      continue;
+    }
     const result = file === "pnpm-lock.yaml" ? parsePnpmLock(text, path) : file === "yarn.lock" ? isBerry(text) ? parseYarnBerryLock(text, path) : parseYarnClassicLock(text, path) : parseNpmLock(text, path);
     lockRecords.push(...result.dependencies);
     errors.push(...result.errors);
   }
-  for (const record of lockRecords) {
-    const declaration = declared.get(record.name);
+  for (const record2 of lockRecords) {
+    const declaration = declared.get(record2.name);
     if (declaration) {
-      record.direct = true;
-      record.dev = declaration.dev;
+      record2.direct = true;
+      record2.dev = declaration.dev;
     }
   }
   const all = [...manifestRecords, ...lockRecords];
-  const filtered = all.filter((record) => {
-    if (!includeTransitive && !record.direct) return false;
-    if (!includeDev && record.dev) return false;
+  const filtered = all.filter((record2) => {
+    if (!includeTransitive && !record2.direct) return false;
+    if (!includeDev && record2.dev) return false;
     return true;
   });
   return {
@@ -14591,11 +14741,11 @@ function analyzeManifests(options) {
 function dedupe(records) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const record of records) {
-    const key = `${record.name}|${record.manifestPath}|${record.loc.startLine}`;
+  for (const record2 of records) {
+    const key = `${record2.name}|${record2.manifestPath}|${record2.loc.startLine}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(record);
+    out.push(record2);
   }
   return out.sort(
     (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
@@ -14611,6 +14761,12 @@ var DEFAULT_EXCLUDES = [
   "**/.svelte-kit/**",
   "**/coverage/**",
   "**/vendor/**",
+  // Installed Python packages, for the same reason as node_modules: a virtualenv
+  // holds every dependency's own manifests, which describe what *they* use.
+  "**/.venv/**",
+  "**/venv/**",
+  "**/site-packages/**",
+  "**/.tox/**",
   "**/*.min.js",
   "**/*.bundle.js",
   "**/*.map"
@@ -14620,7 +14776,12 @@ var MANIFEST_PATTERNS = [
   "**/package-lock.json",
   "**/npm-shrinkwrap.json",
   "**/pnpm-lock.yaml",
-  "**/yarn.lock"
+  "**/yarn.lock",
+  "**/pyproject.toml",
+  "**/requirements.txt",
+  "**/requirements-*.txt",
+  "**/requirements_*.txt",
+  "**/requirements/*.txt"
 ];
 var SOURCE_PATTERNS = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
 var INFRA_PATTERNS = [
@@ -14959,9 +15120,9 @@ var CONFIDENCE_BONUS = { high: 20, medium: 10, low: 0 };
 function toRank(severity, confidence) {
   return Math.min(100, SEVERITY_RANK[severity] + CONFIDENCE_BONUS[confidence]);
 }
-function confidenceForDependency(record, alias) {
-  if (!record.direct) return "low";
-  if (record.dev) return "medium";
+function confidenceForDependency(record2, alias) {
+  if (!record2.direct) return "low";
+  if (record2.dev) return "medium";
   return alias.kind === "official-sdk" ? "high" : "medium";
 }
 var ORDER = { low: 0, medium: 1, high: 2 };
@@ -15930,22 +16091,22 @@ function scan(options) {
     });
     manifestsScanned = analysis.manifestsScanned;
     errors.push(...analysis.errors);
-    for (const record of analysis.dependencies) {
-      const match = kb.lookupPackage(record.ecosystem, record.name);
+    for (const record2 of analysis.dependencies) {
+      const match = kb.lookupPackage(record2.ecosystem, record2.name);
       if (!match) {
-        if (record.direct) unmatchedPackages.add(record.name);
+        if (record2.direct) unmatchedPackages.add(record2.name);
         continue;
       }
-      if (!record.direct && match.alias.detectTransitive !== true) continue;
+      if (!record2.direct && match.alias.detectTransitive !== true) continue;
       signals.push({
         kind: "dependency",
         vendorId: match.vendor.id,
-        matchedOn: record.name,
-        confidence: confidenceForDependency(record, match.alias),
-        location: record.loc,
-        snippet: record.snippet,
-        ...record.dev ? { devOnly: true } : {},
-        ...record.transitiveVia ? { transitiveVia: record.transitiveVia } : {}
+        matchedOn: record2.name,
+        confidence: confidenceForDependency(record2, match.alias),
+        location: record2.loc,
+        snippet: record2.snippet,
+        ...record2.dev ? { devOnly: true } : {},
+        ...record2.transitiveVia ? { transitiveVia: record2.transitiveVia } : {}
       });
     }
   }
@@ -16010,17 +16171,17 @@ function scan(options) {
   if (includeInfrastructure) {
     const infra = analyzeInfrastructure({ root, configPaths: infrastructure });
     errors.push(...infra.errors);
-    for (const record of infra.regions) {
-      const vendor = kb.byId.get(record.provider);
-      if (!vendor) unmatchedHosts.add(record.provider);
+    for (const record2 of infra.regions) {
+      const vendor = kb.byId.get(record2.provider);
+      if (!vendor) unmatchedHosts.add(record2.provider);
       signals.push({
         kind: "infrastructure",
         vendorId: vendor?.id ?? null,
-        matchedOn: record.region,
+        matchedOn: record2.region,
         confidence: "high",
-        location: record.loc,
-        snippet: record.snippet,
-        region: record.region
+        location: record2.loc,
+        snippet: record2.snippet,
+        region: record2.region
       });
     }
   }
@@ -16508,7 +16669,7 @@ var scanCommand = defineCommand({
     },
     quiet: { type: "boolean", default: false }
   },
-  async run({ args, rawArgs }) {
+  async run({ args, rawArgs: rawArgs2 }) {
     const root = resolve4(String(args.path ?? "."));
     if (!isDirectory(root)) {
       process.stderr.write(`egressa: ${root} is not a directory
@@ -16517,7 +16678,15 @@ var scanCommand = defineCommand({
     }
     const config = loadConfig(root, args.config ? String(args.config) : void 0);
     const exclude = [...config.exclude ?? [], ...toStringArray(args.exclude)];
-    const failOnGiven = rawArgs.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
+    const negated = exclude.filter((glob) => glob.startsWith("!"));
+    if (negated.length > 0) {
+      process.stderr.write(
+        `egressa: exclude globs cannot be negated (${negated.join(", ")}); list only what to skip
+`
+      );
+      process.exit(EXIT.USAGE);
+    }
+    const failOnGiven = rawArgs2.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
     const failOn = parseFailOn(
       failOnGiven ? String(args["fail-on"]) : config.failOn ?? String(args["fail-on"])
     );
@@ -16673,6 +16842,40 @@ var vendorsCommand = defineCommand({
   }
 });
 
+// src/flags.ts
+var camel = (name) => name.replace(/-([a-z])/g, (_3, c3) => c3.toUpperCase());
+function unknownFlags(argv2, args) {
+  const long = /* @__PURE__ */ new Set(["help"]);
+  const short = /* @__PURE__ */ new Set(["h"]);
+  const takesValue = /* @__PURE__ */ new Set();
+  for (const [name, def] of Object.entries(args)) {
+    if (def.type === "positional") continue;
+    const names = [name, camel(name)];
+    if (def.type === "boolean") names.push(`no-${name}`, `no${camel(`-${name}`)}`);
+    for (const n2 of names) long.add(n2);
+    for (const alias of ["alias" in def ? def.alias ?? [] : []].flat()) {
+      if (alias.length === 1) short.add(alias);
+      else long.add(alias);
+    }
+    if (def.type === "string") for (const n2 of [name, camel(name)]) takesValue.add(n2);
+  }
+  const unknown = [];
+  for (let i2 = 0; i2 < argv2.length; i2++) {
+    const token = argv2[i2];
+    if (token === "--") break;
+    if (token.startsWith("--")) {
+      const [name = "", value] = token.slice(2).split(/=(.*)/s);
+      if (!long.has(name)) unknown.push(`--${name}`);
+      else if (value === void 0 && takesValue.has(name)) i2++;
+    } else if (/^-[A-Za-z]/.test(token)) {
+      for (const letter of token.slice(1)) {
+        if (!short.has(letter)) unknown.push(`-${letter}`);
+      }
+    }
+  }
+  return unknown;
+}
+
 // src/cli.ts
 var subCommands = {
   scan: scanCommand,
@@ -16700,7 +16903,22 @@ function withDefaultCommand(argv2) {
   if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv2;
   return ["scan", ...argv2];
 }
-runMain(main, { rawArgs: withDefaultCommand(process.argv.slice(2)) }).catch((error) => {
+var rawArgs = withDefaultCommand(process.argv.slice(2));
+var command = rawArgs[0];
+if (command !== void 0 && Object.hasOwn(subCommands, command)) {
+  const unknown = unknownFlags(
+    rawArgs.slice(1),
+    subCommands[command].args
+  );
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `egressa: unknown option ${unknown.join(", ")}. Run \`egressa ${command} --help\` for the options.
+`
+    );
+    process.exit(EXIT.USAGE);
+  }
+}
+runMain(main, { rawArgs }).catch((error) => {
   process.stderr.write(`egressa: ${error.message}
 `);
   process.exit(EXIT.INTERNAL);

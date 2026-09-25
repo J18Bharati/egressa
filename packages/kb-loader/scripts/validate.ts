@@ -137,6 +137,18 @@ for (const file of vendorFiles) {
           `${where}: package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`,
         );
       }
+      // PyPI treats `Twilio`, `twilio` and `twi_lio`-style spellings as one
+      // project and the manifest readers emit the PEP 503 form, so an alias in
+      // any other spelling can never match -- a silent recall gap. PyPI has no
+      // namespaces either, so a wildcard there claims nothing real.
+      if (ecosystem === 'pypi') {
+        const normalised = alias.name.toLowerCase().replace(/[-_.]+/g, '-');
+        if (alias.name !== normalised || alias.name.endsWith('/*')) {
+          errors.push(
+            `${where}: pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`,
+          );
+        }
+      }
       // A wildcard alias claims a whole registry namespace. Recorded here and
       // cross-checked once every entry is read, because an overlap is a
       // property of the set and the file that introduces it may be read first.

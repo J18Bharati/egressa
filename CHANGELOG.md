@@ -13,10 +13,15 @@ describes the state of the repository rather than an artifact anyone can install
 
 ## [Unreleased]
 
-Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in place.
+Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 
 ### Added
 
+- **Python dependency manifests are read.** `requirements*.txt` and `pyproject.toml` (PEP 621
+  dependencies and extras, PEP 735 groups, Poetry tables), with PEP 503 name normalisation and
+  dev-only detection. Both field tests missed Twilio in five production files because no Python
+  manifest was read. Declared dependencies only: no Python lockfile, and no Python call sites.
+  Virtualenvs and `site-packages` are never read, for the same reason as `node_modules`.
 - **`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`,
   connects an MCP client to `egressa-mcp`, and has each one scan a small repository. It fails the
   build unless both scans used the native parser and the knowledge base shipped beside that binary.
@@ -60,6 +65,13 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
   checked against a primary source. Datadog's default has changed across major versions
   (`mask-user-input`, then `mask`, then `mask-user-input`). Every documented version masks inputs,
   and the row records the history rather than a single value.
+
+### Knowledge base — `2026.09.21` → `2026.09.26`
+
+- `pypi` aliases for Twilio (`twilio`) and AWS (`boto3`, `botocore`), each checked against the
+  publisher on PyPI.
+- `kb:validate` rejects a `pypi` alias that is not in PEP 503 normalised form, which could never
+  match, and a `pypi` wildcard, since PyPI has no namespaces.
 
 ## [0.2.0] — 2026-09-22
 

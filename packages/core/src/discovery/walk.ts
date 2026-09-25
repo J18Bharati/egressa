@@ -22,6 +22,12 @@ export const DEFAULT_EXCLUDES = [
   '**/.svelte-kit/**',
   '**/coverage/**',
   '**/vendor/**',
+  // Installed Python packages, for the same reason as node_modules: a virtualenv
+  // holds every dependency's own manifests, which describe what *they* use.
+  '**/.venv/**',
+  '**/venv/**',
+  '**/site-packages/**',
+  '**/.tox/**',
   '**/*.min.js',
   '**/*.bundle.js',
   '**/*.map',
@@ -33,6 +39,11 @@ export const MANIFEST_PATTERNS = [
   '**/npm-shrinkwrap.json',
   '**/pnpm-lock.yaml',
   '**/yarn.lock',
+  '**/pyproject.toml',
+  '**/requirements.txt',
+  '**/requirements-*.txt',
+  '**/requirements_*.txt',
+  '**/requirements/*.txt',
 ];
 
 export const SOURCE_PATTERNS = ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'];

@@ -10,7 +10,8 @@
       "npm": [
         { "name": "twilio", "kind": "official-sdk", "detectTransitive": false },
         { "name": "@twilio/conversations", "kind": "official-sdk", "detectTransitive": false }
-      ]
+      ],
+      "pypi": [{ "name": "twilio", "kind": "official-sdk", "detectTransitive": false }]
     },
     "hosts": [
       {

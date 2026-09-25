@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 import { parseNpmLock } from './npm-lock.js';
 import { parsePackageJson } from './package-json.js';
 import { parsePnpmLock } from './pnpm-lock.js';
+import { parsePyprojectToml, parseRequirementsTxt } from './python.js';
 import type { DependencyRecord, ManifestParseResult } from './types.js';
 import { parseYarnBerryLock, parseYarnClassicLock } from './yarn-lock.js';
 
@@ -10,6 +11,11 @@ export * from './types.js';
 export { parseNpmLock } from './npm-lock.js';
 export { parsePackageJson } from './package-json.js';
 export { parsePnpmLock } from './pnpm-lock.js';
+export {
+  normalisePypiName,
+  parsePyprojectToml,
+  parseRequirementsTxt,
+} from './python.js';
 export { parseYarnBerryLock, parseYarnClassicLock } from './yarn-lock.js';
 
 /** Berry lockfiles are YAML and announce themselves with a `__metadata` block. */
@@ -70,6 +76,18 @@ export function analyzeManifests(options: AnalyzeManifestsOptions): ManifestAnal
       }
       manifestRecords.push(...result.dependencies);
       errors.push(...result.errors);
+      continue;
+    }
+
+    // Python manifests declare; there is no lockfile to project onto, and their
+    // names must not enter `declared`, which is keyed by npm name alone.
+    if (file === 'pyproject.toml' || file.endsWith('.txt')) {
+      const python =
+        file === 'pyproject.toml'
+          ? parsePyprojectToml(text, path)
+          : parseRequirementsTxt(text, path);
+      manifestRecords.push(...python.dependencies);
+      errors.push(...python.errors);
       continue;
     }
 
