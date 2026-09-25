@@ -9257,7 +9257,7 @@ var require_scan = __commonJS({
       let negated = false;
       let negatedExtglob = false;
       let finished = false;
-      let braces = 0;
+      let braces2 = 0;
       let prev;
       let code;
       let token = { value: "", depth: 0, isGlob: false };
@@ -9279,7 +9279,7 @@ var require_scan = __commonJS({
           continue;
         }
         if (braceEscaped === true || code === CHAR_LEFT_CURLY_BRACE) {
-          braces++;
+          braces2++;
           while (eos() !== true && (code = advance())) {
             if (code === CHAR_BACKWARD_SLASH) {
               backslashes = token.backslashes = true;
@@ -9287,7 +9287,7 @@ var require_scan = __commonJS({
               continue;
             }
             if (code === CHAR_LEFT_CURLY_BRACE) {
-              braces++;
+              braces2++;
               continue;
             }
             if (braceEscaped !== true && code === CHAR_DOT && (code = advance()) === CHAR_DOT) {
@@ -9309,8 +9309,8 @@ var require_scan = __commonJS({
               break;
             }
             if (code === CHAR_RIGHT_CURLY_BRACE) {
-              braces--;
-              if (braces === 0) {
+              braces2--;
+              if (braces2 === 0) {
                 braceEscaped = false;
                 isBrace = token.isBrace = true;
                 finished = true;
@@ -9844,7 +9844,7 @@ var require_parse = __commonJS({
       input = utils.removePrefix(input, state);
       len = input.length;
       const extglobs = [];
-      const braces = [];
+      const braces2 = [];
       const stack = [];
       let prev = bos;
       let value;
@@ -10162,12 +10162,12 @@ var require_parse = __commonJS({
             outputIndex: state.output.length,
             tokensIndex: state.tokens.length
           };
-          braces.push(open);
+          braces2.push(open);
           push(open);
           continue;
         }
         if (value === "}") {
-          const brace = braces[braces.length - 1];
+          const brace = braces2[braces2.length - 1];
           if (opts.nobrace === true || !brace) {
             push({ type: "text", value, output: value });
             continue;
@@ -10200,7 +10200,7 @@ var require_parse = __commonJS({
           }
           push({ type: "brace", value, output });
           decrement("braces");
-          braces.pop();
+          braces2.pop();
           continue;
         }
         if (value === "|") {
@@ -10212,7 +10212,7 @@ var require_parse = __commonJS({
         }
         if (value === ",") {
           let output = value;
-          const brace = braces[braces.length - 1];
+          const brace = braces2[braces2.length - 1];
           if (brace && stack[stack.length - 1] === "braces") {
             brace.comma = true;
             output = "|";
@@ -10235,7 +10235,7 @@ var require_parse = __commonJS({
         if (value === ".") {
           if (state.braces > 0 && prev.type === "dot") {
             if (prev.value === ".") prev.output = DOT_LITERAL;
-            const brace = braces[braces.length - 1];
+            const brace = braces2[braces2.length - 1];
             prev.type = "dots";
             prev.output += value;
             prev.value += value;
@@ -14659,6 +14659,9 @@ function resolveRegion(vendor, raw) {
   if (!hit) return null;
   return { code: hit.code, country: hit.country.toUpperCase(), sourceUrl: hit.sourceUrl };
 }
+function isUnmappedRegion(vendor, raw) {
+  return vendor !== null && raw !== void 0 && resolveRegion(vendor, raw) === null;
+}
 function declaresRegionNarrowing(vendor) {
   return vendor.processing.jurisdictions.some((j) => j.regionSelected === true);
 }
@@ -15548,6 +15551,9 @@ function walk2(node, visit2) {
 function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed) {
   const index = new LineIndex(text);
   const out = [];
+  const matchers = keys.map(
+    (key) => [key, new RegExp(`(^|[^A-Za-z0-9_-])${key}\\s*=\\s*"([^"\\\\$]+)"`, "g")]
+  );
   let offset = 0;
   let depth = 0;
   let inBlock = insideBlockNamed === void 0;
@@ -15565,26 +15571,36 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
       }
     }
     if (inBlock) {
-      for (const key of keys) {
-        const at = line.indexOf(key);
-        if (at === -1) continue;
-        const assignment = line.slice(at).match(new RegExp(`^${key}\\s*=\\s*"([^"\\\\$]+)"`));
-        if (!assignment?.[1]) continue;
-        out.push({
-          provider,
-          region: assignment[1],
-          loc: index.locationAt(filePath, lineOffset + at, key.length),
-          snippet: index.snippetAt(lineOffset + at)
-        });
+      for (const [key, matcher] of matchers) {
+        for (const match of line.matchAll(matcher)) {
+          const at = match.index + (match[1] ?? "").length;
+          if (insideBlockNamed !== void 0 && depthAt(line, at, depth) !== blockDepth + 1) {
+            continue;
+          }
+          const region = match[2];
+          if (!region) continue;
+          out.push({
+            provider,
+            region,
+            loc: index.locationAt(filePath, lineOffset + at, key.length),
+            snippet: index.snippetAt(lineOffset + at)
+          });
+        }
       }
     }
-    depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+    depth += braces(line);
     if (insideBlockNamed !== void 0 && inBlock && depth <= blockDepth) {
       inBlock = false;
       blockDepth = -1;
     }
   }
   return out;
+}
+function braces(text) {
+  return (text.match(/\{/g) ?? []).length - (text.match(/\}/g) ?? []).length;
+}
+function depthAt(line, column, lineStartDepth) {
+  return lineStartDepth + braces(line.slice(0, column));
 }
 function analyzeInfrastructure(options) {
   const { root, configPaths } = options;
@@ -15668,7 +15684,7 @@ function mergeSignals(signals, options) {
     const region = vendor && signal.region ? resolveRegion(vendor, signal.region) : null;
     const classified = vendor ? classifyExposure(vendor, kb, {
       region,
-      ...signal.region && !region ? { unmappedRegion: signal.region } : {}
+      ...isUnmappedRegion(vendor, signal.region) ? { unmappedRegion: signal.region } : {}
     }) : null;
     const ruleId = classified?.ruleId ?? unmatchedRule(signal);
     const narrowedTo = classified?.exposure.inputs.some((i2) => i2.startsWith("narrowedTo:")) ? region?.country : void 0;
@@ -15698,7 +15714,7 @@ function unmatchedRule(signal) {
   return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
 }
 function buildFinding(ruleId, vendor, signals, classified, region, staleVendorIds) {
-  const evidence = signals.map(toEvidence).sort(byStrength);
+  const evidence = signals.map((s2) => toEvidence(s2, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
   const transfer = vendor ? toTransferFacts(vendor) : null;
@@ -15723,7 +15739,7 @@ function buildFinding(ruleId, vendor, signals, classified, region, staleVendorId
     suppression: null
   };
 }
-function toEvidence(signal) {
+function toEvidence(signal, vendor) {
   return {
     ...signal.location,
     kind: signal.kind,
@@ -15734,7 +15750,8 @@ function toEvidence(signal) {
     ...signal.transitiveVia ? { transitiveVia: signal.transitiveVia } : {},
     // This list is a whitelist: a field not named here is dropped from the
     // finding even though the signal carried it.
-    ...signal.region ? { region: signal.region } : {}
+    ...signal.region ? { region: signal.region } : {},
+    ...isUnmappedRegion(vendor, signal.region) ? { regionUnmapped: true } : {}
   };
 }
 function byStrength(a2, b2) {
@@ -16167,7 +16184,11 @@ function formatHuman(result, options) {
 function formatFinding(finding, c3) {
   const marker = finding.severity === "warning" ? c3("yellow", "!") : finding.severity === "error" ? c3("red", "x") : c3("blue", "i");
   const vendorName = displayName(finding);
-  const regions = [...new Set(finding.evidence.map((e2) => e2.region).filter(Boolean))];
+  const regions = [
+    ...new Set(
+      finding.evidence.filter((e2) => e2.region).map((e2) => e2.regionUnmapped ? `${e2.region} [unmapped]` : e2.region)
+    )
+  ];
   const name = regions.length > 0 ? `${vendorName} (${regions.join(", ")})` : vendorName;
   const suppressed = finding.suppressed ? c3("dim", " (suppressed)") : "";
   const confidence = finding.confidence === "high" ? "" : c3("dim", ` [${finding.confidence} confidence]`);
@@ -16601,6 +16622,10 @@ var subCommands = {
 var main = defineCommand({
   meta: {
     name: "egressa",
+    // citty answers `--version` from here, and exits 1 with "No version
+    // specified" when it is missing -- which it was, although `--version` has
+    // always been in PASS_THROUGH below.
+    version: TOOL_VERSION,
     description: "Detects third-party data-egress patterns in source code and their cross-border transfer exposure. Does not assess or certify GDPR compliance."
   },
   subCommands,

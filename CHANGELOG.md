@@ -11,6 +11,39 @@ know which half moved. Knowledge base versions are dates (`kb.version`); the too
 Nothing has been published yet — there is no npm release and no git remote — so every version below
 describes the state of the repository rather than an artifact anyone can install.
 
+## [Unreleased]
+
+Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in place.
+
+### Added
+
+- **`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`
+  and connects an MCP client to `egressa-mcp`, and fails the build if either cannot start. No test
+  could catch a bundle that does not boot, because vitest aliases every package to its source.
+- **`pnpm smoke:pack`** runs the same check against the four packed tarballs installed in a clean
+  `node:20-slim` container. It is manual because it needs Docker and the registry.
+- **An unmapped region is marked.** Evidence carries `regionUnmapped: true` when a region is not in
+  the vendor's map, and the human title reads `(eu-wset-1 [unmapped])` rather than rendering it like
+  a resolved region. The exposure engine already refused to narrow on one.
+
+### Fixed
+
+- **The MCP server could not start.** `dist/server.js` threw `Dynamic require of "process" is not
+  supported` at import, because its build dropped the `createRequire` banner the CLI carries for
+  exactly that error. Both builds now import one banner from `tsup.banner.ts`.
+- **`egressa --version` exited 1** with "No version specified". The root command carried no
+  version for citty to print.
+- **A Terraform region nested inside a provider block was read as the provider's region.**
+  `default_tags { tags = { region = "emea" } }` produced a second AWS finding titled `(emea)` at
+  high confidence. Only the provider block's own level is read now.
+- **`sts_region` was read as `region`.** The key lookup had no boundary, so any key ending in
+  `region` inside `provider "aws"` matched. A key must now stand alone. In HCL and TOML a hyphen
+  counts as part of a key.
+- **The privacy review's session-replay gate did not know replay configured inside Sentry or
+  Datadog**, so `Sentry.replayIntegration()` never dispatched the specialist. The write-time hook had
+  the same gap. The specialist's masking table gains Sentry Replay and Datadog RUM rows, each
+  checked against a primary source.
+
 ## [0.2.0] — 2026-09-22
 
 Knowledge base `2026.09.21`. Findings schema `1.1.0`.
