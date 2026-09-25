@@ -269,24 +269,6 @@ properly means forcing colour on — a pseudo-terminal, or a seam in `formatHuma
 **Priority:** P3
 **Depends on:** None
 
-### Read Python dependency manifests
-
-**What:** A `pyproject.toml` / `requirements.txt` reader in `packages/core/src/manifests/`, plus
-`pypi` aliases for `twilio` and `boto3`.
-
-**Why:** Across two field tests, `twilio`, a vendor already in the knowledge base, was missed in five
-production files, because 11 Python manifests were never read. `boto3` hides AWS whenever
-`@aws-sdk/*` is absent. The privacy-review skill's `STACK:` line reports `python` on the same tree,
-so the two halves disagree.
-
-**Context:** T21 in the 2026-09-21 triage, which was accepted and never tracked here. The index side
-already exists at `kb-loader/src/index.ts:24`. Python *call-site* analysis stays in
-`docs/ROADMAP.md`. This item is the manifest half only.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
-
 ### Let `unmatched` be filtered
 
 **What:** Apply `--min-confidence` to `unmatched`, or add `--no-unmatched` / `--only-unmatched`.
@@ -551,6 +533,13 @@ in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Read Python dependency manifests
+**Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/core/src/manifests/python.ts` reads
+`requirements*.txt` and `pyproject.toml` (PEP 621, PEP 735, Poetry), with `pypi` aliases for Twilio
+and AWS and a `kb:validate` rule that keeps them PEP 503 normalised. On the field-test target Twilio
+is now reported where it was missed. Python call sites and lockfiles remain on the roadmap. Other
+vendors' Python SDKs need their own `pypi` aliases, each checked against its publisher.
 
 ### Reject a flag the CLI cannot honour
 **Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/cli/src/flags.ts` checks every flag
