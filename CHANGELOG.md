@@ -29,6 +29,10 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
 
 ### Fixed
 
+- **`SCOPE_OPT_OUT` was computed and used for nothing**, and SKILL.md did not say so. It is now
+  documented as a context gate. The opt-out signals checklist stays routed on the tracker gates,
+  because its own scope rule is to report nothing without an advertising tracker. A test fails on
+  any future gate that is neither routed nor listed as context.
 - **An unknown flag was accepted and ignored.** `egressa scan . --exlude 'legacy/**'` scanned
   everything and exited 0. An undeclared flag is now a usage error (exit `2`) that names it, and so
   is a negated `exclude` glob, which discovery never honoured.

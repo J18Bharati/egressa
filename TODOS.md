@@ -141,23 +141,29 @@ same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
 **Priority:** P2
 **Depends on:** None
 
-### Route the opt-out specialist on `SCOPE_OPT_OUT`
+### Decide whether the review should check objection and direct-marketing opt-outs
 
-**What:** Add `SCOPE_OPT_OUT` to the opt-out-signals dispatch condition at `SKILL.md:71`, so the row
-reads `SCOPE_TRACKERS`, `SCOPE_TRACKER_CODE` or `SCOPE_OPT_OUT`.
+**What:** Decide whether privacy-review gets a checklist for honouring an objection or an
+unsubscribe: an `opt_out` or `stop_contacting` state that is recorded but never acted on, and
+outreach to people who never signed up. If yes, add the provisions to
+`references/legal-basis.md` first.
 
-**Why:** `scope.sh` computes the gate, but no row dispatches on it and the context-only list at
-`SKILL.md:81` does not name it, so it has no effect. In the 2026-09-25 field test, the backend repo
-set it `true`. The skill did not dispatch the specialist. A dispatch made by hand, outside the
-routing, returned three substantive Art 21(1) findings.
+**Why:** In the 2026-09-25 field test, an ad-hoc dispatch outside the skill's routing returned three
+substantive findings of this kind against a backend that emails debtors. One was an `opt_out`
+auto-action that no code path executes. No shipped checklist covers this. `opt-out-signals.md` is
+about GPC and similar signals owed by a business that sells or shares data, and it correctly stays
+silent without advertising trackers. The findings cited Art 21(1), which `legal-basis.md` does not
+carry. Under this skill's rules, nothing may be cited until it does.
 
-**Context:** The specialist is one of the two never validated (see the item above), so this sends
-more traffic to an unvalidated checklist. Do both. A `scope-gates.test.ts` case is not enough on its
-own because routing lives in `SKILL.md` prose. Assert the table row in `claims-contract.test.ts`, or
-in a small routing test. Triage F2 in `docs/reviews/2026-09-25-live-run-triage.md`.
+**Context:** F2 in `docs/reviews/2026-09-25-live-run-triage.md`. The triage first recommended
+routing `opt-out-signals.md` on `SCOPE_OPT_OUT`. That was wrong, because the checklist's own scope
+rule would then emit nothing. `SCOPE_OPT_OUT` is now documented as a context gate, and
+`scope-gates.test.ts` fails on any gate that is neither routed nor listed as context. A new
+checklist is a product-scope decision, so record it in `docs/ROADMAP.md` too. It also needs the
+cold-context validation the other specialists had.
 
-**Effort:** S
-**Priority:** P1
+**Effort:** M
+**Priority:** P2
 **Depends on:** None
 
 ### Decide whether replay inside a general SDK needs consent routing

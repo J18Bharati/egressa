@@ -435,3 +435,34 @@ describe('session replay inside a general SDK routes the specialist', () => {
     expect(run.lines.SCOPE_SESSION_REPLAY).toBe('false');
   });
 });
+
+// F2 in docs/reviews/2026-09-25-live-run-triage.md. SCOPE_OPT_OUT was computed,
+// not routed, and not listed as context -- an orphan nobody could tell was
+// deliberate. Every gate scope.sh emits must now be named in SKILL.md, either in
+// the dispatch table or in the context-only list.
+describe('every gate is accounted for in SKILL.md', () => {
+  const gates = [...readFileSync(SCOPE, 'utf8').matchAll(/^gate (SCOPE_[A-Z_]+)/gm)].map(
+    (m) => m[1] as string,
+  );
+  const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+  const step2 = skill.slice(skill.indexOf('## Step 2'), skill.indexOf('## Step 3'));
+  const table = step2
+    .split('\n')
+    .filter((l) => l.startsWith('| '))
+    .join('\n');
+  const contextLine = step2.slice(step2.indexOf('**Not every gate selects a specialist.**'));
+  const context = contextLine.slice(0, contextLine.indexOf('\n\n'));
+
+  it('reads the gates it checks', () => {
+    expect(gates.length).toBeGreaterThan(10);
+  });
+
+  for (const gate of gates) {
+    it(`${gate} dispatches a specialist or is listed as context`, () => {
+      const routed = table.includes(`\`${gate}\``);
+      const contextOnly = context.includes(`\`${gate}\``);
+      expect({ gate, accountedFor: routed || contextOnly }).toEqual({ gate, accountedFor: true });
+      expect({ gate, both: routed && contextOnly }).toEqual({ gate, both: false });
+    });
+  }
+});
