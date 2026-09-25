@@ -17,6 +17,8 @@ them by default. **Precision here is easy and cheap, so there is no excuse for a
 | Microsoft Clarity | Yes, in all three modes, and it cannot be turned off for inputs | Nothing about masking. Do not report it |
 | Smartlook | Yes. Forms are not recorded unless `{ forms: true }` is passed | An explicit `forms: true` |
 | PostHog | Yes. `maskAllInputs` defaults to `true` | An explicit `maskAllInputs: false` |
+| Sentry Replay | Yes. `maskAllText`, `maskAllInputs` and `blockAllMedia` all default to `true` ([integration source](https://github.com/getsentry/sentry-javascript/blob/develop/packages/replay-internal/src/integration.ts), checked 2026-09-25) | An explicit `maskAllText: false` or `maskAllInputs: false`, or an unmask selector |
+| Datadog RUM | Yes. `defaultPrivacyLevel` is `mask` when not set ([privacy options](https://docs.datadoghq.com/real_user_monitoring/session_replay/browser/privacy_options/), checked 2026-09-25) | An explicit `defaultPrivacyLevel: 'allow'` |
 
 **LogRocket is the outlier and the main finding this specialist exists to produce.**
 
@@ -37,8 +39,8 @@ question, not a `code` finding.
 
 ## Masking switched off explicitly
 
-Any of `maskAllInputs: false`, `maskTextSelector: 'none'`, `forms: true` on Smartlook, a
-LogRocket `inputSanitizer: false`, or a per-element unmask attribute on a field that carries
+Any of `maskAllInputs: false`, `maskAllText: false` on Sentry, `defaultPrivacyLevel: 'allow'` on
+Datadog, `maskTextSelector: 'none'`, `forms: true` on Smartlook, a LogRocket `inputSanitizer: false`, or a per-element unmask attribute on a field that carries
 personal data.
 
 Severity `high`. This is a deliberate choice, so the finding is about whether it was intended and

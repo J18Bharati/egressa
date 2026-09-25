@@ -46,10 +46,10 @@ const PATTERNS = [
   },
   {
     id: 'session-replay-init',
-    test: /\bLogRocket\.init\s*\(|\bSmartlook\.init\s*\(|\bFS\.identify\s*\(|\bclarity\s*\(\s*['"]|\bhj\s*\(\s*['"]/,
+    test: /\bLogRocket\.init\s*\(|\bSmartlook\.init\s*\(|\bFS\.identify\s*\(|\bclarity\s*\(\s*['"]|\bhj\s*\(\s*['"]|\breplayIntegration\s*\(|\bsessionReplaySampleRate\s*:/,
     provision: 'ePrivacy Directive 2002/58/EC Art 5(3)',
     what: 'a session-replay tool is being initialised',
-    ask: 'Are text inputs masked? LogRocket is the one major vendor whose default records them: `dom.inputSanitizer` defaults to false. The others mask by default, so the question there is whether masking was switched off.',
+    ask: "Are text inputs masked? LogRocket is the one major vendor whose default records them: `dom.inputSanitizer` defaults to false. The others mask by default, so the question there is whether masking was switched off -- `maskAllInputs: false` or `maskAllText: false` on Sentry, `defaultPrivacyLevel: 'allow'` on Datadog.",
   },
   {
     id: 'client-storage',

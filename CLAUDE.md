@@ -225,7 +225,7 @@ every specialist in full — a specialist that has not seen the table will cite 
 
 **The narrow checks are narrow on purpose.** Retention lost its general "no deletion path" check
 because Prisma has no TTL construct, so there is no absence to test for. Session replay reduced to
-one finding because five of six vendors already mask inputs by default; LogRocket's `inputSanitizer`
+one finding because seven of eight vendors already mask inputs by default; LogRocket's `inputSanitizer`
 defaults to `false`. Consent gating must skip strictly-necessary cookies — session, CSRF, load
 balancer — which is an exemption in Art 5(3) itself and the largest false-positive source in the set.
 

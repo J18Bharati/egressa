@@ -104,6 +104,22 @@ describe('the tracker write hook fires on', () => {
     expect(out?.additionalContext).toContain('inputSanitizer');
   });
 
+  it('Sentry Replay added to an existing init', () => {
+    // The hook knew only the dedicated replay vendors, the same gap F1 found in
+    // the review skill's scope gate.
+    const { out } = run(
+      write('sentry.client.config.ts', 'integrations: [Sentry.replayIntegration()],'),
+    );
+    expect(out?.systemMessage).toContain('session-replay');
+    expect(out?.additionalContext).toContain('maskAllInputs');
+  });
+
+  it('Datadog RUM replay sampling', () => {
+    const { out } = run(write('src/rum.ts', 'datadogRum.init({ sessionReplaySampleRate: 20 });'));
+    expect(out?.systemMessage).toContain('session-replay');
+    expect(out?.additionalContext).toContain('defaultPrivacyLevel');
+  });
+
   it('a storage write that is not strictly necessary', () => {
     const { out } = run(write('app/u.ts', 'localStorage.setItem("utm_source", p);'));
     expect(out?.systemMessage).toContain('stored on the user');
@@ -129,6 +145,11 @@ describe('the tracker write hook stays silent on', () => {
       expect(out).toBeNull();
       expect(code).toBe(0);
     });
+
+  silent(
+    'a Sentry init with no replay',
+    write('sentry.client.config.ts', "Sentry.init({ dsn: 'x', tracesSampleRate: 0.2 });"),
+  );
 
   silent('an edit that already carries its own consent gate', {
     session_id: 'gated',

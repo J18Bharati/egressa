@@ -331,7 +331,7 @@ gate SCOPE_IAC           paths '\.tf$|(^|/)cdk/|cdk\.json$|serverless\.ya?ml$|te
 
 gate SCOPE_TRACKERS      declared 'posthog|mixpanel|amplitude|@segment/|analytics-node|react-ga|gtag|logrocket|fullstory|@microsoft/clarity|hotjar|smartlook|heap-api|react-facebook-pixel|@snapchat|tiktok-pixel'
 gate SCOPE_TRACKER_CODE  hits 'gtag\(|dataLayer|fbq\(|_linkedin_partner_id|ttq\.|snaptr\(|clarity\(|hj\(|posthog\.init|mixpanel\.init|amplitude\.(init|getInstance)|analytics\.load|LogRocket\.init|FS\.identify|Smartlook'
-gate SCOPE_SESSION_REPLAY hits 'logrocket|fullstory|@microsoft/clarity|hotjar|smartlook|session_?[Rr]ecording|record[Cc]anvas|maskAllInputs'
+gate SCOPE_SESSION_REPLAY hits 'logrocket|fullstory|@microsoft/clarity|hotjar|smartlook|session_?[Rr]ecording|record[Cc]anvas|maskAllInputs|replayIntegration|replaysSessionSampleRate|replaysOnErrorSampleRate|@sentry/replay|rrweb|sessionReplaySampleRate|startSessionReplayRecording'
 
 gate SCOPE_CONSENT       hits '__tcfapi|__cmp\(|onetrust|OneTrust|Cookiebot|klaro|osano|cookieconsent|CookieConsent|consent[_-]?[Mm]ode|hasConsent|consentGranted|analytics_storage|ad_storage'
 gate SCOPE_CLIENT_STORAGE hits 'document\.cookie|localStorage\.|sessionStorage\.|indexedDB|res\.cookie\(|[Ss]et-[Cc]ookie|cookies\(\)\.set|serializeCookie'
