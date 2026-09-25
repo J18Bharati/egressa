@@ -141,6 +141,58 @@ same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
 **Priority:** P2
 **Depends on:** None
 
+### Route the opt-out specialist on `SCOPE_OPT_OUT`
+
+**What:** Add `SCOPE_OPT_OUT` to the opt-out-signals dispatch condition at `SKILL.md:71`, so the row
+reads `SCOPE_TRACKERS`, `SCOPE_TRACKER_CODE` or `SCOPE_OPT_OUT`.
+
+**Why:** `scope.sh` computes the gate, but no row dispatches on it and the context-only list at
+`SKILL.md:81` does not name it, so it has no effect. In the 2026-09-25 field test, the backend repo
+set it `true`. The skill did not dispatch the specialist. A dispatch made by hand, outside the
+routing, returned three substantive Art 21(1) findings.
+
+**Context:** The specialist is one of the two never validated (see the item above), so this sends
+more traffic to an unvalidated checklist. Do both. A `scope-gates.test.ts` case is not enough on its
+own because routing lives in `SKILL.md` prose. Assert the table row in `claims-contract.test.ts`, or
+in a small routing test. Triage F2 in `docs/reviews/2026-09-25-live-run-triage.md`.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** None
+
+### Assert one structured block per dispatched specialist
+
+**What:** Step 4 of `SKILL.md` names every dispatched specialist that returned no structured block,
+and reports that specialist's lane as not reviewed rather than as silent.
+
+**Why:** In the 2026-09-21 run, one specialist's output was lost entirely and the result read as a
+clean lane. It did not recur on 2026-09-25, where six of six returned blocks, but one clean run
+does not show the failure is impossible.
+
+**Context:** T16 in `docs/reviews/2026-09-21-external-run-triage.md`. It was accepted there and
+never tracked here.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Let two specialists' findings on one line be seen to agree
+
+**What:** Change the fingerprint so the Step 4 merge can recognise the same `file:line` raised by
+different specialists, and mark those as corroborated rather than deduplicating one away.
+
+**Why:** The scheme appends the category (`file:line:consent`, `file:line:pii-in-logs`), so two
+specialists flagging the same line never collide. The 2026-09-25 run produced a concrete pair on a
+Sentry config line. Agreement between independent checklists is the strongest signal the skill can
+produce, and the merge cannot see it.
+
+**Context:** T4.1 in the 2026-09-21 triage and F4 in the 2026-09-25 triage. Keep category in the
+record. Only the join key changes.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ## Engine
 
 ### Carry a jurisdiction's role through to output
@@ -188,6 +240,136 @@ redeclaration, which is the failure mode that actually occurred, so the risk her
 properly means forcing colour on â€” a pseudo-terminal, or a seam in `formatHuman`.
 
 **Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Reject a flag the CLI cannot honour
+
+**What:** Exit `2` on an unknown flag name, and on an `--exclude` glob starting with `!`.
+
+**Why:** `egressa scan . --exlude 'legacy/**'` exits `0` and scans everything, because citty does not
+reject unknown arguments and `packages/cli/src/cli.ts` has no post-parse guard. Values are validated
+(`--fail-on bogus` exits `2`). Flag names are not. A typo in CI widens the scan silently, which
+undercuts the reason `--exclude` is recorded in the output at all. A negated glob is accepted and
+does nothing, which is the same failure.
+
+**Context:** E9 and E11 in `docs/reviews/2026-09-25-live-run-triage.md`. Compare the parsed args
+with the command's declared `args`, including citty's `no-` forms. The structural guard in
+`cli.test.ts` already walks those declarations.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** None
+
+### Read Python dependency manifests
+
+**What:** A `pyproject.toml` / `requirements.txt` reader in `packages/core/src/manifests/`, plus
+`pypi` aliases for `twilio` and `boto3`.
+
+**Why:** Across two field tests, `twilio`, a vendor already in the knowledge base, was missed in five
+production files, because 11 Python manifests were never read. `boto3` hides AWS whenever
+`@aws-sdk/*` is absent. The privacy-review skill's `STACK:` line reports `python` on the same tree,
+so the two halves disagree.
+
+**Context:** T21 in the 2026-09-21 triage, which was accepted and never tracked here. The index side
+already exists at `kb-loader/src/index.ts:24`. Python *call-site* analysis stays in
+`docs/ROADMAP.md`. This item is the manifest half only.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Let `unmatched` be filtered
+
+**What:** Apply `--min-confidence` to `unmatched`, or add `--no-unmatched` / `--only-unmatched`.
+
+**Why:** `--min-confidence high` cut findings from 13 to 5 on the 2026-09-25 target and left all 63
+packages and 5 hosts in place. About 85% of them are build tooling or first-party packages. The block
+is the only recall signal the project has, and it is being scrolled past.
+
+**Context:** T17 in the 2026-09-21 triage, never tracked. `human.ts` and `markdown.ts` print it
+unconditionally.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Read regions from `docker-compose.yml`
+
+**What:** Read literal region values from `environment:` in compose files, as `fly.toml`'s
+`primary_region` is read today.
+
+**Why:** `SCOPE_IAC` in the privacy-review skill routes on `docker-compose.ya?ml$`, and the engine
+reads nothing from those files. On the 2026-09-25 target, nine `eu-west-1` literals in a production
+compose file were invisible to the scan while the skill reported infrastructure present.
+
+**Context:** B9 in the 2026-09-25 triage. `infrastructure/key-literal.ts` is most of a reader. The
+open question is which keys count (`AWS_REGION`, `AWS_DEFAULT_REGION`, `awslogs-region`) and which
+vendor each attributes to. Attribute only where the key names the vendor. Guessing would violate
+"a wrong host is worse than no host".
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Count what ignore files removed
+
+**What:** Record in all four formats a count of paths excluded by `.gitignore` / `.egressaignore`.
+Record the count, not the globs.
+
+**Why:** `scan.exclude` records `--exclude` and `.egressa.yml` so a narrowed SARIF says it is
+narrowed. Ignore files narrow the scan just as much and leave no trace. The rationale at
+`packages/core/src/types.ts:285`, "already committed and readable", does not hold for a SARIF that
+travels without the repository.
+
+**Context:** E10 in the 2026-09-25 triage. It touches the findings schema, which is free to change
+in place until the first release.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Name Terraform's GCP and Azure providers correctly
+
+**What:** `infrastructure/index.ts:50` loops over `['aws', 'gcp', 'azure']`. Terraform calls them
+`google` and `azurerm`, and Azure's key is `location`, not `region`.
+
+**Why:** Two-thirds of the loop can never match.
+
+**Context:** C4 in the 2026-09-25 triage. There are no GCP or Azure knowledge base entries, so
+nothing is lost today. Do this together with those entries, or drop the two names until they
+exist.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Validate a knowledge base passed with `--kb`
+
+**What:** Run the `kb:validate` checks at load time for a user-supplied `--kb`. At minimum, run the
+namespace-overlap and alias-kind checks.
+
+**Why:** The 2026-09-25 run loaded a hand-built knowledge base with overlapping namespaces, and it
+exited `0`. The shipped knowledge base passes every guard in the authoring pipeline. A supplied one
+skips all of them, which leaves the runtime ambiguity branch as the only defence.
+
+**Context:** The exit code for a knowledge base that fails to load is already `4`.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### `--full` and `--group-by`
+
+**What:** `--full` to disable `... and N more` truncation, and `--group-by file|service|vendor`.
+
+**Why:** Truncation hid the only structurally distinct call site in the 2026-09-21 run. "What does
+this service send?" can be answered only from the JSON today.
+
+**Context:** T19 and T20 in the 2026-09-21 triage, never tracked. Absence was reconfirmed from
+`--help` on 2026-09-25.
+
+**Effort:** M
 **Priority:** P3
 **Depends on:** None
 
@@ -287,6 +469,11 @@ to, and per the revised dispatch contract the transfers specialist always runs â
 failure there reproduces T0.1's exact shape in the one specialist nothing else gates. Highest
 value single assertion: `reconcile-aws.sh` makes no network call without `EGRESSA_ALLOW_AWS=1`.
 Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage.md`.
+
+While there, make `scan-transfers.sh` print which binary tier it resolved. The binaries are the
+target's build, the repository the skill lives in, and the degraded bundle. On 2026-09-25 it
+resolved through the skill's own checkout, a tier that an installed copy does not have, and nothing
+in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 
 **Effort:** M
 **Priority:** P2

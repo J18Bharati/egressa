@@ -62,7 +62,8 @@ Knowledge base `2026.09.21`. Findings schema `1.1.0`.
   package to whichever vendor sorted first once namespaces existed.
 - **A diagnostic sentence no longer renders as a vendor name.** Three renderers reached past a null
   vendor into the unresolved reason; the reason now has its own place.
-- Jurisdiction and confidence handling, SARIF `role` output, and several test and help-text gaps.
+- Jurisdiction and confidence handling, and several test and help-text gaps. A jurisdiction's
+  `role` is still discarded before output; see `TODOS.md`.
 
 ### Changed
 
