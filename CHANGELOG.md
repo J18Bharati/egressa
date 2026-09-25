@@ -17,9 +17,10 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
 
 ### Added
 
-- **`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`
-  and connects an MCP client to `egressa-mcp`, and fails the build if either cannot start. No test
-  could catch a bundle that does not boot, because vitest aliases every package to its source.
+- **`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`,
+  connects an MCP client to `egressa-mcp`, and has each one scan a small repository. It fails the
+  build unless both scans used the native parser and the knowledge base shipped beside that binary.
+  No test could catch a bundle that does not boot, because vitest aliases every package to its source.
 - **`pnpm smoke:pack`** runs the same check against the four packed tarballs installed in a clean
   `node:20-slim` container. It is manual because it needs Docker and the registry.
 - **An unmapped region is marked.** Evidence carries `regionUnmapped: true` when a region is not in
@@ -36,13 +37,22 @@ Knowledge base unchanged (`2026.09.21`). Findings schema `1.1.0`, edited in plac
 - **A Terraform region nested inside a provider block was read as the provider's region.**
   `default_tags { tags = { region = "emea" } }` produced a second AWS finding titled `(emea)` at
   high confidence. Only the provider block's own level is read now.
+- **A Terraform or Fly region in a comment or a string was read as the declared region**, and a
+  brace inside a string moved the block depth. Each line is now scanned for strings, `${...}`
+  interpolation and comments, and only code counts. Found by the branch review, in the first
+  version of the nested-block fix above.
+- **An unmapped region's audit trail depended on signal order.** `exposure.inputs` came from the
+  group's first signal only. It now lists every unmapped region the evidence carries.
+- **`egressa -v` exited 1.**
 - **`sts_region` was read as `region`.** The key lookup had no boundary, so any key ending in
   `region` inside `provider "aws"` matched. A key must now stand alone. In HCL and TOML a hyphen
   counts as part of a key.
 - **The privacy review's session-replay gate did not know replay configured inside Sentry or
   Datadog**, so `Sentry.replayIntegration()` never dispatched the specialist. The write-time hook had
   the same gap. The specialist's masking table gains Sentry Replay and Datadog RUM rows, each
-  checked against a primary source.
+  checked against a primary source. Datadog's default has changed across major versions
+  (`mask-user-input`, then `mask`, then `mask-user-input`). Every documented version masks inputs,
+  and the row records the history rather than a single value.
 
 ## [0.2.0] — 2026-09-22
 

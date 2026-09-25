@@ -18,7 +18,7 @@ them by default. **Precision here is easy and cheap, so there is no excuse for a
 | Smartlook | Yes. Forms are not recorded unless `{ forms: true }` is passed | An explicit `forms: true` |
 | PostHog | Yes. `maskAllInputs` defaults to `true` | An explicit `maskAllInputs: false` |
 | Sentry Replay | Yes. `maskAllText`, `maskAllInputs` and `blockAllMedia` all default to `true` ([integration source](https://github.com/getsentry/sentry-javascript/blob/develop/packages/replay-internal/src/integration.ts), checked 2026-09-25) | An explicit `maskAllText: false` or `maskAllInputs: false`, or an unmask selector |
-| Datadog RUM | Yes. `defaultPrivacyLevel` is `mask` when not set ([privacy options](https://docs.datadoghq.com/real_user_monitoring/session_replay/browser/privacy_options/), checked 2026-09-25) | An explicit `defaultPrivacyLevel: 'allow'` |
+| Datadog RUM | Yes, from SDK v4: `defaultPrivacyLevel` defaults to `mask-user-input` (v4, and v7 on) or `mask` (v5 and v6), and both mask form inputs ([upgrade guide](https://docs.datadoghq.com/real_user_monitoring/guide/browser-sdk-upgrade/), [privacy options](https://docs.datadoghq.com/real_user_monitoring/session_replay/browser/privacy_options/), checked 2026-09-26). Not verified before v4 | An explicit `defaultPrivacyLevel: 'allow'`. A `@datadog/browser-rum` pinned below v4 is a `config` question, not a finding |
 
 **LogRocket is the outlier and the main finding this specialist exists to produce.**
 

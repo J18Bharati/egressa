@@ -9257,7 +9257,7 @@ var require_scan = __commonJS({
       let negated = false;
       let negatedExtglob = false;
       let finished = false;
-      let braces2 = 0;
+      let braces = 0;
       let prev;
       let code;
       let token = { value: "", depth: 0, isGlob: false };
@@ -9279,7 +9279,7 @@ var require_scan = __commonJS({
           continue;
         }
         if (braceEscaped === true || code === CHAR_LEFT_CURLY_BRACE) {
-          braces2++;
+          braces++;
           while (eos() !== true && (code = advance())) {
             if (code === CHAR_BACKWARD_SLASH) {
               backslashes = token.backslashes = true;
@@ -9287,7 +9287,7 @@ var require_scan = __commonJS({
               continue;
             }
             if (code === CHAR_LEFT_CURLY_BRACE) {
-              braces2++;
+              braces++;
               continue;
             }
             if (braceEscaped !== true && code === CHAR_DOT && (code = advance()) === CHAR_DOT) {
@@ -9309,8 +9309,8 @@ var require_scan = __commonJS({
               break;
             }
             if (code === CHAR_RIGHT_CURLY_BRACE) {
-              braces2--;
-              if (braces2 === 0) {
+              braces--;
+              if (braces === 0) {
                 braceEscaped = false;
                 isBrace = token.isBrace = true;
                 finished = true;
@@ -9844,7 +9844,7 @@ var require_parse = __commonJS({
       input = utils.removePrefix(input, state);
       len = input.length;
       const extglobs = [];
-      const braces2 = [];
+      const braces = [];
       const stack = [];
       let prev = bos;
       let value;
@@ -10162,12 +10162,12 @@ var require_parse = __commonJS({
             outputIndex: state.output.length,
             tokensIndex: state.tokens.length
           };
-          braces2.push(open);
+          braces.push(open);
           push(open);
           continue;
         }
         if (value === "}") {
-          const brace = braces2[braces2.length - 1];
+          const brace = braces[braces.length - 1];
           if (opts.nobrace === true || !brace) {
             push({ type: "text", value, output: value });
             continue;
@@ -10200,7 +10200,7 @@ var require_parse = __commonJS({
           }
           push({ type: "brace", value, output });
           decrement("braces");
-          braces2.pop();
+          braces.pop();
           continue;
         }
         if (value === "|") {
@@ -10212,7 +10212,7 @@ var require_parse = __commonJS({
         }
         if (value === ",") {
           let output = value;
-          const brace = braces2[braces2.length - 1];
+          const brace = braces[braces.length - 1];
           if (brace && stack[stack.length - 1] === "braces") {
             brace.comma = true;
             output = "|";
@@ -10235,7 +10235,7 @@ var require_parse = __commonJS({
         if (value === ".") {
           if (state.braces > 0 && prev.type === "dot") {
             if (prev.value === ".") prev.output = DOT_LITERAL;
-            const brace = braces2[braces2.length - 1];
+            const brace = braces[braces.length - 1];
             prev.type = "dots";
             prev.output += value;
             prev.value += value;
@@ -14660,7 +14660,7 @@ function resolveRegion(vendor, raw) {
   return { code: hit.code, country: hit.country.toUpperCase(), sourceUrl: hit.sourceUrl };
 }
 function isUnmappedRegion(vendor, raw) {
-  return vendor !== null && raw !== void 0 && resolveRegion(vendor, raw) === null;
+  return vendor !== null && !!raw?.trim() && resolveRegion(vendor, raw) === null;
 }
 function declaresRegionNarrowing(vendor) {
   return vendor.processing.jurisdictions.some((j) => j.regionSelected === true);
@@ -14713,11 +14713,12 @@ function classifyExposure(vendor, kb, context = {}) {
     inputs.push(`region:${region.code}`, `regionCountry:${region.country}`, "regionSource:kb");
     if (narrows) inputs.push(`narrowedTo:${[...new Set(countries)].sort().join(",")}`);
     else inputs.push("narrowing:not-declared");
-  } else if (context.unmappedRegion) {
-    inputs.push(`region:${context.unmappedRegion}`, "regionSource:unmapped");
-  } else {
-    inputs.push("regionSource:none");
   }
+  const unmapped = [...new Set(context.unmappedRegions ?? [])].sort();
+  if (unmapped.length > 0) {
+    inputs.push(...unmapped.map((code) => `region:${code}`), "regionSource:unmapped");
+  }
+  if (!region && unmapped.length === 0) inputs.push("regionSource:none");
   const nonEea = countries.filter((c3) => !EEA_MEMBERS.has(c3));
   inputs.push(`euRegion:${euRegion.available ? euRegion.scope ?? "unscoped" : "none"}`);
   for (const mechanism of vendor.legal.transferMechanisms) {
@@ -15554,6 +15555,7 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
   const matchers = keys.map(
     (key) => [key, new RegExp(`(^|[^A-Za-z0-9_-])${key}\\s*=\\s*"([^"\\\\$]+)"`, "g")]
   );
+  const scanner = { inBlockComment: false };
   let offset = 0;
   let depth = 0;
   let inBlock = insideBlockNamed === void 0;
@@ -15561,21 +15563,34 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
   for (const line of text.split("\n")) {
     const lineOffset = offset;
     offset += line.length + 1;
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+    const { code, brace } = scanLine(line, scanner);
+    let contentFrom = 0;
     if (insideBlockNamed !== void 0 && !inBlock) {
-      const header = trimmed.match(/^([a-z_]+)\s+"([^"]+)"\s*\{/);
-      if (header && header[1] === insideBlockNamed && header[2] === provider) {
+      const first = line.search(/\S/);
+      const header = line.slice(Math.max(first, 0)).match(/^([a-z_]+)\s+"([^"]+)"\s*\{/);
+      if (first !== -1 && code[first] && header && header[1] === insideBlockNamed && header[2] === provider) {
         inBlock = true;
         blockDepth = depth;
+        contentFrom = first + header[0].length;
+      }
+    }
+    const before = [];
+    let running = depth;
+    let closesAt = Number.POSITIVE_INFINITY;
+    for (let c3 = 0; c3 < line.length; c3++) {
+      before.push(running);
+      running += brace[c3] ?? 0;
+      if (inBlock && insideBlockNamed !== void 0 && c3 >= contentFrom && running <= blockDepth) {
+        closesAt = Math.min(closesAt, c3);
       }
     }
     if (inBlock) {
       for (const [key, matcher] of matchers) {
         for (const match of line.matchAll(matcher)) {
           const at = match.index + (match[1] ?? "").length;
-          if (insideBlockNamed !== void 0 && depthAt(line, at, depth) !== blockDepth + 1) {
-            continue;
+          if (!code[at]) continue;
+          if (insideBlockNamed !== void 0) {
+            if (at < contentFrom || at >= closesAt || before[at] !== blockDepth + 1) continue;
           }
           const region = match[2];
           if (!region) continue;
@@ -15588,19 +15603,66 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
         }
       }
     }
-    depth += braces(line);
-    if (insideBlockNamed !== void 0 && inBlock && depth <= blockDepth) {
+    depth = running;
+    if (insideBlockNamed !== void 0 && inBlock && closesAt !== Number.POSITIVE_INFINITY) {
       inBlock = false;
       blockDepth = -1;
     }
   }
   return out;
 }
-function braces(text) {
-  return (text.match(/\{/g) ?? []).length - (text.match(/\}/g) ?? []).length;
-}
-function depthAt(line, column, lineStartDepth) {
-  return lineStartDepth + braces(line.slice(0, column));
+function scanLine(line, state) {
+  const code = new Array(line.length).fill(false);
+  const brace = new Array(line.length).fill(0);
+  const stack = [];
+  let i2 = 0;
+  while (i2 < line.length) {
+    if (state.inBlockComment) {
+      if (line.startsWith("*/", i2)) {
+        state.inBlockComment = false;
+        i2 += 2;
+      } else i2++;
+      continue;
+    }
+    const ch = line[i2];
+    const top = stack.at(-1);
+    if (top?.kind === "string") {
+      if (ch === "\\") i2 += 2;
+      else if (ch === top.quote) {
+        stack.pop();
+        i2++;
+      } else if (top.quote === '"' && line.startsWith("${", i2)) {
+        stack.push({ kind: "interp", depth: 0 });
+        i2 += 2;
+      } else i2++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      stack.push({ kind: "string", quote: ch });
+      i2++;
+      continue;
+    }
+    if (!top && (ch === "#" || line.startsWith("//", i2))) break;
+    if (!top && line.startsWith("/*", i2)) {
+      state.inBlockComment = true;
+      i2 += 2;
+      continue;
+    }
+    if (top?.kind === "interp") {
+      if (ch === "{") top.depth++;
+      else if (ch === "}") {
+        if (top.depth === 0) stack.pop();
+        else top.depth--;
+      }
+      i2++;
+      continue;
+    }
+    code[i2] = true;
+    if (ch === "{") brace[i2] = 1;
+    else if (ch === "}") brace[i2] = -1;
+    i2++;
+  }
+  return { code, brace };
 }
 function analyzeInfrastructure(options) {
   const { root, configPaths } = options;
@@ -15682,10 +15744,7 @@ function mergeSignals(signals, options) {
   for (const signal of signals) {
     const vendor = signal.vendorId ? kb.byId.get(signal.vendorId) ?? null : null;
     const region = vendor && signal.region ? resolveRegion(vendor, signal.region) : null;
-    const classified = vendor ? classifyExposure(vendor, kb, {
-      region,
-      ...isUnmappedRegion(vendor, signal.region) ? { unmappedRegion: signal.region } : {}
-    }) : null;
+    const classified = vendor ? classifyExposure(vendor, kb, { region }) : null;
     const ruleId = classified?.ruleId ?? unmatchedRule(signal);
     const narrowedTo = classified?.exposure.inputs.some((i2) => i2.startsWith("narrowedTo:")) ? region?.country : void 0;
     const key = `${signal.vendorId ?? `unknown:${signal.matchedOn}`}|${ruleId}|${narrowedTo ?? ""}`;
@@ -15702,7 +15761,8 @@ function mergeSignals(signals, options) {
         group.signals,
         group.classified,
         group.region,
-        staleVendorIds
+        staleVendorIds,
+        kb
       )
     );
   }
@@ -15713,12 +15773,13 @@ function mergeSignals(signals, options) {
 function unmatchedRule(signal) {
   return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
 }
-function buildFinding(ruleId, vendor, signals, classified, region, staleVendorIds) {
+function buildFinding(ruleId, vendor, signals, classified, region, staleVendorIds, kb) {
   const evidence = signals.map((s2) => toEvidence(s2, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
   const transfer = vendor ? toTransferFacts(vendor) : null;
-  const exposure = classified?.exposure ?? null;
+  const unmappedRegions = signals.filter((s2) => isUnmappedRegion(vendor, s2.region)).map((s2) => s2.region);
+  const exposure = vendor && unmappedRegions.length > 0 ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure : classified?.exposure ?? null;
   return {
     id: fingerprint(
       vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ""}`,
@@ -16635,6 +16696,7 @@ var PASS_THROUGH = /* @__PURE__ */ new Set(["--help", "-h", "--version", "-v"]);
 function withDefaultCommand(argv2) {
   const first = argv2[0];
   if (first === void 0) return ["scan"];
+  if (first === "-v" && argv2.length === 1) return ["--version"];
   if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv2;
   return ["scan", ...argv2];
 }

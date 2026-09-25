@@ -395,6 +395,19 @@ describe('session replay inside a general SDK routes the specialist', () => {
       'sentry.client.config.ts',
       "Sentry.init({ dsn: 'x', replaysOnErrorSampleRate: 1.0 });\n",
     ],
+    ['the Sentry replay package', 'src/replay.ts', "import { Replay } from '@sentry/replay';\n"],
+    ['Sentry v7 Replay as a class', 'src/sentry.ts', 'integrations: [new Sentry.Replay()],\n'],
+    [
+      'rrweb used directly',
+      'src/rec.ts',
+      "import { record } from 'rrweb';\nrecord({ emit() {} });\n",
+    ],
+    [
+      'a Sentry session sample rate alone',
+      'src/sentry.ts',
+      "Sentry.init({ dsn: 'x', replaysSessionSampleRate: 0.1 });\n",
+    ],
+    ['Datadog starting a recording', 'src/rum.ts', 'datadogRum.startSessionReplayRecording();\n'],
     [
       'Datadog RUM replay sampling',
       'src/rum.ts',

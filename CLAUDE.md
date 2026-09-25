@@ -325,8 +325,10 @@ the moment it ran outside a `node_modules` tree. Defining `require` above the sh
 fix. The MCP server shipped without it once, because its config assumed the banner carried only the
 shebang — which is why there is now one definition rather than two.
 
-**`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`
-and connects an MCP client to `egressa-mcp`, and fails the build if either cannot start. Nothing in
+**`pnpm build` ends by booting both binaries.** `scripts/smoke-dist.mjs` runs `egressa --version`,
+connects an MCP client to `egressa-mcp`, and has each one scan a two-file repository. It fails the
+build unless both scans ran with the native parser (`engine.degraded` false, a call-site finding
+present) and loaded the knowledge base shipped beside that binary. Starting alone proves neither. Nothing in
 `pnpm test` can catch a bundle that does not boot, since vitest aliases every package to source.
 The script resolves the MCP SDK from the package beside the binary, never by bare import: from
 `scripts/` a bare import finds whatever copy sits in a parent directory, or none on a fresh clone.

@@ -114,6 +114,16 @@ describe('the tracker write hook fires on', () => {
     expect(out?.additionalContext).toContain('maskAllInputs');
   });
 
+  it('Sentry v7 Replay constructed as a class', () => {
+    const { out } = run(write('src/sentry.ts', 'integrations: [new Sentry.Replay()],'));
+    expect(out?.systemMessage).toContain('session-replay');
+  });
+
+  it('a Sentry replay sample rate above zero', () => {
+    const { out } = run(write('src/sentry.ts', 'Sentry.init({ replaysSessionSampleRate: 0.1 });'));
+    expect(out?.systemMessage).toContain('session-replay');
+  });
+
   it('Datadog RUM replay sampling', () => {
     const { out } = run(write('src/rum.ts', 'datadogRum.init({ sessionReplaySampleRate: 20 });'));
     expect(out?.systemMessage).toContain('session-replay');
@@ -145,6 +155,11 @@ describe('the tracker write hook stays silent on', () => {
       expect(out).toBeNull();
       expect(code).toBe(0);
     });
+
+  silent(
+    'a replay sample rate of zero, which turns replay off',
+    write('src/rum.ts', 'datadogRum.init({ sessionReplaySampleRate: 0 });'),
+  );
 
   silent(
     'a Sentry init with no replay',

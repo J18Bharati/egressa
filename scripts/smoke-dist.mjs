@@ -11,15 +11,22 @@
  * the suite loads a bundle. This runs *after* the build, as the last step of
  * `pnpm build`, and never before tests -- CLAUDE.md forbids a build step there.
  *
+ * Starting is not enough. Each binary also scans a two-file repository, and the
+ * result must come from the native parser (`engine.degraded` false, a call-site
+ * finding present) and from the knowledge base shipped *beside that binary*.
+ * `--version` and a tool listing load neither, so a tarball missing `kb/`, or
+ * one that silently fell back to manifest-only analysis, would pass without it.
+ *
  * The MCP client library is resolved from the package beside the MCP binary,
  * never through a bare import. From `scripts/` a bare import finds whatever copy
  * of the SDK happens to sit in a parent directory (a stray one in `~` passed
  * locally), and on a fresh clone finds none.
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const TIMEOUT_MS = 20_000;
@@ -47,6 +54,52 @@ if (cli.status !== 0) fail(`${cliBin} --version exited ${cli.status}`, cli.stder
 if (cli.stdout.trim() !== expected) {
   fail(`${cliBin} --version printed ${JSON.stringify(cli.stdout.trim())}, expected ${expected}`);
 }
+
+// --- A scan through the CLI ------------------------------------------------
+
+/** The knowledge base version shipped in `<package>/kb/`, beside the binary. */
+function shippedKbVersion(bin) {
+  const file = resolve(dirname(bin), '..', 'kb', 'kb.version');
+  try {
+    return readFileSync(file, 'utf8').trim();
+  } catch {
+    fail(`${bin} ships no knowledge base: ${file} is missing`);
+  }
+}
+
+/** A fixture both analyses must see: a manifest entry and a resolvable call. */
+const repo = mkdtempSync(join(tmpdir(), 'egressa-smoke-'));
+writeFileSync(
+  join(repo, 'package.json'),
+  '{"name":"smoke","private":true,"dependencies":{"stripe":"^14.0.0"}}\n',
+);
+mkdirSync(join(repo, 'src'));
+writeFileSync(join(repo, 'src', 'pay.ts'), "await fetch('https://api.stripe.com/v1/charges');\n");
+process.on('exit', () => rmSync(repo, { recursive: true, force: true }));
+
+/** The same three facts, whichever binary produced the document. */
+function checkScan(bin, doc, expectedKb) {
+  if (doc?.scan?.engine?.degraded !== false) {
+    fail(`${bin} scanned in degraded mode: ${JSON.stringify(doc?.scan?.engine)}`);
+  }
+  if (doc.kb?.version !== expectedKb) {
+    fail(`${bin} loaded knowledge base ${doc.kb?.version}, but ships ${expectedKb}`);
+  }
+  const kinds = new Set((doc.findings ?? []).flatMap((f) => f.evidence.map((e) => e.kind)));
+  if (!kinds.has('dependency') || !kinds.has('callsite')) {
+    fail(
+      `${bin} scan found evidence of kinds [${[...kinds].join(', ')}]`,
+      JSON.stringify(doc.summary),
+    );
+  }
+}
+
+const scanned = spawnSync(process.execPath, [cliBin, 'scan', repo, '--format', 'json'], {
+  encoding: 'utf8',
+  timeout: TIMEOUT_MS,
+});
+if (scanned.status !== 0) fail(`${cliBin} scan exited ${scanned.status}`, scanned.stderr);
+checkScan(cliBin, JSON.parse(scanned.stdout), shippedKbVersion(cliBin));
 
 // --- MCP server ------------------------------------------------------------
 
@@ -79,6 +132,11 @@ try {
   if (!names.includes('scan_repository')) {
     fail(`${mcpBin} listed no scan_repository tool (got: ${names.join(', ')})`, serverStderr);
   }
+  const result = await client.callTool({
+    name: 'scan_repository',
+    arguments: { path: repo, full: true },
+  });
+  checkScan(mcpBin, JSON.parse(result.content[0].text), shippedKbVersion(mcpBin));
 } catch (error) {
   fail(`${mcpBin} failed to start: ${error.message}`, serverStderr);
 } finally {
@@ -86,4 +144,6 @@ try {
   await client.close().catch(() => {});
 }
 
-process.stdout.write(`smoke-dist: ok -- ${cliBin} ${expected}, ${mcpBin} lists scan_repository\n`);
+process.stdout.write(
+  `smoke-dist: ok -- ${cliBin} ${expected} and ${mcpBin} both scan with the native parser and their own knowledge base\n`,
+);

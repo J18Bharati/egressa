@@ -160,6 +160,26 @@ in a small routing test. Triage F2 in `docs/reviews/2026-09-25-live-run-triage.m
 **Priority:** P1
 **Depends on:** None
 
+### Decide whether replay inside a general SDK needs consent routing
+
+**What:** Decide whether Sentry and Datadog replay terms should also feed `SCOPE_TRACKER_CODE`, and
+so the consent-gating dispatch and possibly `SIGNAL_TRACKERS_NO_CONSENT`, and whether
+`specialists/consent-gating.md` should name them.
+
+**Why:** Since the 2026-09-25 fixes, `Sentry.replayIntegration()` routes the session-replay
+specialist, which checks masking. An app whose only recorder is Sentry Replay still gets no
+consent-gating dispatch, because the tracker gates do not know it. Whether a replay recorder
+needs prior consent is not a masking question.
+
+**Context:** Raised by the branch review of `field-test-2-fixes` (finding 11). Be careful with
+`SIGNAL_TRACKERS_NO_CONSENT`: it is the one line `scope.sh` *asserts* rather than routes, and it
+strips comments for that reason. Widening it changes what the script claims, not only what it
+routes. Needs a citation from `references/legal-basis.md` before any checklist wording.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Assert one structured block per dispatched specialist
 
 **What:** Step 4 of `SKILL.md` names every dispatched specialist that returned no structured block,
@@ -363,6 +383,24 @@ by the engineering review of the 2026-09-25 fixes (R8).
 **Priority:** P3
 **Depends on:** None
 
+### Escape control characters from the scanned repository in output
+
+**What:** Escape C0/C1 control characters in every string the human and markdown formatters take
+from the scanned tree (regions, snippets, `matchedOn`, file names), or reject a region literal that
+is not `^[A-Za-z0-9_.-]{1,64}$` at read time.
+
+**Why:** The reviewed repository is arbitrary third-party source. A `main.tf` with ESC or BEL
+inside `region = "…"` puts terminal escape sequences into human output. The branch review's
+security pass reproduced this with `od -c`. The same stance already governs `scope.sh`: a file named
+`-i.js` must not become an option.
+
+**Context:** Found by the branch review of `field-test-2-fixes` (finding 7). The issue predates
+that branch, but the branch edited the render path. SARIF and JSON escape by construction.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Validate a knowledge base passed with `--kb`
 
 **What:** Run the `kb:validate` checks at load time for a user-supplied `--kb`. At minimum, run the
@@ -389,6 +427,25 @@ this service send?" can be answered only from the JSON today.
 `--help` on 2026-09-25.
 
 **Effort:** M
+**Priority:** P3
+**Depends on:** None
+
+### Detect a stale skill bundle by content, not only by version
+
+**What:** Record a content hash of `bin/lib/egressa.mjs`'s source build in `BUNDLE.json`, and have
+`scripts/skill-bundle.test.ts` compare it with a fresh build's. Alternatively, move `VERSION` to a
+prerelease while `[Unreleased]` holds engine changes.
+
+**Why:** The drift test compares `toolVersion` and `kbVersion` only. An engine change made at
+the same version, which is every change between releases, leaves the bundle reporting the old
+behaviour while the test stays green. The bundle is current today only because it was rebuilt by
+hand.
+
+**Context:** Branch review of `field-test-2-fixes`, finding 13. A hash of the built file couples
+the test to a build, which `pnpm test` must not require. Hashing the inputs (core sources plus
+the tsup config) avoids that.
+
+**Effort:** S
 **Priority:** P3
 **Depends on:** None
 
