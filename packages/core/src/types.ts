@@ -91,6 +91,13 @@ export interface Evidence extends SourceLocation {
   transitiveVia?: string[];
   /** Region identifier this evidence carried, verbatim. */
   region?: string;
+  /**
+   * Set when `region` matched no entry in the vendor's `regions` map, so it
+   * narrowed nothing. The identifier is still what the file declares -- a typo,
+   * or a region newer than the map -- and is reported, but marked, so a reader
+   * does not take it for a resolved location.
+   */
+  regionUnmapped?: true;
 }
 
 export interface Signal {

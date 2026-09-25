@@ -1,6 +1,6 @@
 import { loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
-import { resolveRegion } from './regions.js';
+import { isUnmappedRegion, resolveRegion } from './regions.js';
 import { classifyExposure } from './rules.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
@@ -101,6 +101,15 @@ describe('classifyExposure: a region selects which jurisdiction applies', () => 
     expect(resolveRegion(aws, 'eu-west-2')?.country).toBe('GB');
     expect(resolveRegion(aws, 'eu-central-2')?.country).toBe('CH');
     expect(resolveRegion(aws, 'eu-west-1')?.country).toBe('IE');
+  });
+
+  it('calls a region unmapped only when a vendor map exists and lacks it', () => {
+    // One predicate for grouping and evidence. A signal with no knowledge base
+    // vendor has no map to be absent from, so it is never flagged.
+    expect(isUnmappedRegion(null, 'eu-wset-1')).toBe(false);
+    expect(isUnmappedRegion(aws, undefined)).toBe(false);
+    expect(isUnmappedRegion(aws, 'eu-west-1')).toBe(false);
+    expect(isUnmappedRegion(aws, 'eu-wset-1')).toBe(true);
   });
 
   it('rates London as an adequate third country, not EU processing', () => {

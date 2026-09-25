@@ -344,6 +344,25 @@ exist.
 **Priority:** P3
 **Depends on:** None
 
+### Locate the Serverless region by its YAML key range
+
+**What:** In `parseServerlessYaml`, take the annotation position from the `region` pair's key range
+in the parsed document, not from `text.indexOf('region', text.indexOf('provider'))`
+(`packages/core/src/infrastructure/index.ts:113`).
+
+**Why:** The region *value* comes from the YAML parser and is correct. Only the reported location is
+found by substring, so `profile: region-admin` placed above `region: eu-west-1` puts the SARIF
+annotation on the profile line. This is the same substring class as the Terraform reader's
+`sts_region` defect, fixed in `key-literal.ts`, but here only the location is affected.
+
+**Context:** The document is already parsed with `keepSourceTokens`. The only fixture is
+`regional-multi/serverless.yml`. Add a case where a `region-` value comes before the key. Found
+by the engineering review of the 2026-09-25 fixes (R8).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ### Validate a knowledge base passed with `--kb`
 
 **What:** Run the `kb:validate` checks at load time for a user-supplied `--kb`. At minimum, run the

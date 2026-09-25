@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { KnowledgeBase, VendorEntry } from '@egressa/kb';
-import { type AppliedRegion, resolveRegion } from '../exposure/regions.js';
+import { type AppliedRegion, isUnmappedRegion, resolveRegion } from '../exposure/regions.js';
 import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
 import { RULES } from '../rules.js';
 import type {
@@ -52,7 +52,7 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
     const classified = vendor
       ? classifyExposure(vendor, kb, {
           region,
-          ...(signal.region && !region ? { unmappedRegion: signal.region } : {}),
+          ...(isUnmappedRegion(vendor, signal.region) ? { unmappedRegion: signal.region } : {}),
         })
       : null;
     const ruleId = classified?.ruleId ?? unmatchedRule(signal);
@@ -105,7 +105,7 @@ function buildFinding(
   region: AppliedRegion | null,
   staleVendorIds: Set<string>,
 ): Finding {
-  const evidence = signals.map(toEvidence).sort(byStrength);
+  const evidence = signals.map((s) => toEvidence(s, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s) => s.confidence));
   const primary = evidence[0];
 
@@ -133,7 +133,7 @@ function buildFinding(
   };
 }
 
-function toEvidence(signal: Signal): Evidence {
+function toEvidence(signal: Signal, vendor: VendorEntry | null): Evidence {
   return {
     ...signal.location,
     kind: signal.kind,
@@ -145,6 +145,7 @@ function toEvidence(signal: Signal): Evidence {
     // This list is a whitelist: a field not named here is dropped from the
     // finding even though the signal carried it.
     ...(signal.region ? { region: signal.region } : {}),
+    ...(isUnmappedRegion(vendor, signal.region) ? { regionUnmapped: true as const } : {}),
   };
 }
 

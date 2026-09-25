@@ -14,17 +14,39 @@ import type { InfraRecord } from './types.js';
  * It is not a fallback parser. A value that is not a quoted literal -- an HCL
  * `var.region`, an interpolation, a heredoc -- yields nothing at all rather
  * than a guess, which is the same rule `resolve-host.ts` applies to hosts.
+ *
+ * Two rules decide which assignments count, and both exist because the reader
+ * once reported a region the file did not declare:
+ *
+ * - The key must stand alone. It is preceded by the start of the line or by a
+ *   character that cannot be part of a key, and in both HCL and TOML a key may
+ *   hold letters, digits, `_` and `-`. Without that, `sts_region = "us-east-1"`,
+ *   a real argument of the AWS provider, was read as the provider's region.
+ * - Inside a named block, only the block's own level counts. The brace depth is
+ *   taken at the key's position, not the line's start, so the one-liner
+ *   `provider "aws" { region = "ca-central-1" }` is read, and
+ *   `default_tags { tags = { region = "emea" } }` -- a tag, on a line or across
+ *   several -- is not.
+ *
+ * Per line: skip comments and blanks; on `provider "<name>" {` record the depth
+ * the block opened at; while inside it, examine every match on the line and keep
+ * those one level below the opening; then apply the line's braces and leave the
+ * block when depth falls back. A brace inside a string can only make the depth
+ * read too deep, which drops a region rather than inventing one.
  */
 export function regionsFromKeyLiterals(
   text: string,
   filePath: string,
   keys: string[],
   provider: string,
-  /** When set, only assignments inside a `block "<name>"` are read. */
+  /** When set, only assignments at the top level of a `block "<name>"` are read. */
   insideBlockNamed?: string,
 ): InfraRecord[] {
   const index = new LineIndex(text);
   const out: InfraRecord[] = [];
+  const matchers = keys.map(
+    (key) => [key, new RegExp(`(^|[^A-Za-z0-9_-])${key}\\s*=\\s*"([^"\\\\$]+)"`, 'g')] as const,
+  );
 
   let offset = 0;
   let depth = 0;
@@ -48,21 +70,25 @@ export function regionsFromKeyLiterals(
     }
 
     if (inBlock) {
-      for (const key of keys) {
-        const at = line.indexOf(key);
-        if (at === -1) continue;
-        const assignment = line.slice(at).match(new RegExp(`^${key}\\s*=\\s*"([^"\\\\$]+)"`));
-        if (!assignment?.[1]) continue;
-        out.push({
-          provider,
-          region: assignment[1],
-          loc: index.locationAt(filePath, lineOffset + at, key.length),
-          snippet: index.snippetAt(lineOffset + at),
-        });
+      for (const [key, matcher] of matchers) {
+        for (const match of line.matchAll(matcher)) {
+          const at = match.index + (match[1] ?? '').length;
+          if (insideBlockNamed !== undefined && depthAt(line, at, depth) !== blockDepth + 1) {
+            continue;
+          }
+          const region = match[2];
+          if (!region) continue;
+          out.push({
+            provider,
+            region,
+            loc: index.locationAt(filePath, lineOffset + at, key.length),
+            snippet: index.snippetAt(lineOffset + at),
+          });
+        }
       }
     }
 
-    depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+    depth += braces(line);
     if (insideBlockNamed !== undefined && inBlock && depth <= blockDepth) {
       inBlock = false;
       blockDepth = -1;
@@ -70,4 +96,14 @@ export function regionsFromKeyLiterals(
   }
 
   return out;
+}
+
+/** Net `{` minus `}` in a string. */
+function braces(text: string): number {
+  return (text.match(/\{/g) ?? []).length - (text.match(/\}/g) ?? []).length;
+}
+
+/** Brace depth at a column: the line's starting depth plus what precedes it. */
+function depthAt(line: string, column: number, lineStartDepth: number): number {
+  return lineStartDepth + braces(line.slice(0, column));
 }

@@ -104,6 +104,21 @@ describe('human output', () => {
     expect(text).toContain('verified:   2026-09-06');
   });
 
+  it('marks a region the vendor map does not know, and reads only the provider’s own', () => {
+    // The tag nested in default_tags used to become a second finding titled
+    // "(emea)"; a typo in the real region rendered exactly like a resolved one.
+    const root = mkdtempSync(join(tmpdir(), 'egressa-unmapped-'));
+    writeFileSync(
+      join(root, 'main.tf'),
+      'provider "aws" {\n  default_tags {\n    tags = { region = "emea" }\n  }\n  region = "eu-wset-1"\n}\n',
+    );
+    const text = formatHuman(scan({ root, toolVersion: '0.1.0', kbPath: 'kb', now: NOW }), {
+      color: false,
+    });
+    expect(text).toContain('Amazon Web Services, Inc. (eu-wset-1 [unmapped])');
+    expect(text).not.toContain('emea');
+  });
+
   it('flags a hypothetical run so it cannot be mistaken for the current position', () => {
     const lapsed = scan({
       root: 'fixtures/repos/express-stripe-sendgrid',

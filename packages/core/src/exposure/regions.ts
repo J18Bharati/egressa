@@ -34,6 +34,18 @@ export function resolveRegion(vendor: VendorEntry, raw: string): AppliedRegion |
 }
 
 /**
+ * Whether a region was read for a vendor whose map does not know it.
+ *
+ * True only when there is a vendor and a region and the map has no entry. A
+ * signal with no knowledge base vendor has no map to be absent from, so it is
+ * never flagged. One predicate, used by grouping and by evidence alike, so a
+ * finding's audit trail and its evidence cannot disagree about the same region.
+ */
+export function isUnmappedRegion(vendor: VendorEntry | null, raw: string | undefined): boolean {
+  return vendor !== null && raw !== undefined && resolveRegion(vendor, raw) === null;
+}
+
+/**
  * Whether this vendor has declared which of its jurisdictions a region selects.
  *
  * Narrowing is opt-in per jurisdiction. Without at least one `regionSelected`

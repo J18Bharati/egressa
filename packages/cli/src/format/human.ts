@@ -91,7 +91,15 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   // renders as four identical blocks. All of them, not the first: two regions
   // in the same country share a finding because they have the same legal
   // answer, and naming only one of them would imply the other was not found.
-  const regions = [...new Set(finding.evidence.map((e) => e.region).filter(Boolean))];
+  // An unmapped region is marked rather than hidden: the file declares it, but
+  // it narrowed nothing, and unmarked it reads as a resolved location.
+  const regions = [
+    ...new Set(
+      finding.evidence
+        .filter((e) => e.region)
+        .map((e) => (e.regionUnmapped ? `${e.region} [unmapped]` : e.region)),
+    ),
+  ];
   const name = regions.length > 0 ? `${vendorName} (${regions.join(', ')})` : vendorName;
   const suppressed = finding.suppressed ? c('dim', ' (suppressed)') : '';
   const confidence =

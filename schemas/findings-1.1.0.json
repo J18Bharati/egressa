@@ -598,6 +598,10 @@
                   "region": {
                     "type": "string",
                     "description": "Region identifier read from configuration, verbatim. Resolved against the vendor's own regions map, never from its prefix."
+                  },
+                  "regionUnmapped": {
+                    "const": true,
+                    "description": "Present when region matched no entry in the vendor's regions map, so it narrowed nothing. The identifier is still what the configuration declares."
                   }
                 }
               }
