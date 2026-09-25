@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { scan } from '../scan.js';
 import {
   isDevRequirementsFile,
+  isRequirementsFile,
   normalisePypiName,
   parsePyprojectToml,
   parseRequirementsTxt,
@@ -138,24 +139,140 @@ describe('pyproject.toml', () => {
   });
 });
 
+describe('what the branch review found reading as a dependency', () => {
+  // Each of these reported a vendor at high confidence that the file does not
+  // declare as a dependency.
+  const pyproject = (text: string) => names(parsePyprojectToml(text, 'pyproject.toml'));
+
+  it('ends a dependency table at an array-of-tables header', () => {
+    const text = [
+      '[project.optional-dependencies]',
+      'aws = ["boto3"]',
+      '[[tool.mypy.overrides]]',
+      'module = ["twilio", "boto3"]',
+    ].join('\n');
+    expect(pyproject(text)).toEqual(['boto3']);
+  });
+
+  it('does not read a Poetry source block as packages', () => {
+    const text = [
+      '[tool.poetry.dependencies]',
+      'twilio = "^9"',
+      '[[tool.poetry.source]]',
+      'name = "private"',
+      'url = "https://pypi.example.com/simple"',
+      'priority = "supplemental"',
+    ].join('\n');
+    expect(pyproject(text)).toEqual(['twilio']);
+  });
+
+  it('never reads inside a multi-line string', () => {
+    expect(pyproject('[project]\ndescription = """\ndependencies = ["twilio"]\n"""\n')).toEqual([]);
+    expect(pyproject("[tool.poetry.dependencies]\nreadme = '''\ntwilio = \"yes\"\n'''\n")).toEqual([
+      'readme',
+    ]);
+    expect(pyproject('[project]\ndependencies = ["""twilio"""]\n')).toEqual([]);
+  });
+
+  it('recognises a header with a trailing comment on a CRLF line', () => {
+    const text =
+      '[project]\r\ndependencies = []\r\n[tool.pytest.ini_options]  # cfg\r\naddopts = ["twilio"]\r\n';
+    expect(pyproject(text)).toEqual([]);
+  });
+
+  it('names the package in a Poetry dotted key, once per line', () => {
+    const text = '[tool.poetry.dependencies]\nboto3.version = "^1"\nboto3.optional = true\n';
+    expect(pyproject(text)).toEqual(['boto3', 'boto3']);
+  });
+
+  it('does not read a PEP 735 include-group as a package', () => {
+    const text =
+      '[dependency-groups]\ntest = ["pytest"]\nci = [{ include-group = "test" }, "coverage"]\n';
+    expect(pyproject(text)).toEqual(['pytest (dev)', 'coverage (dev)']);
+  });
+
+  it('marks a named Poetry group dev only when it is named like one', () => {
+    const text =
+      '[tool.poetry.group.aws.dependencies]\nboto3 = "^1"\n[tool.poetry.group.test.dependencies]\npytest = "^8"\n';
+    expect(pyproject(text)).toEqual(['boto3', 'pytest (dev)']);
+  });
+
+  it('reads a requirement line ending in CRLF', () => {
+    expect(names(parseRequirementsTxt('twilio  # sms\r\n', 'requirements.txt'))).toEqual([
+      'twilio',
+    ]);
+  });
+
+  it('refuses prose that starts with a project name', () => {
+    expect(
+      parseRequirementsTxt('Twilio (for SMS) is used\n', 'requirements.txt').dependencies,
+    ).toEqual([]);
+    expect(names(parseRequirementsTxt('twilio (>=9.0)\n', 'requirements.txt'))).toEqual(['twilio']);
+  });
+
+  it('never reads a pip-compile continuation as a requirement', () => {
+    const text =
+      'twilio==9.0.0 \\\n    --hash=sha256:abc \\\n    --hash=sha256:def\nboto3==1.34 \\\n    --hash=sha256:123\n';
+    expect(names(parseRequirementsTxt(text, 'requirements.txt'))).toEqual(['twilio', 'boto3']);
+  });
+
+  it('reads only files that are requirements files', () => {
+    expect(isRequirementsFile('requirements.txt')).toBe(true);
+    expect(isRequirementsFile('svc/requirements-prod.txt')).toBe(true);
+    expect(isRequirementsFile('requirements/base.txt')).toBe(true);
+    expect(isRequirementsFile('requirements/README.txt')).toBe(false);
+    expect(isRequirementsFile('requirements/constraints.txt')).toBe(false);
+    expect(isRequirementsFile('constraints.txt')).toBe(false);
+    expect(isRequirementsFile('docs/notes.txt')).toBe(false);
+  });
+
+  it('marks dev files whatever their case', () => {
+    expect(isDevRequirementsFile('requirements-DEV.txt')).toBe(true);
+  });
+});
+
 describe('a Python service is scanned end to end', () => {
-  it('attributes a declared vendor SDK, and never reads a virtualenv', () => {
+  const write = (root: string, rel: string, text: string) => {
+    mkdirSync(join(root, rel, '..'), { recursive: true });
+    writeFileSync(join(root, rel), text);
+  };
+
+  it('attributes a declared vendor SDK at high confidence', () => {
     // The field-test case: twilio, a vendor already in the knowledge base, was
     // missed in five production files because no Python manifest was read.
     const root = mkdtempSync(join(tmpdir(), 'egressa-python-'));
-    writeFileSync(
-      join(root, 'pyproject.toml'),
-      '[project]\nname = "svc"\ndependencies = ["twilio>=9.0.0", "boto3"]\n',
-    );
-    // An installed package's own manifest describes what *it* uses.
-    mkdirSync(join(root, '.venv', 'lib', 'site-packages', 'x'), { recursive: true });
-    writeFileSync(join(root, '.venv', 'lib', 'site-packages', 'x', 'requirements.txt'), 'stripe\n');
-
+    write(root, 'pyproject.toml', '[project]\nname = "svc"\ndependencies = ["twilio>=9.0.0"]\n');
     const result = scan({ root, toolVersion: '0.0.0', kbPath: 'kb' });
-    const vendors = result.findings.map((f) => f.vendor?.id).sort();
-    expect(vendors).toEqual(['aws', 'twilio']);
     const twilio = result.findings.find((f) => f.vendor?.id === 'twilio');
     expect(twilio?.confidence).toBe('high');
     expect(twilio?.evidence[0]).toMatchObject({ kind: 'dependency', file: 'pyproject.toml' });
+  });
+
+  // An installed package's own manifest describes what *it* uses, and an
+  // editable install's pyproject.toml reads as this repository's own. Each case
+  // plants a knowledge base vendor, so a missing exclusion fails the test.
+  const installed: Array<[string, string]> = [
+    ['a virtualenv named venv', 'venv/lib/python3.12/site-packages/x/requirements.txt'],
+    ['site-packages anywhere', 'lib/site-packages/x/requirements.txt'],
+    ['Debian dist-packages', 'usr/lib/python3/dist-packages/x/requirements.txt'],
+    ['PEP 582 __pypackages__', '__pypackages__/3.12/lib/x/requirements.txt'],
+    ['a dot directory', '.venv/src/x/requirements.txt'],
+  ];
+  for (const [label, rel] of installed) {
+    it(`never reads ${label}`, () => {
+      const root = mkdtempSync(join(tmpdir(), 'egressa-python-'));
+      write(root, rel, 'twilio\n');
+      const result = scan({ root, toolVersion: '0.0.0', kbPath: 'kb' });
+      expect(result.findings.map((f) => f.vendor?.id)).toEqual([]);
+    });
+  }
+
+  it('prunes a virtualenv by its pyvenv.cfg, whatever it is named', () => {
+    const root = mkdtempSync(join(tmpdir(), 'egressa-python-'));
+    write(root, 'env/pyvenv.cfg', 'home = /usr/bin\n');
+    write(root, 'env/src/editable-dep/pyproject.toml', '[project]\ndependencies = ["twilio"]\n');
+    write(root, 'requirements.txt', 'boto3\n');
+    const result = scan({ root, toolVersion: '0.0.0', kbPath: 'kb' });
+    expect(result.findings.map((f) => f.vendor?.id)).toEqual(['aws']);
   });
 });

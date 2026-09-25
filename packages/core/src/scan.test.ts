@@ -166,3 +166,18 @@ describe('a document carrying an unmapped region', () => {
     if (!ok) expect(validateFindings.errors?.slice(0, 5)).toEqual([]);
   });
 });
+
+describe('exclude globs that cannot be honoured', () => {
+  it('throws on a negated glob rather than scanning wider than asked', () => {
+    expect(() =>
+      scan({ ...base, root: 'fixtures/repos/clean-eu-only', exclude: ['!x/**'] }),
+    ).toThrow(/cannot be negated/);
+  });
+
+  it('throws on an entry that is not a string', () => {
+    const exclude = ['a/**', 2024] as unknown as string[];
+    expect(() => scan({ ...base, root: 'fixtures/repos/clean-eu-only', exclude })).toThrow(
+      /must be glob strings/,
+    );
+  });
+});

@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from 'node:path';
-import { DISCLAIMER, RULES, RULE_IDS, scan, summarise } from '@egressa/core';
+import { DISCLAIMER, RULES, RULE_IDS, excludeProblem, scan, summarise } from '@egressa/core';
 import type { RuleId } from '@egressa/core';
 import { loadKnowledgeBase } from '@egressa/kb';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -58,6 +58,10 @@ server.tool(
       .describe('Globs to skip during discovery, e.g. ["vendor/**", "**/legacy/**"]'),
   },
   async (args) => {
+    const excludeError = excludeProblem(args.exclude ?? []);
+    if (excludeError) {
+      return { content: [{ type: 'text' as const, text: excludeError }], isError: true };
+    }
     const result = scan({
       root: safeRoot(args.path),
       toolVersion: TOOL_VERSION,

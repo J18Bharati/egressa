@@ -441,23 +441,38 @@ describe('session replay inside a general SDK routes the specialist', () => {
 // deliberate. Every gate scope.sh emits must now be named in SKILL.md, either in
 // the dispatch table or in the context-only list.
 describe('every gate is accounted for in SKILL.md', () => {
-  const gates = [...readFileSync(SCOPE, 'utf8').matchAll(/^gate (SCOPE_[A-Z_]+)/gm)].map(
-    (m) => m[1] as string,
-  );
   const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
-  const step2 = skill.slice(skill.indexOf('## Step 2'), skill.indexOf('## Step 3'));
-  const table = step2
-    .split('\n')
-    .filter((l) => l.startsWith('| '))
-    .join('\n');
-  const contextLine = step2.slice(step2.indexOf('**Not every gate selects a specialist.**'));
-  const context = contextLine.slice(0, contextLine.indexOf('\n\n'));
+  const step2At = skill.indexOf('## Step 2');
+  const step3At = skill.indexOf('## Step 3');
+  const step2 = skill.slice(step2At, step3At);
+  // The dispatch table only: from its header row to the first blank line, so a
+  // later table in the same step cannot count as routing.
+  const tableAt = step2.indexOf('| Specialist |');
+  const table = step2.slice(tableAt, step2.indexOf('\n\n', tableAt));
+  const contextAt = step2.indexOf('**Not every gate selects a specialist.**');
+  const context = step2.slice(contextAt, step2.indexOf('\n\n', contextAt));
 
-  it('reads the gates it checks', () => {
-    expect(gates.length).toBeGreaterThan(10);
+  // What scope.sh actually prints, not what a regex over its source finds: an
+  // indented or renamed `gate` call would otherwise escape the check.
+  const root = scratch('accounted');
+  plant(root, 'package.json', '{"name":"a","private":true}\n');
+  const printed = Object.keys(runScope(root).lines).filter(
+    (key) => key.startsWith('SCOPE_') && key !== 'SCOPE_PROTO' && key !== 'SCOPE_END',
+  );
+
+  it('finds the sections it checks, so it cannot pass vacuously', () => {
+    expect({ step2At, step3At, tableAt, contextAt }).toEqual({
+      step2At: expect.any(Number),
+      step3At: expect.any(Number),
+      tableAt: expect.any(Number),
+      contextAt: expect.any(Number),
+    });
+    for (const at of [step2At, step3At, tableAt, contextAt]) expect(at).toBeGreaterThanOrEqual(0);
+    expect(step3At).toBeGreaterThan(step2At);
+    expect(printed.length).toBeGreaterThan(10);
   });
 
-  for (const gate of gates) {
+  for (const gate of printed) {
     it(`${gate} dispatches a specialist or is listed as context`, () => {
       const routed = table.includes(`\`${gate}\``);
       const contextOnly = context.includes(`\`${gate}\``);

@@ -371,6 +371,43 @@ that branch, but the branch edited the render path. SARIF and JSON escape by con
 **Priority:** P2
 **Depends on:** None
 
+### Finish the Python surface: lookups, `unmatched`, constraints
+
+**What:** Four gaps left by the manifest reader, found by the branch review of
+`cli-and-routing-fixes`:
+- `egressa vendors show boto3` and MCP `lookup_vendor` look up npm only, and MCP `check_package`
+  does not normalise a pypi name.
+- `unmatched.packages` is one set across ecosystems, so an npm and a pypi package with the same
+  name are indistinguishable.
+- A file referenced by `-c` from a requirements file pins versions and installs nothing. Only
+  `constraints*.txt` is skipped by name today.
+- The `kb:validate` pypi rule has no negative test, and it re-implements `normalisePypiName`.
+
+**Why:** `docs/LIMITATIONS.md` now points a user at `unmatched` for missing Python aliases, and
+the lookup commands are how they would check one.
+
+**Context:** Keying `unmatched` by ecosystem changes the findings schema. That is free before the
+first release and needs a new schema file after it.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Refuse a manifest reached through a symlink out of the scan root
+
+**What:** Skip any discovered manifest whose real path is outside the root.
+
+**Why:** `manifests/index.ts` reads whatever path discovery returns, and a symlink in a reviewed
+repository can point anywhere on the machine. The problem predates the Python reader, but the new
+patterns widen it. The security pass reproduced it.
+
+**Context:** Branch review of `cli-and-routing-fixes`. `egressa schema` also resolves `schemas/`
+against the working directory rather than the package, which is the same class of assumption.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Validate a knowledge base passed with `--kb`
 
 **What:** Run the `kb:validate` checks at load time for a user-supplied `--kb`. At minimum, run the

@@ -4,7 +4,7 @@ import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
-import { walk } from './discovery/walk.js';
+import { excludeProblem, walk } from './discovery/walk.js';
 import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
 import { confidenceForDependency } from './merge/confidence.js';
@@ -88,6 +88,9 @@ export function scan(options: ScanOptions): ScanResult {
   // A root that is not a readable directory must not read as a clean scan. A
   // typo'd path would otherwise produce zero findings, an empty error list and
   // the same output as a repository with nothing to report.
+  const excludeError = excludeProblem(options.exclude ?? []);
+  if (excludeError) throw new TypeError(excludeError);
+
   const rootUsable = isReadableDirectory(root);
   if (!rootUsable) {
     errors.push({

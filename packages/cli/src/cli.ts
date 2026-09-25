@@ -4,7 +4,7 @@ import { scanCommand } from './commands/scan.js';
 import { schemaCommand } from './commands/schema.js';
 import { vendorsCommand } from './commands/vendors.js';
 import { EXIT } from './exit-codes.js';
-import { unknownFlags } from './flags.js';
+import { flagProblems } from './flags.js';
 import { TOOL_VERSION } from './version.js';
 
 const subCommands = {
@@ -58,13 +58,19 @@ export function withDefaultCommand(argv: string[]): string[] {
 const rawArgs = withDefaultCommand(process.argv.slice(2));
 const command = rawArgs[0];
 if (command !== undefined && Object.hasOwn(subCommands, command)) {
-  const unknown = unknownFlags(
+  const { unknown, missingValue } = flagProblems(
     rawArgs.slice(1),
     subCommands[command as keyof typeof subCommands].args as ArgsDef,
   );
-  if (unknown.length > 0) {
+  if (unknown.length > 0 || missingValue.length > 0) {
+    const lines = [
+      ...(unknown.length > 0 ? [`unknown option ${unknown.join(', ')}`] : []),
+      ...missingValue.map(
+        (flag) => `${flag} needs a value; one starting with "-" must be written ${flag}=<value>`,
+      ),
+    ];
     process.stderr.write(
-      `egressa: unknown option ${unknown.join(', ')}. Run \`egressa ${command} --help\` for the options.\n`,
+      `${lines.map((l) => `egressa: ${l}`).join('\n')}\nRun \`egressa ${command} --help\` for the options.\n`,
     );
     process.exit(EXIT.USAGE);
   }

@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { parseNpmLock } from './npm-lock.js';
 import { parsePackageJson } from './package-json.js';
 import { parsePnpmLock } from './pnpm-lock.js';
-import { parsePyprojectToml, parseRequirementsTxt } from './python.js';
+import { isRequirementsFile, parsePyprojectToml, parseRequirementsTxt } from './python.js';
 import type { DependencyRecord, ManifestParseResult } from './types.js';
 import { parseYarnBerryLock, parseYarnClassicLock } from './yarn-lock.js';
 
@@ -12,6 +12,7 @@ export { parseNpmLock } from './npm-lock.js';
 export { parsePackageJson } from './package-json.js';
 export { parsePnpmLock } from './pnpm-lock.js';
 export {
+  isRequirementsFile,
   normalisePypiName,
   parsePyprojectToml,
   parseRequirementsTxt,
@@ -81,7 +82,7 @@ export function analyzeManifests(options: AnalyzeManifestsOptions): ManifestAnal
 
     // Python manifests declare; there is no lockfile to project onto, and their
     // names must not enter `declared`, which is keyed by npm name alone.
-    if (file === 'pyproject.toml' || file.endsWith('.txt')) {
+    if (file === 'pyproject.toml' || isRequirementsFile(path)) {
       const python =
         file === 'pyproject.toml'
           ? parsePyprojectToml(text, path)

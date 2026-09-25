@@ -22,12 +22,15 @@ export const DEFAULT_EXCLUDES = [
   '**/.svelte-kit/**',
   '**/coverage/**',
   '**/vendor/**',
-  // Installed Python packages, for the same reason as node_modules: a virtualenv
-  // holds every dependency's own manifests, which describe what *they* use.
-  '**/.venv/**',
+  // Installed Python packages, for the same reason as node_modules: they hold
+  // every dependency's own manifests, which describe what *those* use, and an
+  // editable install's pyproject.toml reads as this repository's own. Dot
+  // directories (.venv, .tox, .nox) are never walked at all, and a virtualenv
+  // under any other name is pruned by its pyvenv.cfg in walk().
   '**/venv/**',
   '**/site-packages/**',
-  '**/.tox/**',
+  '**/dist-packages/**',
+  '**/__pypackages__/**',
   '**/*.min.js',
   '**/*.bundle.js',
   '**/*.map',
@@ -81,9 +84,46 @@ export function toPosixRelative(root: string, absolute: string): string {
   return relative(root, absolute).split(sep).join('/');
 }
 
+/**
+ * Why a list of exclude globs cannot be honoured, or null when it can.
+ *
+ * Discovery has no negation, so `!legacy/**` would be accepted and do nothing --
+ * the scan silently wider than asked. A non-string entry (YAML reads `2024` as
+ * a number) cannot be a glob at all. Every surface refuses both, through this:
+ * the CLI as a usage error, the MCP server as a tool error, and `scan()` itself
+ * by throwing, for anyone calling core directly.
+ */
+export function excludeProblem(globs: readonly unknown[]): string | null {
+  const notString = globs.filter((glob) => typeof glob !== 'string');
+  if (notString.length > 0) {
+    return `exclude entries must be glob strings, got ${notString.map((g) => JSON.stringify(g)).join(', ')}`;
+  }
+  const negated = (globs as string[]).filter((glob) => glob.startsWith('!'));
+  if (negated.length > 0) {
+    return `exclude globs cannot be negated (${negated.join(', ')}); list only what to skip`;
+  }
+  return null;
+}
+
 export function walk(options: WalkOptions): WalkResult {
   const { root, exclude = [], respectIgnoreFiles = true } = options;
-  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude];
+  // A virtualenv is recognised by the file every one of them carries, not by
+  // its directory name, which is the user's choice (`env`, `py311`, ...).
+  // A pyvenv.cfg at the root itself is ignored: pruning it would drop the scan.
+  const virtualenvs = globSync('**/pyvenv.cfg', {
+    cwd: root,
+    ignore: [...DEFAULT_EXCLUDES, ...exclude],
+    dot: false,
+  })
+    .map((p) =>
+      p
+        .split(sep)
+        .join('/')
+        .replace(/\/?pyvenv\.cfg$/, ''),
+    )
+    .filter((dir) => dir !== '')
+    .map((dir) => `${dir}/**`);
+  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
 
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
   const collect = (patterns: string[]): string[] =>

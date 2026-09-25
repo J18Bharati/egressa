@@ -32,6 +32,14 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const parsed = parse(readFileSync(path, 'utf8')) as EgressaConfig | null;
   if (!parsed || typeof parsed !== 'object') return {};
 
+  // `exclude: legacy/**` is one glob, not a list of characters to spread. Any
+  // other shape is refused here; entry types are checked by excludeProblem.
+  const exclude: unknown = parsed.exclude;
+  if (typeof exclude === 'string') parsed.exclude = [exclude];
+  else if (exclude !== undefined && exclude !== null && !Array.isArray(exclude)) {
+    throw new Error(`${path}: exclude must be a glob or a list of globs`);
+  }
+
   for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
     if (!suppression.reason || suppression.reason.trim() === '') {
       throw new Error(

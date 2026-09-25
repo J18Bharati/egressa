@@ -14453,13 +14453,14 @@ function addNames(target, node) {
 function normalisePypiName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
+var DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
 function requirementName(text) {
   const match = /^(\s*)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(\[[^\]]*\])?\s*(.*)$/s.exec(
     text
   );
   if (!match) return null;
   const rest = (match[4] ?? "").trim();
-  if (rest !== "" && !/^[=<>!~;@,(]/.test(rest)) return null;
+  if (rest !== "" && !/^(?:[=<>!~;@]|\(\s*[=<>!~])/.test(rest)) return null;
   return {
     name: normalisePypiName(match[2]),
     at: (match[1] ?? "").length,
@@ -14478,19 +14479,32 @@ function record(index, path, offset, length, name, version, dev) {
     dev
   };
 }
+function isRequirementsFile(path) {
+  const parts = path.split("/");
+  const file = parts.at(-1) ?? "";
+  if (!file.toLowerCase().endsWith(".txt")) return false;
+  if (/^constraints/i.test(file)) return false;
+  if (/^requirements([-_.].*)?\.txt$/i.test(file)) return true;
+  return parts.at(-2) === "requirements" && !/^(readme|license|licence|notes?|changelog|constraints)/i.test(file);
+}
 function isDevRequirementsFile(path) {
   const file = path.split("/").pop() ?? "";
-  const stem = file.replace(/\.txt$/, "").replace(/^requirements/, "");
-  return /(^|[-_.])(dev|develop|test|tests|testing|lint|docs|typing)$/.test(stem);
+  const stem = file.replace(/\.txt$/i, "").replace(/^requirements[-_.]?/i, "");
+  return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
 }
 function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   const index = new LineIndex(text);
   const dependencies = [];
   let offset = 0;
-  for (const raw of text.split("\n")) {
+  let continuation = false;
+  for (const physical of text.split("\n")) {
     const lineOffset = offset;
-    offset += raw.length + 1;
-    const line = raw.replace(/(^|\s)#.*$/, "");
+    offset += physical.length + 1;
+    const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
+    const continued = continuation;
+    continuation = raw.trimEnd().endsWith("\\");
+    if (continued) continue;
+    const line = raw.replace(/(^|\s)#.*$/, "").replace(/\\\s*$/, "");
     if (line.trim() === "" || line.trim().startsWith("-")) continue;
     const requirement = requirementName(line);
     if (!requirement) continue;
@@ -14502,95 +14516,191 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   }
   return { dependencies, errors: [] };
 }
-var DEV_GROUP = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
+function tokenise(text) {
+  const tokens = [];
+  let i2 = 0;
+  while (i2 < text.length) {
+    const ch = text[i2];
+    if (ch === "\n") {
+      tokens.push({ t: "nl" });
+      i2++;
+    } else if (ch === " " || ch === "	" || ch === "\r") {
+      i2++;
+    } else if (ch === "#") {
+      while (i2 < text.length && text[i2] !== "\n") i2++;
+    } else if (text.startsWith('"""', i2) || text.startsWith("'''", i2)) {
+      const quote = text.slice(i2, i2 + 3);
+      let end = i2 + 3;
+      while (end < text.length && !text.startsWith(quote, end)) {
+        end += quote === '"""' && text[end] === "\\" ? 2 : 1;
+      }
+      let close = end + 3;
+      while (close < text.length && text[close] === quote[0] && close < end + 5) close++;
+      tokens.push({ t: "str", v: text.slice(i2 + 3, end), start: i2, multiline: true });
+      for (let k2 = i2; k2 < Math.min(close, text.length); k2++) {
+        if (text[k2] === "\n") tokens.push({ t: "nl" });
+      }
+      i2 = close;
+    } else if (ch === '"' || ch === "'") {
+      let end = i2 + 1;
+      while (end < text.length && text[end] !== ch && text[end] !== "\n") {
+        end += ch === '"' && text[end] === "\\" ? 2 : 1;
+      }
+      tokens.push({ t: "str", v: text.slice(i2 + 1, end), start: i2, multiline: false });
+      i2 = text[end] === ch ? end + 1 : end;
+    } else if ("[]{}=,.".includes(ch)) {
+      tokens.push({ t: "punct", v: ch, start: i2 });
+      i2++;
+    } else if (/[A-Za-z0-9_-]/.test(ch)) {
+      let end = i2 + 1;
+      while (end < text.length && /[A-Za-z0-9_-]/.test(text[end])) end++;
+      tokens.push({ t: "bare", v: text.slice(i2, end), start: i2 });
+      i2 = end;
+    } else {
+      tokens.push({ t: "other", start: i2 });
+      i2++;
+    }
+  }
+  return tokens;
+}
 function tableKind(table) {
   if (table === "project") return { kind: "array-key", key: "dependencies", dev: () => false };
   if (table === "project.optional-dependencies") {
-    return { kind: "array-key", key: null, dev: (k2) => DEV_GROUP.test(k2) };
+    return { kind: "array-key", key: null, dev: (k2) => DEV_NAME.test(k2) };
   }
   if (table === "dependency-groups") return { kind: "array-key", key: null, dev: () => true };
   if (table === "tool.poetry.dependencies") return { kind: "poetry", dev: false };
   if (table === "tool.poetry.dev-dependencies") return { kind: "poetry", dev: true };
-  if (/^tool\.poetry\.group\.[^.]+\.dependencies$/.test(table))
-    return { kind: "poetry", dev: true };
+  const group = /^tool\.poetry\.group\.([^.]+)\.dependencies$/.exec(table);
+  if (group) return { kind: "poetry", dev: DEV_NAME.test(group[1]) };
   return null;
 }
 function parsePyprojectToml(text, path) {
   const index = new LineIndex(text);
   const dependencies = [];
+  const tokens = tokenise(text);
   let table = null;
-  let arrayDev = null;
-  let offset = 0;
-  for (const line of text.split("\n")) {
-    const lineOffset = offset;
-    offset += line.length + 1;
-    if (arrayDev !== null) {
-      arrayDev = readArray(line, 0, lineOffset, arrayDev) ? arrayDev : null;
+  let i2 = 0;
+  const toLineEnd = () => {
+    while (i2 < tokens.length && tokens[i2]?.t !== "nl") i2++;
+  };
+  const valueEnd = (from) => {
+    const first = tokens[from];
+    if (first?.t === "punct" && (first.v === "[" || first.v === "{")) {
+      let depth = 0;
+      for (let k22 = from; k22 < tokens.length; k22++) {
+        const tok = tokens[k22];
+        if (tok?.t !== "punct") continue;
+        if (tok.v === "[" || tok.v === "{") depth++;
+        else if (tok.v === "]" || tok.v === "}") depth--;
+        if (depth === 0) return k22 + 1;
+      }
+      return tokens.length;
+    }
+    let k2 = from;
+    while (k2 < tokens.length && tokens[k2]?.t !== "nl") k2++;
+    return k2;
+  };
+  const readArray = (from, to, dev) => {
+    let depth = 0;
+    for (let k2 = from; k2 < to; k2++) {
+      const tok = tokens[k2];
+      if (tok?.t === "punct" && (tok.v === "[" || tok.v === "{")) depth++;
+      else if (tok?.t === "punct" && (tok.v === "]" || tok.v === "}")) depth--;
+      else if (tok?.t === "str" && depth === 1 && !tok.multiline) {
+        const requirement = requirementName(tok.v);
+        if (!requirement) continue;
+        const written = tok.v.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            tok.start + 1 + requirement.at,
+            written.length,
+            requirement.name,
+            requirement.spec,
+            dev
+          )
+        );
+      }
+    }
+  };
+  while (i2 < tokens.length) {
+    const tok = tokens[i2];
+    if (tok?.t === "nl") {
+      i2++;
       continue;
     }
-    const header = /^\s*\[\s*([^\]\s][^\]]*?)\s*\]\s*(#.*)?$/.exec(line);
-    if (header) {
-      table = tableKind(header[1].replace(/\s+/g, "").replace(/["']/g, ""));
-      continue;
-    }
-    if (!table) continue;
-    const assignment = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9._-]+))\s*=\s*/.exec(line);
-    if (!assignment) continue;
-    const key = assignment[1] ?? assignment[2] ?? assignment[3];
-    const valueAt = assignment[0].length;
-    if (table.kind === "poetry") {
-      if (key === "python") continue;
-      const keyAt = line.indexOf(key);
-      const version = /^"([^"]*)"/.exec(line.slice(valueAt))?.[1] ?? "";
-      dependencies.push(
-        record(
-          index,
-          path,
-          lineOffset + keyAt,
-          key.length,
-          normalisePypiName(key),
-          version,
-          table.dev
-        )
-      );
-      continue;
-    }
-    if (table.key !== null && key !== table.key) continue;
-    if (line[valueAt] !== "[") continue;
-    const dev = table.dev(key);
-    if (readArray(line, valueAt + 1, lineOffset, dev)) arrayDev = dev;
-  }
-  function readArray(line, from, lineOffset, dev) {
-    let i2 = from;
-    while (i2 < line.length) {
-      const ch = line[i2];
-      if (ch === "#") return true;
-      if (ch === "]") return false;
-      if (ch === '"' || ch === "'") {
-        const close = line.indexOf(ch, i2 + 1);
-        if (close === -1) return true;
-        const body = line.slice(i2 + 1, close);
-        const requirement = requirementName(body);
-        if (requirement) {
-          const written = body.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
-          dependencies.push(
-            record(
-              index,
-              path,
-              lineOffset + i2 + 1 + requirement.at,
-              written.length,
-              requirement.name,
-              requirement.spec,
-              dev
-            )
-          );
-        }
-        i2 = close + 1;
+    if (tok?.t === "punct" && tok.v === "[") {
+      const next = tokens[i2 + 1];
+      if (next?.t === "punct" && next.v === "[") {
+        table = null;
+        toLineEnd();
         continue;
       }
-      i2++;
+      const name = [];
+      let k22 = i2 + 1;
+      let ok = true;
+      for (; k22 < tokens.length; k22++) {
+        const part = tokens[k22];
+        if (part?.t === "punct" && part.v === "]") break;
+        if (part?.t === "bare" || part?.t === "str" && !part.multiline) name.push(part.v);
+        else if (!(part?.t === "punct" && part.v === ".")) {
+          ok = false;
+          break;
+        }
+      }
+      table = ok ? tableKind(name.join(".")) : null;
+      toLineEnd();
+      continue;
     }
-    return true;
+    const parts = [];
+    let k2 = i2;
+    while (k2 < tokens.length) {
+      const part = tokens[k2];
+      if (part?.t === "bare" || part?.t === "str" && !part.multiline) {
+        parts.push({ v: part.v, start: part.start + (part.t === "str" ? 1 : 0) });
+        k2++;
+        const dot = tokens[k2];
+        if (dot?.t === "punct" && dot.v === ".") {
+          k2++;
+          continue;
+        }
+      }
+      break;
+    }
+    const equals = tokens[k2];
+    if (parts.length === 0 || !(equals?.t === "punct" && equals.v === "=")) {
+      toLineEnd();
+      continue;
+    }
+    const valueStart = k2 + 1;
+    const end = valueEnd(valueStart);
+    const head = parts[0];
+    if (table?.kind === "poetry") {
+      if (head.v !== "python") {
+        const value = tokens[valueStart];
+        const version = parts.length === 1 && value?.t === "str" ? value.v : "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            head.start,
+            head.v.length,
+            normalisePypiName(head.v),
+            version,
+            table.dev
+          )
+        );
+      }
+    } else if (table?.kind === "array-key" && parts.length === 1) {
+      const value = tokens[valueStart];
+      if ((table.key === null || head.v === table.key) && value?.t === "punct" && value.v === "[") {
+        readArray(valueStart, end, table.dev(head.v));
+      }
+    }
+    i2 = end;
+    toLineEnd();
   }
   return { dependencies, errors: [] };
 }
@@ -14708,7 +14818,7 @@ function analyzeManifests(options) {
       errors.push(...result2.errors);
       continue;
     }
-    if (file === "pyproject.toml" || file.endsWith(".txt")) {
+    if (file === "pyproject.toml" || isRequirementsFile(path)) {
       const python = file === "pyproject.toml" ? parsePyprojectToml(text, path) : parseRequirementsTxt(text, path);
       manifestRecords.push(...python.dependencies);
       errors.push(...python.errors);
@@ -14761,12 +14871,15 @@ var DEFAULT_EXCLUDES = [
   "**/.svelte-kit/**",
   "**/coverage/**",
   "**/vendor/**",
-  // Installed Python packages, for the same reason as node_modules: a virtualenv
-  // holds every dependency's own manifests, which describe what *they* use.
-  "**/.venv/**",
+  // Installed Python packages, for the same reason as node_modules: they hold
+  // every dependency's own manifests, which describe what *those* use, and an
+  // editable install's pyproject.toml reads as this repository's own. Dot
+  // directories (.venv, .tox, .nox) are never walked at all, and a virtualenv
+  // under any other name is pruned by its pyvenv.cfg in walk().
   "**/venv/**",
   "**/site-packages/**",
-  "**/.tox/**",
+  "**/dist-packages/**",
+  "**/__pypackages__/**",
   "**/*.min.js",
   "**/*.bundle.js",
   "**/*.map"
@@ -14790,9 +14903,27 @@ var INFRA_PATTERNS = [
   "**/fly.toml",
   "**/*.tf"
 ];
+function excludeProblem(globs) {
+  const notString = globs.filter((glob) => typeof glob !== "string");
+  if (notString.length > 0) {
+    return `exclude entries must be glob strings, got ${notString.map((g3) => JSON.stringify(g3)).join(", ")}`;
+  }
+  const negated = globs.filter((glob) => glob.startsWith("!"));
+  if (negated.length > 0) {
+    return `exclude globs cannot be negated (${negated.join(", ")}); list only what to skip`;
+  }
+  return null;
+}
 function walk(options) {
   const { root, exclude = [], respectIgnoreFiles = true } = options;
-  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude];
+  const virtualenvs = globSync("**/pyvenv.cfg", {
+    cwd: root,
+    ignore: [...DEFAULT_EXCLUDES, ...exclude],
+    dot: false
+  }).map(
+    (p) => p.split(sep3).join("/").replace(/\/?pyvenv\.cfg$/, "")
+  ).filter((dir) => dir !== "").map((dir) => `${dir}/**`);
+  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
   const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
   return {
@@ -16063,6 +16194,8 @@ function scan(options) {
   const signals = [];
   const unmatchedPackages = /* @__PURE__ */ new Set();
   const unmatchedHosts = /* @__PURE__ */ new Set();
+  const excludeError = excludeProblem(options.exclude ?? []);
+  if (excludeError) throw new TypeError(excludeError);
   const rootUsable = isReadableDirectory(root);
   if (!rootUsable) {
     errors.push({
@@ -16308,6 +16441,11 @@ function loadConfig(root, explicitPath) {
   if (!existsSync(path)) return {};
   const parsed = (0, import_yaml4.parse)(readFileSync5(path, "utf8"));
   if (!parsed || typeof parsed !== "object") return {};
+  const exclude = parsed.exclude;
+  if (typeof exclude === "string") parsed.exclude = [exclude];
+  else if (exclude !== void 0 && exclude !== null && !Array.isArray(exclude)) {
+    throw new Error(`${path}: exclude must be a glob or a list of globs`);
+  }
   for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
     if (!suppression.reason || suppression.reason.trim() === "") {
       throw new Error(
@@ -16676,14 +16814,19 @@ var scanCommand = defineCommand({
 `);
       process.exit(EXIT.USAGE);
     }
-    const config = loadConfig(root, args.config ? String(args.config) : void 0);
+    let config;
+    try {
+      config = loadConfig(root, args.config ? String(args.config) : void 0);
+    } catch (error) {
+      process.stderr.write(`egressa: ${error.message}
+`);
+      process.exit(EXIT.USAGE);
+    }
     const exclude = [...config.exclude ?? [], ...toStringArray(args.exclude)];
-    const negated = exclude.filter((glob) => glob.startsWith("!"));
-    if (negated.length > 0) {
-      process.stderr.write(
-        `egressa: exclude globs cannot be negated (${negated.join(", ")}); list only what to skip
-`
-      );
+    const excludeError = excludeProblem(exclude);
+    if (excludeError) {
+      process.stderr.write(`egressa: ${excludeError}
+`);
       process.exit(EXIT.USAGE);
     }
     const failOnGiven = rawArgs2.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
@@ -16843,37 +16986,42 @@ var vendorsCommand = defineCommand({
 });
 
 // src/flags.ts
-var camel = (name) => name.replace(/-([a-z])/g, (_3, c3) => c3.toUpperCase());
-function unknownFlags(argv2, args) {
-  const long = /* @__PURE__ */ new Set(["help"]);
+function flagProblems(argv2, args) {
+  const booleans = /* @__PURE__ */ new Set(["help"]);
+  const strings = /* @__PURE__ */ new Set();
   const short = /* @__PURE__ */ new Set(["h"]);
-  const takesValue = /* @__PURE__ */ new Set();
   for (const [name, def] of Object.entries(args)) {
     if (def.type === "positional") continue;
-    const names = [name, camel(name)];
-    if (def.type === "boolean") names.push(`no-${name}`, `no${camel(`-${name}`)}`);
-    for (const n2 of names) long.add(n2);
+    if (def.type === "boolean") booleans.add(name).add(`no-${name}`);
+    else strings.add(name);
     for (const alias of ["alias" in def ? def.alias ?? [] : []].flat()) {
       if (alias.length === 1) short.add(alias);
-      else long.add(alias);
+      else if (def.type === "boolean") booleans.add(alias);
+      else strings.add(alias);
     }
-    if (def.type === "string") for (const n2 of [name, camel(name)]) takesValue.add(n2);
   }
-  const unknown = [];
+  const problems = { unknown: [], missingValue: [] };
   for (let i2 = 0; i2 < argv2.length; i2++) {
     const token = argv2[i2];
     if (token === "--") break;
     if (token.startsWith("--")) {
-      const [name = "", value] = token.slice(2).split(/=(.*)/s);
-      if (!long.has(name)) unknown.push(`--${name}`);
-      else if (value === void 0 && takesValue.has(name)) i2++;
+      const eq = token.indexOf("=");
+      const name = eq === -1 ? token.slice(2) : token.slice(2, eq);
+      if (strings.has(name)) {
+        if (eq !== -1) continue;
+        const next = argv2[i2 + 1];
+        if (next === void 0 || next.startsWith("-")) problems.missingValue.push(`--${name}`);
+        else i2++;
+      } else if (!booleans.has(name) || eq !== -1) {
+        problems.unknown.push(eq === -1 ? `--${name}` : token);
+      }
     } else if (/^-[A-Za-z]/.test(token)) {
-      for (const letter of token.slice(1)) {
-        if (!short.has(letter)) unknown.push(`-${letter}`);
+      if (![...token.slice(1)].every((letter) => short.has(letter))) {
+        problems.unknown.push(token);
       }
     }
   }
-  return unknown;
+  return problems;
 }
 
 // src/cli.ts
@@ -16906,13 +17054,20 @@ function withDefaultCommand(argv2) {
 var rawArgs = withDefaultCommand(process.argv.slice(2));
 var command = rawArgs[0];
 if (command !== void 0 && Object.hasOwn(subCommands, command)) {
-  const unknown = unknownFlags(
+  const { unknown, missingValue } = flagProblems(
     rawArgs.slice(1),
     subCommands[command].args
   );
-  if (unknown.length > 0) {
+  if (unknown.length > 0 || missingValue.length > 0) {
+    const lines = [
+      ...unknown.length > 0 ? [`unknown option ${unknown.join(", ")}`] : [],
+      ...missingValue.map(
+        (flag) => `${flag} needs a value; one starting with "-" must be written ${flag}=<value>`
+      )
+    ];
     process.stderr.write(
-      `egressa: unknown option ${unknown.join(", ")}. Run \`egressa ${command} --help\` for the options.
+      `${lines.map((l2) => `egressa: ${l2}`).join("\n")}
+Run \`egressa ${command} --help\` for the options.
 `
     );
     process.exit(EXIT.USAGE);
