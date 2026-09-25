@@ -375,3 +375,63 @@ describe('a filename cannot be read as an option', () => {
     expect(run.degraded).toEqual([]);
   });
 });
+
+// F1 in docs/reviews/2026-09-25-live-run-triage.md. The gate knew only the
+// dedicated replay vendors, so `Sentry.replayIntegration()` recording a tenth of
+// all sessions never dispatched the specialist -- while the engine matched
+// @sentry/nuxt in the same run. Replay configured inside a general SDK is a
+// different shape of evidence and needs its own terms.
+describe('session replay inside a general SDK routes the specialist', () => {
+  const base = (root: string) => plant(root, 'package.json', '{"name":"r","private":true}\n');
+
+  const cases: Array<[string, string, string]> = [
+    [
+      'Sentry.replayIntegration()',
+      'sentry.client.config.ts',
+      "Sentry.init({\n  dsn: 'x',\n  replaysSessionSampleRate: 0.1,\n  integrations: [Sentry.replayIntegration()],\n});\n",
+    ],
+    [
+      'a Sentry replay sample rate alone',
+      'sentry.client.config.ts',
+      "Sentry.init({ dsn: 'x', replaysOnErrorSampleRate: 1.0 });\n",
+    ],
+    ['the Sentry replay package', 'src/replay.ts', "import { Replay } from '@sentry/replay';\n"],
+    ['Sentry v7 Replay as a class', 'src/sentry.ts', 'integrations: [new Sentry.Replay()],\n'],
+    [
+      'rrweb used directly',
+      'src/rec.ts',
+      "import { record } from 'rrweb';\nrecord({ emit() {} });\n",
+    ],
+    [
+      'a Sentry session sample rate alone',
+      'src/sentry.ts',
+      "Sentry.init({ dsn: 'x', replaysSessionSampleRate: 0.1 });\n",
+    ],
+    ['Datadog starting a recording', 'src/rum.ts', 'datadogRum.startSessionReplayRecording();\n'],
+    [
+      'Datadog RUM replay sampling',
+      'src/rum.ts',
+      "datadogRum.init({ applicationId: 'a', clientToken: 'b', sessionReplaySampleRate: 20 });\n",
+    ],
+  ];
+
+  for (const [name, file, content] of cases) {
+    it(`fires on ${name}`, () => {
+      const root = scratch('replay');
+      base(root);
+      plant(root, file, content);
+      const run = runScope(root);
+      expect(run.lines.SCOPE_END).toBe('ok');
+      expect(run.lines.SCOPE_SESSION_REPLAY).toBe('true');
+    });
+  }
+
+  it('stays false on a Sentry init with no replay', () => {
+    const root = scratch('replay-control');
+    base(root);
+    plant(root, 'sentry.client.config.ts', "Sentry.init({ dsn: 'x', tracesSampleRate: 0.2 });\n");
+    const run = runScope(root);
+    expect(run.lines.SCOPE_END).toBe('ok');
+    expect(run.lines.SCOPE_SESSION_REPLAY).toBe('false');
+  });
+});

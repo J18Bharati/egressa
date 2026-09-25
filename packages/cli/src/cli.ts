@@ -4,6 +4,7 @@ import { scanCommand } from './commands/scan.js';
 import { schemaCommand } from './commands/schema.js';
 import { vendorsCommand } from './commands/vendors.js';
 import { EXIT } from './exit-codes.js';
+import { TOOL_VERSION } from './version.js';
 
 const subCommands = {
   scan: scanCommand,
@@ -15,6 +16,10 @@ const subCommands = {
 const main = defineCommand({
   meta: {
     name: 'egressa',
+    // citty answers `--version` from here, and exits 1 with "No version
+    // specified" when it is missing -- which it was, although `--version` has
+    // always been in PASS_THROUGH below.
+    version: TOOL_VERSION,
     description:
       'Detects third-party data-egress patterns in source code and their cross-border ' +
       'transfer exposure. Does not assess or certify GDPR compliance.',
@@ -42,6 +47,9 @@ const PASS_THROUGH = new Set(['--help', '-h', '--version', '-v']);
 export function withDefaultCommand(argv: string[]): string[] {
   const first = argv[0];
   if (first === undefined) return ['scan'];
+  // citty answers a version request only when argv is exactly `['--version']`,
+  // so `-v` printed usage and exited 1 -- the "findings" code.
+  if (first === '-v' && argv.length === 1) return ['--version'];
   if (Object.hasOwn(subCommands, first) || PASS_THROUGH.has(first)) return argv;
   return ['scan', ...argv];
 }

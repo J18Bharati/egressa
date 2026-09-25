@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { isAbsolute, resolve } from 'node:path';
 import { DISCLAIMER, RULES, RULE_IDS, scan, summarise } from '@egressa/core';
 import type { RuleId } from '@egressa/core';

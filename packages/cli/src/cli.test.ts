@@ -104,6 +104,21 @@ describe('human output', () => {
     expect(text).toContain('verified:   2026-09-06');
   });
 
+  it('marks a region the vendor map does not know, and reads only the provider’s own', () => {
+    // The tag nested in default_tags used to become a second finding titled
+    // "(emea)"; a typo in the real region rendered exactly like a resolved one.
+    const root = mkdtempSync(join(tmpdir(), 'egressa-unmapped-'));
+    writeFileSync(
+      join(root, 'main.tf'),
+      'provider "aws" {\n  default_tags {\n    tags = { region = "emea" }\n  }\n  region = "eu-wset-1"\n}\n',
+    );
+    const text = formatHuman(scan({ root, toolVersion: '0.1.0', kbPath: 'kb', now: NOW }), {
+      color: false,
+    });
+    expect(text).toContain('Amazon Web Services, Inc. (eu-wset-1 [unmapped])');
+    expect(text).not.toContain('emea');
+  });
+
   it('flags a hypothetical run so it cannot be mistaken for the current position', () => {
     const lapsed = scan({
       root: 'fixtures/repos/express-stripe-sendgrid',
@@ -243,6 +258,27 @@ describe('cli end to end', () => {
     const parsed = JSON.parse(stdout) as { schemaVersion: string; disclaimer: string };
     expect(parsed.schemaVersion).toBe(FINDINGS_SCHEMA_VERSION);
     expect(parsed.disclaimer).toContain('does not assess or certify');
+  });
+
+  it('answers --version with the tool version', () => {
+    // It was in PASS_THROUGH and exited 1 with "No version specified", because
+    // the root command's meta carried no version for citty to print.
+    //
+    // citty prints it through consola, which silences itself when the
+    // environment says a test runner is active -- and the child inherits
+    // vitest's. Without these removed the version is printed nowhere.
+    const { NODE_ENV, TEST, VITEST, ...env } = process.env;
+    for (const flag of ['--version', '-v']) {
+      const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', flag], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      });
+      expect({ flag, out: stdout.trim() }).toEqual({
+        flag,
+        out: readFileSync('VERSION', 'utf8').trim(),
+      });
+    }
   });
 
   it('explains a rule without needing a scan', () => {

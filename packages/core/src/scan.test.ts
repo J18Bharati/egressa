@@ -1,4 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadKnowledgeBase } from '@egressa/kb';
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -151,5 +153,16 @@ describe('scan: a document carrying regions', () => {
   it('actually carries a region, so the assertion above is not vacuous', () => {
     expect(result.findings.some((f) => f.signals.some((s) => s.region))).toBe(true);
     expect(result.findings.some((f) => f.evidence.some((e) => e.region))).toBe(true);
+  });
+});
+
+describe('a document carrying an unmapped region', () => {
+  it('validates, with the flag on the evidence', () => {
+    const root = mkdtempSync(join(tmpdir(), 'egressa-unmapped-schema-'));
+    writeFileSync(join(root, 'main.tf'), 'provider "aws" {\n  region = "eu-wset-1"\n}\n');
+    const result = scan({ ...base, root });
+    expect(result.findings.flatMap((f) => f.evidence).some((e) => e.regionUnmapped)).toBe(true);
+    const ok = validateFindings(result);
+    if (!ok) expect(validateFindings.errors?.slice(0, 5)).toEqual([]);
   });
 });

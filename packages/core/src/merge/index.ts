@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { KnowledgeBase, VendorEntry } from '@egressa/kb';
-import { type AppliedRegion, resolveRegion } from '../exposure/regions.js';
+import { type AppliedRegion, isUnmappedRegion, resolveRegion } from '../exposure/regions.js';
 import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
 import { RULES } from '../rules.js';
 import type {
@@ -48,13 +48,12 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
     // which agreed only because both were a pure function of the vendor. A
     // region makes them disagree -- a finding whose rule came from one region
     // and whose flags came from another, with nothing in the output to show it.
+    // buildFinding re-classifies only to add unmapped regions to the audit
+    // trail, with this same resolved region, so the rule and flags cannot move.
     const region = vendor && signal.region ? resolveRegion(vendor, signal.region) : null;
-    const classified = vendor
-      ? classifyExposure(vendor, kb, {
-          region,
-          ...(signal.region && !region ? { unmappedRegion: signal.region } : {}),
-        })
-      : null;
+    // An unmapped region cannot change the rule or the narrowing, so it is left
+    // out here and added once the whole group is known (see buildFinding).
+    const classified = vendor ? classifyExposure(vendor, kb, { region }) : null;
     const ruleId = classified?.ruleId ?? unmatchedRule(signal);
 
     // Only a region that actually narrowed splits a group. An unmapped code
@@ -79,6 +78,7 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
         group.classified,
         group.region,
         staleVendorIds,
+        kb,
       ),
     );
   }
@@ -104,13 +104,22 @@ function buildFinding(
   classified: ExposureResult | null,
   region: AppliedRegion | null,
   staleVendorIds: Set<string>,
+  kb: KnowledgeBase,
 ): Finding {
-  const evidence = signals.map(toEvidence).sort(byStrength);
+  const evidence = signals.map((s) => toEvidence(s, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s) => s.confidence));
   const primary = evidence[0];
 
   const transfer = vendor ? toTransferFacts(vendor) : null;
-  const exposure = classified?.exposure ?? null;
+  // Re-classified with every unmapped region the group's evidence carries, so
+  // the audit trail matches the evidence whatever order the signals arrived in.
+  const unmappedRegions = signals
+    .filter((s) => isUnmappedRegion(vendor, s.region))
+    .map((s) => s.region as string);
+  const exposure =
+    vendor && unmappedRegions.length > 0
+      ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure
+      : (classified?.exposure ?? null);
 
   return {
     id: fingerprint(
@@ -133,7 +142,7 @@ function buildFinding(
   };
 }
 
-function toEvidence(signal: Signal): Evidence {
+function toEvidence(signal: Signal, vendor: VendorEntry | null): Evidence {
   return {
     ...signal.location,
     kind: signal.kind,
@@ -145,6 +154,7 @@ function toEvidence(signal: Signal): Evidence {
     // This list is a whitelist: a field not named here is dropped from the
     // finding even though the signal carried it.
     ...(signal.region ? { region: signal.region } : {}),
+    ...(isUnmappedRegion(vendor, signal.region) ? { regionUnmapped: true as const } : {}),
   };
 }
 

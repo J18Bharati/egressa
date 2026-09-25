@@ -25,3 +25,9 @@ packages/*/kb/
 # Generated reports (make-pdf output and similar)
 /REPORT.pdf
 /*.pdf
+
+# Field-test output: scans run against real third-party repositories, kept so
+# recall and false-positive counts can be diffed across releases. Each run holds
+# file paths, dependency lists and call sites from a private codebase, so these
+# are never committed -- only the defects they surface are.
+/test-runs/

@@ -64,8 +64,12 @@ export interface ExposureResult {
 export interface ExposureContext {
   /** The region this vendor was configured with, when one was detected and resolved. */
   region?: AppliedRegion | null;
-  /** A region identifier that was detected but is not in the vendor's map. */
-  unmappedRegion?: string | null;
+  /**
+   * Region identifiers that were detected but could not be resolved. Every one
+   * a finding's evidence carries, so the audit trail does not depend on which
+   * signal happened to be read first.
+   */
+  unmappedRegions?: readonly string[];
 }
 
 export function classifyExposure(
@@ -102,11 +106,12 @@ export function classifyExposure(
     // A resolved region against an entry that never declared which jurisdiction
     // it selects changes nothing, and saying so is more useful than silence.
     else inputs.push('narrowing:not-declared');
-  } else if (context.unmappedRegion) {
-    inputs.push(`region:${context.unmappedRegion}`, 'regionSource:unmapped');
-  } else {
-    inputs.push('regionSource:none');
   }
+  const unmapped = [...new Set(context.unmappedRegions ?? [])].sort();
+  if (unmapped.length > 0) {
+    inputs.push(...unmapped.map((code) => `region:${code}`), 'regionSource:unmapped');
+  }
+  if (!region && unmapped.length === 0) inputs.push('regionSource:none');
 
   const nonEea = countries.filter((c) => !EEA_MEMBERS.has(c));
 

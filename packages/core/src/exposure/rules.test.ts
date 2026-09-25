@@ -1,6 +1,6 @@
 import { loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
-import { resolveRegion } from './regions.js';
+import { isUnmappedRegion, resolveRegion } from './regions.js';
 import { classifyExposure } from './rules.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
@@ -103,6 +103,15 @@ describe('classifyExposure: a region selects which jurisdiction applies', () => 
     expect(resolveRegion(aws, 'eu-west-1')?.country).toBe('IE');
   });
 
+  it('calls a region unmapped only when a vendor map exists and lacks it', () => {
+    // One predicate for grouping and evidence. A signal with no knowledge base
+    // vendor has no map to be absent from, so it is never flagged.
+    expect(isUnmappedRegion(null, 'eu-wset-1')).toBe(false);
+    expect(isUnmappedRegion(aws, undefined)).toBe(false);
+    expect(isUnmappedRegion(aws, 'eu-west-1')).toBe(false);
+    expect(isUnmappedRegion(aws, 'eu-wset-1')).toBe(true);
+  });
+
   it('rates London as an adequate third country, not EU processing', () => {
     const london = classifyExposure(aws, kb, { region: resolveRegion(aws, 'eu-west-2') });
     expect(london.ruleId).toBe('transfer/adequate-country-egress');
@@ -145,7 +154,7 @@ describe('classifyExposure: a region selects which jurisdiction applies', () => 
 
   it('does not narrow on an unknown region, and says so', () => {
     expect(resolveRegion(aws, 'mars-north-1')).toBeNull();
-    const inputs = classifyExposure(aws, kb, { unmappedRegion: 'mars-north-1' }).exposure.inputs;
+    const inputs = classifyExposure(aws, kb, { unmappedRegions: ['mars-north-1'] }).exposure.inputs;
     expect(inputs).toContain('regionSource:unmapped');
     expect(inputs.some((i) => i.startsWith('narrowedTo:'))).toBe(false);
   });

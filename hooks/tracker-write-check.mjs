@@ -44,12 +44,16 @@ const PATTERNS = [
     what: 'an analytics or advertising tracker is being initialised',
     ask: 'Is this call reachable when the module is evaluated, before the user has chosen? If so it runs before any consent can exist.',
   },
+  // Deliberately narrower than SCOPE_SESSION_REPLAY in privacy-review's
+  // scope.sh. That gate routes a review on any mention, where a needless route
+  // is cheap. This fires mid-edit, where noise gets the plugin switched off, so
+  // it matches only code that turns replay on -- and a sample rate of 0 does not.
   {
     id: 'session-replay-init',
-    test: /\bLogRocket\.init\s*\(|\bSmartlook\.init\s*\(|\bFS\.identify\s*\(|\bclarity\s*\(\s*['"]|\bhj\s*\(\s*['"]/,
+    test: /\bLogRocket\.init\s*\(|\bSmartlook\.init\s*\(|\bFS\.identify\s*\(|\bclarity\s*\(\s*['"]|\bhj\s*\(\s*['"]|\breplayIntegration\s*\(|\bnew\s+(?:Sentry\.)?Replay\s*\(|\b(?:replaysSessionSampleRate|replaysOnErrorSampleRate|sessionReplaySampleRate)\s*:(?!\s*0(?:\.0+)?(?![\d.]))/,
     provision: 'ePrivacy Directive 2002/58/EC Art 5(3)',
     what: 'a session-replay tool is being initialised',
-    ask: 'Are text inputs masked? LogRocket is the one major vendor whose default records them: `dom.inputSanitizer` defaults to false. The others mask by default, so the question there is whether masking was switched off.',
+    ask: "Are text inputs masked? LogRocket is the one major vendor whose default records them: `dom.inputSanitizer` defaults to false. The others mask by default, so the question there is whether masking was switched off -- `maskAllInputs: false` or `maskAllText: false` on Sentry, `defaultPrivacyLevel: 'allow'` on Datadog.",
   },
   {
     id: 'client-storage',

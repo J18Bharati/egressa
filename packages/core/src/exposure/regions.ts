@@ -34,6 +34,20 @@ export function resolveRegion(vendor: VendorEntry, raw: string): AppliedRegion |
 }
 
 /**
+ * Whether a region was read for a knowledge base vendor and could not be
+ * resolved to a country -- because the vendor's map lacks it, or because the
+ * vendor has no map yet. Either way it narrowed nothing.
+ *
+ * False when there is no vendor (nothing to resolve against) and for an empty
+ * identifier, which no reader reports as a region. The single predicate behind
+ * both `regionSource:unmapped` in a finding's audit trail and `regionUnmapped`
+ * on its evidence, so the two cannot disagree.
+ */
+export function isUnmappedRegion(vendor: VendorEntry | null, raw: string | undefined): boolean {
+  return vendor !== null && !!raw?.trim() && resolveRegion(vendor, raw) === null;
+}
+
+/**
  * Whether this vendor has declared which of its jurisdictions a region selects.
  *
  * Narrowing is opt-in per jurisdiction. Without at least one `regionSelected`

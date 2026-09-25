@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { binaryBanner } from '../../tsup.banner.js';
 
 export default defineConfig({
   entry: ['src/server.ts'],
@@ -11,5 +12,6 @@ export default defineConfig({
   // published binary is self-contained.
   external: ['oxc-parser'],
   noExternal: [/@egressa\//],
-  // No banner: the source entrypoint already carries the shebang.
+  // Shebang plus a real `require`; see tsup.banner.ts for why both are needed.
+  banner: { js: binaryBanner },
 });
