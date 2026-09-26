@@ -49,7 +49,12 @@ export class ConfigError extends Error {
  */
 export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const path = explicitPath ?? join(root, '.egressa.yml');
-  if (!existsSync(path)) return {};
+  if (!existsSync(path)) {
+    // Asking for a file by name and scanning without it would be the silent
+    // widening the rest of this function exists to prevent.
+    if (explicitPath !== undefined) throw new ConfigError(`${path}: no such file`);
+    return {};
+  }
 
   let parsed: EgressaConfig | null;
   try {
@@ -70,11 +75,44 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const excludeError = excludeProblem(parsed.exclude ?? []);
   if (excludeError) throw new ConfigError(`${path}: ${excludeError}`);
 
-  for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
-    if (!suppression?.reason || String(suppression.reason).trim() === '') {
-      throw new ConfigError(
-        `${path}: suppression ${index + 1} has no reason. Every suppression must say why it was accepted.`,
-      );
+  const transitive: unknown = parsed.includeTransitive;
+  if (transitive !== undefined && transitive !== null && typeof transitive !== 'boolean') {
+    throw new ConfigError(`${path}: includeTransitive must be true or false`);
+  }
+  if (parsed.failOn !== undefined && parsed.failOn !== null && typeof parsed.failOn !== 'string') {
+    throw new ConfigError(`${path}: failOn must be text`);
+  }
+
+  // Every field of a suppression reaches the findings document and SARIF as
+  // written, so anything that is not the declared type is refused here rather
+  // than published. An expiry that is not a date used to compare as NaN and
+  // never expire, which made a temporary acceptance permanent.
+  const suppressions: unknown = parsed.suppressions;
+  if (suppressions !== undefined && suppressions !== null && !Array.isArray(suppressions)) {
+    throw new ConfigError(`${path}: suppressions must be a list`);
+  }
+  for (const [index, entry] of ((suppressions ?? []) as unknown[]).entries()) {
+    const at = `${path}: suppression ${index + 1}`;
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new ConfigError(`${at} must be a mapping`);
+    }
+    const s = entry as Record<string, unknown>;
+    if (typeof s.reason !== 'string' && s.reason !== undefined && s.reason !== null) {
+      throw new ConfigError(`${at}: reason must be text`);
+    }
+    if (typeof s.reason !== 'string' || s.reason.trim() === '') {
+      throw new ConfigError(`${at} has no reason. Every suppression must say why it was accepted.`);
+    }
+    for (const field of ['vendor', 'rule', 'acceptedBy', 'expires'] as const) {
+      if (s[field] !== undefined && typeof s[field] !== 'string') {
+        throw new ConfigError(`${at}: ${field} must be text`);
+      }
+    }
+    if (s.vendor === undefined && s.rule === undefined) {
+      throw new ConfigError(`${at} names neither a vendor nor a rule, so it would match nothing`);
+    }
+    if (typeof s.expires === 'string' && !Number.isFinite(Date.parse(s.expires))) {
+      throw new ConfigError(`${at}: expires must be a date such as 2027-01-31`);
     }
   }
   return { ...parsed, source: relative(root, path) || path };

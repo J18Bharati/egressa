@@ -275,7 +275,11 @@ describe('the repository’s own .egressa.yml', () => {
   });
 
   it('refuses a bad exclude argument before reading the config', async () => {
-    const response = await errorFor({ path: repo(CONFIG), exclude: ['!tools/**'] });
+    // The config is broken too, so the message says which was checked first.
+    const response = await errorFor({
+      path: repo('suppressions: nope\n'),
+      exclude: ['!tools/**'],
+    });
     expect(response.isError).toBe(true);
     expect(response.content[0]?.text).toContain('cannot be negated');
   });
@@ -286,6 +290,10 @@ describe('the repository’s own .egressa.yml', () => {
     });
     expect(noReason.isError).toBe(true);
     expect(noReason.content[0]?.text).toContain('must say why');
+
+    const notAList = await errorFor({ path: repo('suppressions: nope\n') });
+    expect(notAList.isError).toBe(true);
+    expect(notAList.content[0]?.text).toContain('suppressions must be a list');
 
     const malformed = await errorFor({ path: repo('exclude: [legacy/**\n') });
     expect(malformed.isError).toBe(true);

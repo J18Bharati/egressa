@@ -261,6 +261,36 @@ describe('cli end to end', () => {
       expect(stderr).toContain('.egressa.yml');
     });
 
+    it('reports a suppressions entry that is not a list as a usage error', () => {
+      // It exited 1, the findings code, after the config moved into core.
+      const { code, stderr } = runErr(['scan', repo('suppressions: nope\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('suppressions must be a list');
+    });
+
+    it('lets --no-include-transitive override a config that turns it on', () => {
+      // @supabase/auth-js is detected transitively, so the setting is visible.
+      const dir = repo('includeTransitive: true\n');
+      writeFileSync(join(dir, 'package.json'), '{"name":"x","dependencies":{"foo":"1"}}');
+      writeFileSync(
+        join(dir, 'package-lock.json'),
+        JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            '': { name: 'x', dependencies: { foo: '1' } },
+            'node_modules/foo': { version: '1' },
+            'node_modules/@supabase/auth-js': { version: '2' },
+          },
+        }),
+      );
+      const vendors = (extra: string[]) =>
+        JSON.parse(
+          run(['scan', dir, '--kb', 'kb', '--format', 'json', ...extra]).stdout,
+        ).findings.map((f: { vendor: { id: string } | null }) => f.vendor?.id);
+      expect(vendors([])).toEqual(['supabase']);
+      expect(vendors(['--no-include-transitive'])).toEqual([]);
+    });
+
     it('reports a suppression with no reason as a usage error', () => {
       const { code, stderr } = runErr([
         'scan',

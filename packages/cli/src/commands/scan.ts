@@ -117,8 +117,12 @@ export const scanCommand = defineCommand({
     try {
       config = loadConfig(root, args.config ? String(args.config) : undefined);
     } catch (error) {
-      if (!(error instanceof ConfigError)) throw error;
-      process.stderr.write(`egressa: ${error.message}\n`);
+      // Whatever went wrong, the file is what has to change, so it is always a
+      // usage error. loadConfig names the file in a ConfigError; anything else
+      // is named here.
+      const message = (error as Error).message;
+      const where = error instanceof ConfigError ? '' : '.egressa.yml: ';
+      process.stderr.write(`egressa: ${where}${message}\n`);
       process.exit(EXIT.USAGE);
     }
     // citty collects a repeated string flag into an array itself (a second
@@ -151,8 +155,11 @@ export const scanCommand = defineCommand({
         ...(args.kb ? { kbPath: String(args.kb) } : {}),
         config,
         ...(exclude.length > 0 ? { exclude } : {}),
-        // Only when typed: `false` would override a config that turns it on.
-        ...(args['include-transitive'] ? { includeTransitive: true } : {}),
+        // Only when typed, either way: an untyped flag would otherwise override
+        // what the config says, and MCP's `includeTransitive: false` already can.
+        ...(rawArgs.some((a) => a === '--include-transitive' || a === '--no-include-transitive')
+          ? { includeTransitive: args['include-transitive'] === true }
+          : {}),
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,
         includeInfrastructure: args.infrastructure !== false,

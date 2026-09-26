@@ -65,8 +65,11 @@ export interface SummarisedScan {
     degraded: boolean;
     /** Every exclude applied, the configuration's first. */
     exclude?: string[];
-    /** The configuration file applied, relative to the root, or null for none. */
-    config: string | null;
+    /**
+     * The configuration file applied, relative to the root, or null for none.
+     * Absent when the caller did not say, which is not the same as none.
+     */
+    config?: string | null;
   };
   summary: ScanResult['summary'];
   findings: SummarisedFinding[];
@@ -90,7 +93,7 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
       manifestsScanned: result.scan.manifestsScanned,
       degraded: result.scan.engine.degraded,
       ...(result.scan.exclude ? { exclude: result.scan.exclude } : {}),
-      config: options.config ?? null,
+      ...(options.config !== undefined ? { config: options.config } : {}),
     },
     summary: result.summary,
     findings: shown.map((finding) => toSummarised(finding, maxEvidence)),

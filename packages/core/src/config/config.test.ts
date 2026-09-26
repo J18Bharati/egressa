@@ -164,3 +164,50 @@ describe('loadConfig', () => {
     expect(() => loadConfig(dirWith('exclude: 7\n'))).toThrow(ConfigError);
   });
 });
+
+describe('what the branch review found loadConfig letting through', () => {
+  // Each reached output that breaks the published schema, made a suppression
+  // permanent, or failed as something other than a usage error.
+  const dirWith = (text: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, '.egressa.yml'), text);
+    return dir;
+  };
+  const refuses = (text: string, message: RegExp) => {
+    const dir = dirWith(text);
+    expect(() => loadConfig(dir)).toThrow(ConfigError);
+    expect(() => loadConfig(dir)).toThrow(message);
+  };
+
+  it('refuses suppressions that are not a list of entries', () => {
+    refuses('suppressions: nope\n', /suppressions must be a list/);
+    refuses('suppressions:\n  - stripe\n', /suppression 1 must be a mapping/);
+  });
+
+  it('refuses a reason, vendor, rule or acceptedBy that is not text', () => {
+    refuses('suppressions:\n  - vendor: stripe\n    reason: 42\n', /reason must be text/);
+    refuses('suppressions:\n  - vendor: 5\n    reason: x\n', /vendor must be text/);
+    refuses(
+      'suppressions:\n  - vendor: stripe\n    reason: x\n    acceptedBy: 7\n',
+      /acceptedBy must be text/,
+    );
+  });
+
+  it('refuses a suppression that names neither a vendor nor a rule', () => {
+    refuses('suppressions:\n  - reason: x\n', /names neither a vendor nor a rule/);
+  });
+
+  it('refuses an expiry that is not a date, rather than never expiring', () => {
+    refuses('suppressions:\n  - vendor: stripe\n    reason: x\n    expires: never\n', /expires/);
+    refuses('suppressions:\n  - vendor: stripe\n    reason: x\n    expires: 20200101\n', /expires/);
+  });
+
+  it('refuses includeTransitive that is not true or false', () => {
+    refuses('includeTransitive: "yes"\n', /includeTransitive must be true or false/);
+  });
+
+  it('refuses an explicit config path that does not exist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    expect(() => loadConfig(dir, join(dir, 'missing.yml'))).toThrow(ConfigError);
+  });
+});

@@ -80,8 +80,9 @@ server.tool(
     try {
       config = loadConfig(root);
     } catch (error) {
-      if (!(error instanceof ConfigError)) throw error;
-      return { content: [{ type: 'text' as const, text: error.message }], isError: true };
+      const message = (error as Error).message;
+      const text = error instanceof ConfigError ? message : `.egressa.yml: ${message}`;
+      return { content: [{ type: 'text' as const, text }], isError: true };
     }
     const result = scan({
       root,
