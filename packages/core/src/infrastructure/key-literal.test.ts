@@ -288,9 +288,12 @@ describe('what is not code on this line may have been opened on an earlier one',
   });
 
   it('opens nothing on the $${ and %%{ escapes', () => {
+    // Unbalanced on purpose: read as `${` / `%{`, each would leave a frame open
+    // and hide the real region below.
     const text = [
       'provider "aws" {',
-      '  profile = "$${region} %%{x}"',
+      '  profile = "$${"',
+      '  tag = "%%{"',
       '  region = "eu-west-1"',
       '}',
     ].join('\n');
@@ -310,7 +313,8 @@ describe('what is not code on this line may have been opened on an earlier one',
 
 describe('fly.toml: primary_region is a top-level key', () => {
   it('does not read one inside a multi-line basic string', () => {
-    const text = 'primary_region = "fra"\n[processes]\n  app = """\nprimary_region = "syd"\n"""\n';
+    // No table before it: the string alone must hide the key.
+    const text = 'app = """\nprimary_region = "syd"\n"""\nprimary_region = "fra"\n';
     expect(regions(fly(text))).toEqual(['fra']);
   });
 
@@ -330,13 +334,19 @@ describe('fly.toml: primary_region is a top-level key', () => {
     expect(fly('env = { primary_region = "iad" }\n')).toEqual([]);
   });
 
+  it('does not read a key after an odd quote inside a multi-line string', () => {
+    // Quote parity alone hides the key in simpler cases; this one needs the
+    // multi-line string recognised.
+    const text = 'cmd = """\nsay "hi\nprimary_region = "syd"\n"""\nprimary_region = "fra"\n';
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
+
   it('reads a literal string', () => {
     expect(regions(fly("primary_region = 'fra'\n"))).toEqual(['fra']);
   });
 
   it('reads a CRLF file with a multi-line string', () => {
-    const text =
-      'primary_region = "fra"\r\n[processes]\r\n  app = """\r\nprimary_region = "syd"\r\n"""\r\n';
+    const text = 'app = """\r\nprimary_region = "syd"\r\n"""\r\nprimary_region = "fra"\r\n';
     expect(regions(fly(text))).toEqual(['fra']);
   });
 
@@ -354,5 +364,69 @@ describe('limitations: each hides a region, and lifting one is deliberate', () =
 
   it('hides the rest of the file after an unterminated heredoc', () => {
     expect(tf('provider "aws" {\n  profile = <<EOF\n  region = "eu-west-1"\n}\n')).toEqual([]);
+  });
+});
+
+describe('what the branch review found still inventing a region', () => {
+  // Each reported a region at high confidence that no provider in the file
+  // declares, after the rewrite that was meant to stop exactly this.
+  it('honours a block comment inside an interpolation', () => {
+    const text = [
+      'locals {',
+      '  note = "${ /* }"',
+      'provider "aws" {',
+      '  region = "us-east-1"',
+      '}',
+      '*/ "x" }"',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('honours a line comment inside a multi-line interpolation', () => {
+    const text = [
+      'locals {',
+      '  note = "${ foo # " }',
+      '  }"',
+      '}',
+      'provider "aws" {',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('does not end a heredoc on its terminator inside an interpolation', () => {
+    const text = [
+      'resource "local_file" "p" {',
+      '  content = <<EOT',
+      '${join("", [for x in [1] :',
+      'EOT',
+      '])}',
+      'provider "aws" {',
+      '  region = "us-west-2"',
+      '}',
+      'EOT',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('reads a provider block only at the top level of the file', () => {
+    const text = 'module "m" {\n  provider "aws" {\n    region = "us-east-1"\n  }\n}\n';
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('refuses a literal that is only the start of an expression', () => {
+    expect(tf('provider "aws" {\n  region = "us-east-1" == var.x ? "a" : "b"\n}')).toEqual([]);
+    expect(fly('primary_region = "fra" == "x"\n')).toEqual([]);
+  });
+
+  it('still reads a literal followed by a comment or a closing brace', () => {
+    expect(regions(tf('provider "aws" {\n  region = "eu-west-1" # main\n}'))).toEqual([
+      'eu-west-1',
+    ]);
+    expect(regions(tf('provider "aws" { region = "eu-west-1" }'))).toEqual(['eu-west-1']);
+    expect(regions(fly('primary_region = "fra" # main\n'))).toEqual(['fra']);
   });
 });
