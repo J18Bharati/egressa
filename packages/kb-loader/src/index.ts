@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostTrie, normaliseHost } from './host-trie.js';
+import { normalisePypiName } from './pypi.js';
 import type {
   AdequacyDecision,
   AdequacyStatus,
@@ -12,6 +13,7 @@ import type {
 
 export * from './types.js';
 export { HostTrie, normaliseHost } from './host-trie.js';
+export { normalisePypiName } from './pypi.js';
 
 /** Entries older than this are reported as kb/stale-entry rather than as current. */
 export const STALE_AFTER_DAYS = 180;
@@ -23,6 +25,12 @@ export interface KnowledgeBase {
   adequacy: AdequacyStatus;
   lookupPackage(ecosystem: 'npm' | 'pypi', name: string): PackageMatch | null;
   lookupHost(host: string): ReturnType<HostTrie['lookup']>;
+  /**
+   * The vendor a free-text query names: a vendor id, an npm or PyPI package, or
+   * a host. Null when nothing matches, or when the npm and PyPI readings name
+   * different vendors.
+   */
+  findVendor(query: string): VendorEntry | null;
   /** In-force adequacy or DPF decision for a country, or null. */
   decisionFor(country: string): AdequacyDecision | null;
   staleEntries(asOf?: Date): VendorEntry[];
@@ -76,7 +84,7 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
 
   const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v) => v.toUpperCase()));
 
-  return {
+  const kb: KnowledgeBase = {
     version,
     vendors,
     byId,
@@ -98,7 +106,10 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
      * may pass its own `kbPath`.
      */
     lookupPackage(ecosystem, name) {
-      const key = `${ecosystem}:${name}`;
+      // PyPI names are compared in PEP 503 form, the form the knowledge base
+      // stores; `Twilio` is the same project as `twilio`. npm names are not
+      // normalised, because npm does not treat them as equivalent.
+      const key = `${ecosystem}:${ecosystem === 'pypi' ? normalisePypiName(name) : name}`;
       const exact = packageIndex.get(key);
       if (exact) return exact;
 
@@ -115,6 +126,23 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
 
     lookupHost(host) {
       return hosts.lookup(host);
+    },
+
+    /**
+     * A question like "is `boto3` a known vendor?" does not say which registry
+     * it means. Trying npm alone answered "no entry" for a vendor the knowledge
+     * base carries under PyPI. Two registries can use one name for two
+     * different projects, though, and naming either vendor then would be a
+     * guess, so that case answers nothing -- the same refusal `lookupPackage`
+     * makes for two overlapping scopes.
+     */
+    findVendor(query) {
+      const byVendorId = byId.get(query);
+      if (byVendorId) return byVendorId;
+      const npm = kb.lookupPackage('npm', query)?.vendor;
+      const pypi = kb.lookupPackage('pypi', query)?.vendor;
+      if (npm && pypi && npm.id !== pypi.id) return null;
+      return npm ?? pypi ?? hosts.lookup(query)?.vendor ?? null;
     },
 
     decisionFor(country) {
@@ -134,6 +162,7 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
       return vendors.filter((v) => Date.parse(v.lastVerified) < cutoff);
     },
   };
+  return kb;
 }
 
 /**

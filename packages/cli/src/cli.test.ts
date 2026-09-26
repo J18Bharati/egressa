@@ -1,14 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config.js';
 import { EXIT } from './exit-codes.js';
 import { formatHuman } from './format/human.js';
 import { formatMarkdown } from './format/markdown.js';
-import { applySuppressions } from './suppress.js';
 
 const NOW = new Date('2026-09-06T12:00:00.000Z');
 const result = () =>
@@ -18,71 +16,6 @@ const result = () =>
     kbPath: 'kb',
     now: NOW,
   });
-
-describe('suppressions', () => {
-  const config = {
-    suppressions: [
-      { vendor: 'stripe', reason: 'SCCs signed; ticket PRIV-1', expires: '2027-01-01' },
-    ],
-  };
-
-  it('marks a finding suppressed without removing it', () => {
-    const suppressed = applySuppressions(result(), config, NOW);
-    expect(suppressed.findings).toHaveLength(1);
-    expect(suppressed.findings[0]?.suppressed).toBe(true);
-    expect(suppressed.findings[0]?.suppression?.reason).toContain('PRIV-1');
-    expect(suppressed.summary.suppressed).toBe(1);
-  });
-
-  it('reactivates an expired suppression and adds an expiry note', () => {
-    const expiredConfig = {
-      suppressions: [{ vendor: 'stripe', reason: 'temporary', expires: '2026-01-01' }],
-    };
-    const out = applySuppressions(result(), expiredConfig, NOW);
-    const active = out.findings.find((f) => f.ruleId !== 'config/expired-suppression');
-    const note = out.findings.find((f) => f.ruleId === 'config/expired-suppression');
-
-    expect(active?.suppressed).toBe(false);
-    expect(active?.suppression?.expired).toBe(true);
-    expect(note).toBeDefined();
-    expect(note?.remediation.summary).toContain('expired on 2026-01-01');
-  });
-
-  it('leaves other vendors untouched', () => {
-    const out = applySuppressions(
-      result(),
-      { suppressions: [{ vendor: 'sentry', reason: 'x' }] },
-      NOW,
-    );
-    expect(out.findings[0]?.suppressed).toBe(false);
-  });
-});
-
-describe('config', () => {
-  it('treats a missing config as normal, not an error', () => {
-    expect(loadConfig(mkdtempSync(join(tmpdir(), 'adq-')))).toEqual({});
-  });
-
-  it('refuses a suppression with no reason', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
-    writeFileSync(
-      join(dir, '.egressa.yml'),
-      'version: 1\nsuppressions:\n  - vendor: stripe\n    reason: ""\n',
-    );
-    expect(() => loadConfig(dir)).toThrow(/must say why/);
-  });
-
-  it('reads suppressions and excludes', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
-    writeFileSync(
-      join(dir, '.egressa.yml'),
-      'version: 1\nexclude: ["**/legacy/**"]\nsuppressions:\n  - vendor: stripe\n    reason: accepted for now\n',
-    );
-    const config = loadConfig(dir);
-    expect(config.exclude).toEqual(['**/legacy/**']);
-    expect(config.suppressions?.[0]?.reason).toBe('accepted for now');
-  });
-});
 
 describe('human output', () => {
   it('states what a clean scan does not prove', () => {
@@ -322,6 +255,42 @@ describe('cli end to end', () => {
       expect(doc.summary.findingCount).toBe(0);
     });
 
+    it('reports malformed YAML as a usage error, naming the file', () => {
+      const { code, stderr } = runErr(['scan', repo('exclude: [legacy/**\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('.egressa.yml');
+    });
+
+    it('reports a suppressions entry that is not a list as a usage error', () => {
+      // It exited 1, the findings code, after the config moved into core.
+      const { code, stderr } = runErr(['scan', repo('suppressions: nope\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('suppressions must be a list');
+    });
+
+    it('lets --no-include-transitive override a config that turns it on', () => {
+      // @supabase/auth-js is detected transitively, so the setting is visible.
+      const dir = repo('includeTransitive: true\n');
+      writeFileSync(join(dir, 'package.json'), '{"name":"x","dependencies":{"foo":"1"}}');
+      writeFileSync(
+        join(dir, 'package-lock.json'),
+        JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            '': { name: 'x', dependencies: { foo: '1' } },
+            'node_modules/foo': { version: '1' },
+            'node_modules/@supabase/auth-js': { version: '2' },
+          },
+        }),
+      );
+      const vendors = (extra: string[]) =>
+        JSON.parse(
+          run(['scan', dir, '--kb', 'kb', '--format', 'json', ...extra]).stdout,
+        ).findings.map((f: { vendor: { id: string } | null }) => f.vendor?.id);
+      expect(vendors([])).toEqual(['supabase']);
+      expect(vendors(['--no-include-transitive'])).toEqual([]);
+    });
+
     it('reports a suppression with no reason as a usage error', () => {
       const { code, stderr } = runErr([
         'scan',
@@ -330,6 +299,84 @@ describe('cli end to end', () => {
       expect(code).toBe(EXIT.USAGE);
       expect(stderr).toContain('must say why');
     });
+  });
+
+  describe('a suppression in .egressa.yml and --fail-on', () => {
+    // The CI gate's meaning. Suppressions used to be applied by the CLI just
+    // before the exit code was chosen; they are now applied inside scan(), and
+    // these pin that the gate still reads them the same way.
+    const stripeRepo = (config: string | null) => {
+      const dir = mkdtempSync(join(tmpdir(), 'egressa-gate-'));
+      writeFileSync(join(dir, 'pay.ts'), "fetch('https://api.stripe.com/v1/charges');\n");
+      if (config !== null) writeFileSync(join(dir, '.egressa.yml'), config);
+      return dir;
+    };
+    const suppress = (expires: string) =>
+      `suppressions:\n  - vendor: stripe\n    reason: SCCs signed, PRIV-1\n    expires: "${expires}"\n`;
+
+    it('does not fail on a suppressed finding', () => {
+      const dir = stripeRepo(suppress('2999-01-01'));
+      expect(run(['scan', dir, '--kb', 'kb', '--fail-on', 'note', '--quiet']).code).toBe(
+        EXIT.CLEAN,
+      );
+    });
+
+    it('fails on the same finding with no suppression', () => {
+      const dir = stripeRepo(null);
+      expect(run(['scan', dir, '--kb', 'kb', '--fail-on', 'note', '--quiet']).code).toBe(
+        EXIT.FINDINGS,
+      );
+    });
+
+    it('fails again once the suppression expires, with the note after its finding', () => {
+      const dir = stripeRepo(suppress('2000-01-01'));
+      expect(run(['scan', dir, '--kb', 'kb', '--fail-on', 'note', '--quiet']).code).toBe(
+        EXIT.FINDINGS,
+      );
+      const doc = JSON.parse(run(['scan', dir, '--kb', 'kb', '--format', 'json']).stdout);
+      const ids = doc.findings.map((f: { ruleId: string }) => f.ruleId);
+      const at = ids.indexOf('config/expired-suppression');
+      expect(at).toBeGreaterThan(0);
+      expect(doc.findings[at - 1].vendor.id).toBe('stripe');
+      expect(doc.findings[at - 1].suppressed).toBe(false);
+    });
+
+    it('shows a suppressed finding in SARIF as dismissed, with its reason', () => {
+      const dir = stripeRepo(suppress('2999-01-01'));
+      const sarif = JSON.parse(run(['scan', dir, '--kb', 'kb', '--format', 'sarif']).stdout);
+      const dismissed = sarif.runs[0].results.filter(
+        (r: { suppressions?: unknown[] }) => (r.suppressions ?? []).length > 0,
+      );
+      expect(dismissed).toHaveLength(1);
+      expect(JSON.stringify(dismissed[0].suppressions)).toContain('PRIV-1');
+    });
+  });
+
+  it('writes --out=- to stdout, not to a file named -', () => {
+    // Run from an empty directory with absolute paths, so a regression leaves
+    // its stray file there rather than in the repository.
+    const cwd = mkdtempSync(join(tmpdir(), 'egressa-out-'));
+    const repo = process.cwd();
+    const stdout = execFileSync(
+      join(repo, 'node_modules/.bin/tsx'),
+      [
+        // The repository's tsconfig maps @egressa/* to source; without it tsx,
+        // started outside the repository, loads whatever was last built.
+        '--tsconfig',
+        join(repo, 'tsconfig.json'),
+        join(repo, 'packages/cli/src/cli.ts'),
+        'scan',
+        join(repo, 'fixtures/repos/express-stripe-sendgrid'),
+        '--kb',
+        join(repo, 'kb'),
+        '--format',
+        'json',
+        '--out=-',
+      ],
+      { cwd, encoding: 'utf8' },
+    );
+    expect(JSON.parse(stdout).schemaVersion).toBe(FINDINGS_SCHEMA_VERSION);
+    expect(existsSync(join(cwd, '-'))).toBe(false);
   });
 
   it('answers --version with the tool version', () => {
@@ -368,6 +415,13 @@ describe('cli end to end', () => {
   it('resolves a vendor by package name', () => {
     const { stdout } = run(['vendors', 'show', '@sentry/nextjs', '--kb', 'kb']);
     expect(stdout).toContain('Functional Software');
+  });
+
+  it('resolves a vendor by PyPI package name', () => {
+    // It used to answer "No knowledge base entry" for a vendor the knowledge
+    // base carries, because only npm was tried.
+    const { stdout } = run(['vendors', 'show', 'boto3', '--kb', 'kb']);
+    expect(JSON.parse(stdout).id).toBe('aws');
   });
 });
 

@@ -15,11 +15,14 @@ export interface DependencyRecord {
   manifestPath: string;
   loc: SourceLocation;
   snippet: string;
-  /** True when declared in a package.json dependencies block, not reached via the tree. */
+  /** True when the project declared it, not reached through another package. */
   direct: boolean;
   /** True when it appears only in devDependencies. */
   dev: boolean;
-  /** For transitive records, the path of direct dependents that led here. */
+  /**
+   * For transitive records, what led here: the path of dependents from an npm
+   * lockfile, or the immediate parents a compiled `requirements.txt` names.
+   */
   transitiveVia?: string[];
   /** Workspace package name, when the manifest belongs to a workspace member. */
   workspace?: string;

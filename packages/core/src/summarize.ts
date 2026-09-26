@@ -16,6 +16,12 @@ import type { Finding, ScanResult } from './types.js';
 export interface SummaryOptions {
   maxFindings?: number;
   maxEvidencePerFinding?: number;
+  /**
+   * Where the repository's own configuration was read from, or null when it
+   * has none. An agent scanning a repository it does not own needs to know
+   * when that repository excluded files or suppressed findings itself.
+   */
+  config?: string | null;
 }
 
 export interface SummarisedFinding {
@@ -39,6 +45,9 @@ export interface SummarisedFinding {
    * `reference` as though it were a `callsite`.
    */
   referenceOnly: boolean;
+  /** Accepted in the repository's configuration. Kept, never dropped. */
+  suppressed: boolean;
+  suppression?: { reason: string; expired: boolean; acceptedBy?: string; expires?: string };
   dpaUrl?: string;
   subprocessorsUrl?: string;
   lastVerified?: string;
@@ -49,7 +58,19 @@ export interface SummarisedFinding {
 export interface SummarisedScan {
   disclaimer: string;
   kb: ScanResult['kb'];
-  scan: { root: string; filesScanned: number; manifestsScanned: number; degraded: boolean };
+  scan: {
+    root: string;
+    filesScanned: number;
+    manifestsScanned: number;
+    degraded: boolean;
+    /** Every exclude applied, the configuration's first. */
+    exclude?: string[];
+    /**
+     * The configuration file applied, relative to the root, or null for none.
+     * Absent when the caller did not say, which is not the same as none.
+     */
+    config?: string | null;
+  };
   summary: ScanResult['summary'];
   findings: SummarisedFinding[];
   truncated: boolean;
@@ -71,6 +92,8 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
       filesScanned: result.scan.filesScanned,
       manifestsScanned: result.scan.manifestsScanned,
       degraded: result.scan.engine.degraded,
+      ...(result.scan.exclude ? { exclude: result.scan.exclude } : {}),
+      ...(options.config !== undefined ? { config: options.config } : {}),
     },
     summary: result.summary,
     findings: shown.map((finding) => toSummarised(finding, maxEvidence)),
@@ -106,6 +129,19 @@ function toSummarised(finding: Finding, maxEvidence: number): SummarisedFinding 
     })),
     evidenceTotal: finding.evidence.length,
     referenceOnly: isReferenceOnly(finding),
+    suppressed: finding.suppressed,
+    ...(finding.suppression
+      ? {
+          suppression: {
+            reason: finding.suppression.reason,
+            expired: finding.suppression.expired === true,
+            ...(finding.suppression.acceptedBy
+              ? { acceptedBy: finding.suppression.acceptedBy }
+              : {}),
+            ...(finding.suppression.expires ? { expires: finding.suppression.expires } : {}),
+          },
+        }
+      : {}),
     ...(finding.transfer?.dpaUrl ? { dpaUrl: finding.transfer.dpaUrl } : {}),
     ...(finding.transfer?.subprocessorsUrl
       ? { subprocessorsUrl: finding.transfer.subprocessorsUrl }

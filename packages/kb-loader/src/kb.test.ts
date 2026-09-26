@@ -95,6 +95,51 @@ describe('loadKnowledgeBase', () => {
   });
 });
 
+describe('PyPI names, and a query that names no registry', () => {
+  // Field test 3, B12. `egressa vendors show boto3` answered "no entry" for a
+  // vendor the knowledge base carries, and MCP check_package missed `Twilio`.
+  it('compares a PyPI name in PEP 503 form, whatever its spelling', () => {
+    expect(kb.lookupPackage('pypi', 'Twilio')?.vendor.id).toBe('twilio');
+    expect(kb.lookupPackage('pypi', 'Boto3')?.vendor.id).toBe('aws');
+  });
+
+  it('does not normalise an npm name, which npm does not treat as equivalent', () => {
+    expect(kb.lookupPackage('npm', 'stripe')?.vendor.id).toBe('stripe');
+    expect(kb.lookupPackage('npm', 'Stripe')).toBeNull();
+  });
+
+  it('finds a vendor by id, npm package, PyPI package or host', () => {
+    expect(kb.findVendor('aws')?.id).toBe('aws');
+    expect(kb.findVendor('@sentry/nextjs')?.id).toBe('sentry');
+    expect(kb.findVendor('boto3')?.id).toBe('aws');
+    expect(kb.findVendor('api.stripe.com')?.id).toBe('stripe');
+    expect(kb.findVendor('left-pad')).toBeNull();
+  });
+
+  it('answers nothing when npm and PyPI name different vendors', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-'));
+    cpSync('kb', dir, { recursive: true });
+    const clash = JSON.parse(readFileSync(join(dir, 'vendors/stripe.json'), 'utf8'));
+    clash.aliases.packages.npm = [
+      ...(clash.aliases.packages.npm ?? []),
+      { name: 'boto3', kind: 'official-sdk', detectTransitive: false },
+    ];
+    writeFileSync(join(dir, 'vendors/stripe.json'), JSON.stringify(clash));
+    const ambiguous = loadKnowledgeBase({ kbPath: dir });
+
+    expect(ambiguous.findVendor('boto3')).toBeNull();
+    // Each registry on its own still answers.
+    expect(ambiguous.lookupPackage('npm', 'boto3')?.vendor.id).toBe('stripe');
+    expect(ambiguous.lookupPackage('pypi', 'boto3')?.vendor.id).toBe('aws');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps working when taken off the knowledge base object', () => {
+    const { findVendor } = kb;
+    expect(findVendor('boto3')?.id).toBe('aws');
+  });
+});
+
 describe('adequacy status', () => {
   it('reports the current status of a decision', () => {
     expect(kb.decisionFor('JP')?.status).toBe('in-force');

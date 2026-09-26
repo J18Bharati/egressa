@@ -200,7 +200,11 @@ it normally runs in this mode. `scan-transfers.sh` prefers a real build for that
 Call sites are analysed in JavaScript and TypeScript only. Python is read at the manifest level:
 declared dependencies in `requirements*.txt` and `pyproject.toml`, matched against `pypi` aliases.
 Three consequences follow. A Python service that calls a vendor by URL, with no SDK declared, is not
-detected. No Python lockfile is read, so `--include-transitive` adds nothing for Python. And a
+detected. `poetry.lock` and `uv.lock` are not read. A `requirements.txt` compiled by pip-compile
+or `uv pip compile` is read as a lockfile, split by its `# via` annotations. But output without
+annotations looks exactly like a hand-written file, and every package in it is read as declared:
+`poetry export`, `pipenv requirements`, and pip-compile or uv run with `--no-header --no-annotate`.
+A pip-compile header with no annotations is recognised, and nothing in that file is attributed. And a
 vendor is matched only if its knowledge base entry carries a `pypi` alias — today Twilio and AWS
 (`boto3`, `botocore`). Any other vendor's Python SDK lands in `unmatched`, which is the signal to
 add one.
@@ -260,3 +264,13 @@ set, unnarrowed. That is the honest answer, and
 Not collected at all: files under dot-directories such as `.github/` and `.terraform/`, because the
 walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an
 ordinary constructor argument the call-site analyzer does not yet attribute to a provider.
+
+Two shapes hide a region that is written as a literal, and both are pinned by cases in
+`packages/core/src/infrastructure/key-literal.test.ts`:
+
+- **An unterminated heredoc or string in a `.tf` file** hides everything after it. The reader
+  carries heredocs, interpolations and strings across lines so that none of them can produce a
+  region, and a file that never closes one is read as still inside it.
+- **In `fly.toml`, a line inside a multi-line array that begins with `[`** is taken for a table
+  header, and `primary_region` is read only above the first table. So a top-level `primary_region`
+  written after such an array is not read. Fly's generated configuration does not have this layout.

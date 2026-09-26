@@ -181,3 +181,33 @@ describe('exclude globs that cannot be honoured', () => {
     );
   });
 });
+
+describe('deployment config reaches the region reader in the right language', () => {
+  const regionsIn = (files: Record<string, string>) => {
+    const root = mkdtempSync(join(tmpdir(), 'egressa-iac-'));
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(root, name), text);
+    const result = scan({ root, toolVersion: '0', kbPath: 'kb' });
+    return result.findings.flatMap((f) => f.evidence.map((e) => e.region)).filter(Boolean);
+  };
+
+  it('reads a .tf file as HCL, so a heredoc cannot declare a provider', () => {
+    const tf = [
+      'resource "local_file" "p" {',
+      '  content = <<EOF',
+      'provider "aws" {',
+      '  region = "us-west-2"',
+      '}',
+      'EOF',
+      '}',
+      'provider "aws" {',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regionsIn({ 'main.tf': tf })).toEqual(['eu-west-1']);
+  });
+
+  it('reads fly.toml as TOML, top-level primary_region only', () => {
+    const fly = "app = 'demo'\nprimary_region = 'fra'\n[env]\n  primary_region = \"iad\"\n";
+    expect(regionsIn({ 'fly.toml': fly })).toEqual(['fra']);
+  });
+});

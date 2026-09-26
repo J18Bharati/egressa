@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { regionsFromKeyLiterals } from './key-literal.js';
 
 const tf = (text: string, provider = 'aws') =>
-  regionsFromKeyLiterals(text, 'main.tf', ['region'], provider, 'provider');
-const fly = (text: string) => regionsFromKeyLiterals(text, 'fly.toml', ['primary_region'], 'fly');
+  regionsFromKeyLiterals(text, 'main.tf', ['region'], provider, {
+    language: 'hcl',
+    insideBlockNamed: 'provider',
+  });
+const fly = (text: string) =>
+  regionsFromKeyLiterals(text, 'fly.toml', ['primary_region'], 'fly', { language: 'toml' });
+const regions = (records: { region: string }[]) => records.map((r) => r.region);
 
 /** 1-based column of the first `needle` on 1-based `line`. */
 const columnOf = (text: string, line: number, needle: string) =>
@@ -190,5 +195,238 @@ describe('what the rewrite must keep doing', () => {
     ].join('\n');
     expect(tf(text, 'aws').map((r) => r.region)).toEqual(['eu-west-1']);
     expect(tf(text, 'gcp').map((r) => r.region)).toEqual(['europe-west1']);
+  });
+});
+
+describe('what is not code on this line may have been opened on an earlier one', () => {
+  // Field test 3, A9. Each of these reported a region the file does not declare,
+  // because only a block comment used to carry from one line to the next.
+  it('does not read a heredoc body inside the provider', () => {
+    const text = [
+      'provider "aws" {',
+      '  profile = <<EOF',
+      'region = "us-east-1"',
+      'EOF',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('does not read an indented heredoc body', () => {
+    const text = [
+      'provider "aws" {',
+      '  profile = <<-EOT',
+      '    region = "ap-south-1"',
+      '  EOT',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('does not read a provider block that a heredoc writes', () => {
+    // Terraform that writes Terraform. This one was reported at high
+    // confidence and narrowed the jurisdiction to the United States.
+    const text = [
+      'resource "local_file" "p" {',
+      '  content = <<EOF',
+      'provider "aws" {',
+      '  region = "us-west-2"',
+      '}',
+      'EOF',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('does not let a brace in a heredoc move the depth', () => {
+    const text = [
+      'provider "aws" {',
+      '  assume_role {',
+      '    policy = <<EOF',
+      '}',
+      'EOF',
+      '    region = "us-east-1"',
+      '  }',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('does not close a string on a quote inside a template directive', () => {
+    // A7's exact symptom, brought back by `%{`.
+    const text = [
+      'provider "aws" {',
+      '  default_tags {',
+      '    tags = {',
+      '      n = "%{ for k in ["}"] }${k}%{ endfor }"',
+      '      m = "%{ for k in ["}"] }${k}%{ endfor }"',
+      '      region = "emea"',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('carries an interpolation across lines', () => {
+    const text = [
+      'provider "aws" {',
+      '  default_tags {',
+      '    tags = {',
+      '      n = "${',
+      '        lookup(var.m, "}")',
+      '      }"',
+      '      region = "emea"',
+      '    }',
+      '  }',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('opens nothing on the $${ and %%{ escapes', () => {
+    // Unbalanced on purpose: read as `${` / `%{`, each would leave a frame open
+    // and hide the real region below.
+    const text = [
+      'provider "aws" {',
+      '  profile = "$${"',
+      '  tag = "%%{"',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('refuses a value holding a template directive', () => {
+    expect(tf('provider "aws" {\n  region = "%{if true}eu-west-1%{endif}"\n}')).toEqual([]);
+  });
+
+  it('reads a CRLF file with a heredoc', () => {
+    const text =
+      'provider "aws" {\r\n  profile = <<EOF\r\nregion = "us-east-1"\r\nEOF\r\n  region = "eu-west-1"\r\n}\r\n';
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+});
+
+describe('fly.toml: primary_region is a top-level key', () => {
+  it('does not read one inside a multi-line basic string', () => {
+    // No table before it: the string alone must hide the key.
+    const text = 'app = """\nprimary_region = "syd"\n"""\nprimary_region = "fra"\n';
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
+
+  it('does not read one inside a multi-line literal string at the top level', () => {
+    const text = "release_command = '''\nprimary_region = \"sin\"\n'''\nprimary_region = \"fra\"\n";
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
+
+  it('does not read one under a table', () => {
+    expect(regions(fly('primary_region = "fra"\n[env]\n  primary_region = "iad"\n'))).toEqual([
+      'fra',
+    ]);
+  });
+
+  it('does not read a dotted key or an inline table', () => {
+    expect(fly('env.primary_region = "iad"\n')).toEqual([]);
+    expect(fly('env = { primary_region = "iad" }\n')).toEqual([]);
+  });
+
+  it('does not read a key after an odd quote inside a multi-line string', () => {
+    // Quote parity alone hides the key in simpler cases; this one needs the
+    // multi-line string recognised.
+    const text = 'cmd = """\nsay "hi\nprimary_region = "syd"\n"""\nprimary_region = "fra"\n';
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
+
+  it('reads a literal string', () => {
+    expect(regions(fly("primary_region = 'fra'\n"))).toEqual(['fra']);
+  });
+
+  it('reads a CRLF file with a multi-line string', () => {
+    const text = 'app = """\r\nprimary_region = "syd"\r\n"""\r\nprimary_region = "fra"\r\n';
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
+
+  it('closes a multi-line string on a run of more than three quotes', () => {
+    expect(regions(fly('note = """say ""hi"""""\nprimary_region = "fra"\n'))).toEqual(['fra']);
+  });
+});
+
+describe('limitations: each hides a region, and lifting one is deliberate', () => {
+  // docs/LIMITATIONS.md. A case here starting to return a region is a test
+  // failure to act on, not a win.
+  it('stops at a nested array line opening with [ before primary_region', () => {
+    expect(fly('matrix = [\n  [1, 2],\n]\nprimary_region = "fra"\n')).toEqual([]);
+  });
+
+  it('hides the rest of the file after an unterminated heredoc', () => {
+    expect(tf('provider "aws" {\n  profile = <<EOF\n  region = "eu-west-1"\n}\n')).toEqual([]);
+  });
+});
+
+describe('what the branch review found still inventing a region', () => {
+  // Each reported a region at high confidence that no provider in the file
+  // declares, after the rewrite that was meant to stop exactly this.
+  it('honours a block comment inside an interpolation', () => {
+    const text = [
+      'locals {',
+      '  note = "${ /* }"',
+      'provider "aws" {',
+      '  region = "us-east-1"',
+      '}',
+      '*/ "x" }"',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('honours a line comment inside a multi-line interpolation', () => {
+    const text = [
+      'locals {',
+      '  note = "${ foo # " }',
+      '  }"',
+      '}',
+      'provider "aws" {',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('does not end a heredoc on its terminator inside an interpolation', () => {
+    const text = [
+      'resource "local_file" "p" {',
+      '  content = <<EOT',
+      '${join("", [for x in [1] :',
+      'EOT',
+      '])}',
+      'provider "aws" {',
+      '  region = "us-west-2"',
+      '}',
+      'EOT',
+      '}',
+    ].join('\n');
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('reads a provider block only at the top level of the file', () => {
+    const text = 'module "m" {\n  provider "aws" {\n    region = "us-east-1"\n  }\n}\n';
+    expect(tf(text)).toEqual([]);
+  });
+
+  it('refuses a literal that is only the start of an expression', () => {
+    expect(tf('provider "aws" {\n  region = "us-east-1" == var.x ? "a" : "b"\n}')).toEqual([]);
+    expect(fly('primary_region = "fra" == "x"\n')).toEqual([]);
+  });
+
+  it('still reads a literal followed by a comment or a closing brace', () => {
+    expect(regions(tf('provider "aws" {\n  region = "eu-west-1" # main\n}'))).toEqual([
+      'eu-west-1',
+    ]);
+    expect(regions(tf('provider "aws" { region = "eu-west-1" }'))).toEqual(['eu-west-1']);
+    expect(regions(fly('primary_region = "fra" # main\n'))).toEqual(['fra']);
   });
 });

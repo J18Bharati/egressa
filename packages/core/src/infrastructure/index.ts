@@ -45,10 +45,17 @@ export function analyzeInfrastructure(options: AnalyzeInfrastructureOptions): In
       else if (name === 'serverless.yml' || name === 'serverless.yaml') {
         regions.push(...parseServerlessYaml(text, path));
       } else if (name === 'fly.toml') {
-        regions.push(...regionsFromKeyLiterals(text, path, ['primary_region'], 'fly'));
+        regions.push(
+          ...regionsFromKeyLiterals(text, path, ['primary_region'], 'fly', { language: 'toml' }),
+        );
       } else if (name.endsWith('.tf')) {
         for (const provider of ['aws', 'gcp', 'azure']) {
-          regions.push(...regionsFromKeyLiterals(text, path, ['region'], provider, 'provider'));
+          regions.push(
+            ...regionsFromKeyLiterals(text, path, ['region'], provider, {
+              language: 'hcl',
+              insideBlockNamed: 'provider',
+            }),
+          );
         }
       }
     } catch (error) {

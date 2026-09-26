@@ -20,7 +20,9 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 - **Python dependency manifests are read.** `requirements*.txt` and `pyproject.toml` (PEP 621
   dependencies and extras, PEP 735 groups, Poetry tables), with PEP 503 name normalisation and
   dev-only detection. Both field tests missed Twilio in five production files because no Python
-  manifest was read. Declared dependencies only: no Python lockfile, and no Python call sites.
+  manifest was read. Declared dependencies only, and no Python call sites. A `requirements.txt`
+  compiled by pip-compile or `uv pip compile` is read as the lockfile it is: only packages its
+  `# via` annotations name as coming from a source file are declared, and the rest are transitive.
   Installed packages are not read, for the same reason as `node_modules`: `site-packages`,
   `dist-packages`, `__pypackages__`, any dot directory, and any directory holding a `pyvenv.cfg`,
   whatever it is named. A `pyproject.toml` is read with a small TOML tokeniser, so a multi-line
@@ -75,6 +77,37 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   checked against a primary source. Datadog's default has changed across major versions
   (`mask-user-input`, then `mask`, then `mask-user-input`). Every documented version masks inputs,
   and the row records the history rather than a single value.
+
+- **A heredoc, a template directive or a TOML multi-line string could produce a region the file
+  does not declare.** A heredoc that writes a `provider "aws"` block was reported as `us-west-2` at
+  high confidence and narrowed the jurisdiction. The region reader now carries heredocs,
+  interpolations, strings and multi-line strings across lines, and recognises `%{…}`. In `fly.toml`,
+  `primary_region` is read only as a top-level key, so `[env]` and multi-line strings no longer
+  contribute one. A single-quoted `primary_region` is now read. A comment inside an interpolation is
+  honoured, a `provider` block counts only at the top level of the file, and a literal must be the
+  whole value, not the first operand of an expression.
+- **A compiled `requirements.txt` made every transitive package a direct, high-confidence vendor.**
+  See the Python entry under Added: pip-compile and uv output is now read as a lockfile. A source
+  in a subdirectory or a dependency group counts as a source, and a `# via` parent that is not in
+  the file is taken as the project itself, so no declared SDK is dropped.
+- **The MCP server ignored `.egressa.yml`.** Through MCP a team's suppressed finding came back
+  unsuppressed and its excluded tree was scanned. Loading and applying the config moved into core,
+  so both surfaces apply it. The MCP summary now carries each finding's suppression and names the
+  file in `scan.config`. A config error of any kind, including malformed YAML, names the file and is a
+  usage error (CLI exit 2, MCP tool error).
+- **An expired-suppression note was appended after every other finding, and was not counted.** It
+  now follows the finding it reactivates, so a truncated MCP summary cannot keep one without the
+  other, and it counts in `byRule` and `bySeverity` like any other finding.
+- **`egressa vendors show` and MCP `lookup_vendor` tried npm only**, so `boto3` had "no knowledge base
+  entry". They now try PyPI too, and answer nothing when npm and PyPI name different vendors. MCP
+  `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.
+- **`--out=-` wrote a file named `-`.** It now means stdout.
+- **`.egressa.yml` is validated as a whole.** Every suppression field must be text, a suppression
+  must name a vendor or a rule, and `expires` must be a date. An unparseable one used to compare as
+  never expiring. A `--config` path that does not exist is refused, and every config failure is a
+  usage error, never exit 1. `--no-include-transitive` overrides a config that turns it on.
+- **A `.egressa.yml` symlinked outside the repository is refused, and a YAML error no longer quotes
+  the file.** Through MCP, the quoted lines of whatever file the link pointed at reached the agent.
 
 ### Knowledge base — `2026.09.21` → `2026.09.26`
 
