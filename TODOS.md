@@ -387,6 +387,38 @@ by the engineering review of the 2026-09-25 fixes (R8).
 **Priority:** P3
 **Depends on:** None
 
+### Let an MCP caller see and control the scanned repository's config
+
+**What:** Three follow-ups from the review of `field-test-3-fixes`, which made MCP apply a
+repository's `.egressa.yml`:
+- A `scan_repository` argument to ignore the repository's own config, for an agent reviewing a
+  repository it does not trust.
+- `full: true` returns the findings document, which does not name the config file. Only the
+  summary carries `scan.config`. Recording it in `scan()` means a findings-schema field, which is
+  free only until the first release.
+- A suppression's `reason` is free text from the scanned repository, and it now reaches the
+  agent's context. Consider marking it as repository-supplied in the tool description.
+
+**Why:** After G3 a repository can exclude its own files and accept its own findings in what an
+agent receives. The summary says so, and the full document and the caller's controls do not yet.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Drop `yaml` from the CLI's dependencies
+
+**What:** `packages/cli/package.json` still declares `yaml`, and `tsup.config.ts` lists it in
+`noExternal`, although the CLI no longer imports it: config loading moved into core. Remove both,
+and confirm with `pnpm build` (smoke-dist) and `pnpm smoke:pack` that the bundle still inlines
+core's copy.
+
+**Why:** An unused dependency is install weight and a supply-chain surface for nothing.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ### Escape control characters from the scanned repository in output
 
 **What:** Escape C0/C1 control characters in every string the human and markdown formatters take

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { excludeProblem } from '../discovery/walk.js';
 import type { Finding } from '../types.js';
@@ -56,11 +56,25 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     return {};
   }
 
+  // The repository's own config must be the repository's own file. A link
+  // pointing elsewhere would have this read, and quote in an error, a file
+  // the caller never asked about -- and MCP returns that text to an agent.
+  // An explicit --config path is the caller's choice and is read as given.
+  if (explicitPath === undefined) {
+    const inside = relative(realpathSync(root), realpathSync(path));
+    if (inside.startsWith('..') || isAbsolute(inside)) {
+      throw new ConfigError(`${path}: resolves outside the repository; not read`);
+    }
+  }
+
   let parsed: EgressaConfig | null;
   try {
     parsed = parse(readFileSync(path, 'utf8')) as EgressaConfig | null;
   } catch (error) {
-    throw new ConfigError(`${path}: ${(error as Error).message}`);
+    // The parser's message quotes the offending lines after its first line.
+    // Only the first line is kept: position and cause, never file content.
+    const summary = ((error as Error).message.split('\n')[0] ?? '').replace(/:\s*$/, '');
+    throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
   if (!parsed || typeof parsed !== 'object') return {};
 

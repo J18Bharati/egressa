@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -209,5 +209,26 @@ describe('what the branch review found loadConfig letting through', () => {
   it('refuses an explicit config path that does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'adq-'));
     expect(() => loadConfig(dir, join(dir, 'missing.yml'))).toThrow(ConfigError);
+  });
+});
+
+describe('a config reached through a symlink', () => {
+  // The review found a YAML error quoting lines of whatever file the link
+  // pointed at, which MCP returned to the calling agent.
+  it('refuses a .egressa.yml that resolves outside the scan root', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'adq-secret-'));
+    writeFileSync(join(outside, 'secret.txt'), 'API_KEY: [unterminated sk_live_123\n');
+    const root = mkdtempSync(join(tmpdir(), 'adq-'));
+    symlinkSync(join(outside, 'secret.txt'), join(root, '.egressa.yml'));
+    expect(() => loadConfig(root)).toThrow(ConfigError);
+    expect(() => loadConfig(root)).toThrow(/outside the repository/);
+    expect(() => loadConfig(root)).not.toThrow(/sk_live/);
+  });
+
+  it('does not quote the file in a YAML error', () => {
+    const root = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(root, '.egressa.yml'), 'exclude: [legacy/** sk_live_123\n');
+    expect(() => loadConfig(root)).toThrow(ConfigError);
+    expect(() => loadConfig(root)).not.toThrow(/sk_live/);
   });
 });

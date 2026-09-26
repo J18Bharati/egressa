@@ -83,9 +83,13 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   high confidence and narrowed the jurisdiction. The region reader now carries heredocs,
   interpolations, strings and multi-line strings across lines, and recognises `%{…}`. In `fly.toml`,
   `primary_region` is read only as a top-level key, so `[env]` and multi-line strings no longer
-  contribute one. A single-quoted `primary_region` is now read.
+  contribute one. A single-quoted `primary_region` is now read. A comment inside an interpolation is
+  honoured, a `provider` block counts only at the top level of the file, and a literal must be the
+  whole value, not the first operand of an expression.
 - **A compiled `requirements.txt` made every transitive package a direct, high-confidence vendor.**
-  See the Python entry under Added: pip-compile and uv output is now read as a lockfile.
+  See the Python entry under Added: pip-compile and uv output is now read as a lockfile. A source
+  in a subdirectory or a dependency group counts as a source, and a `# via` parent that is not in
+  the file is taken as the project itself, so no declared SDK is dropped.
 - **The MCP server ignored `.egressa.yml`.** Through MCP a team's suppressed finding came back
   unsuppressed and its excluded tree was scanned. Loading and applying the config moved into core,
   so both surfaces apply it. The MCP summary now carries each finding's suppression and names the
@@ -98,6 +102,12 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   entry". They now try PyPI too, and answer nothing when npm and PyPI name different vendors. MCP
   `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.
 - **`--out=-` wrote a file named `-`.** It now means stdout.
+- **`.egressa.yml` is validated as a whole.** Every suppression field must be text, a suppression
+  must name a vendor or a rule, and `expires` must be a date. An unparseable one used to compare as
+  never expiring. A `--config` path that does not exist is refused, and every config failure is a
+  usage error, never exit 1. `--no-include-transitive` overrides a config that turns it on.
+- **A `.egressa.yml` symlinked outside the repository is refused, and a YAML error no longer quotes
+  the file.** Through MCP, the quoted lines of whatever file the link pointed at reached the agent.
 
 ### Knowledge base — `2026.09.21` → `2026.09.26`
 
