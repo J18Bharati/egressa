@@ -1,5 +1,15 @@
 import { isAbsolute, resolve } from 'node:path';
-import { DISCLAIMER, RULES, RULE_IDS, excludeProblem, scan, summarise } from '@egressa/core';
+import {
+  ConfigError,
+  DISCLAIMER,
+  type EgressaConfig,
+  RULES,
+  RULE_IDS,
+  excludeProblem,
+  loadConfig,
+  scan,
+  summarise,
+} from '@egressa/core';
 import type { RuleId } from '@egressa/core';
 import { loadKnowledgeBase } from '@egressa/kb';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -39,7 +49,10 @@ server.tool(
   'scan_repository',
   scoped(
     'Scan a local repository for third-party data egress and cross-border transfer exposure. ' +
-      'Returns a summary plus the strongest findings; set full=true for the complete document.',
+      'Returns a summary plus the strongest findings; set full=true for the complete document. ' +
+      "The repository's own .egressa.yml is applied, as the CLI applies it: it can exclude files " +
+      'and suppress findings. scan.config names the file when there is one, and a suppressed ' +
+      'finding is kept and marked suppressed, never removed.',
   ),
   {
     path: z.string().describe('Path to the repository to scan'),
@@ -62,9 +75,18 @@ server.tool(
     if (excludeError) {
       return { content: [{ type: 'text' as const, text: excludeError }], isError: true };
     }
+    const root = safeRoot(args.path);
+    let config: EgressaConfig;
+    try {
+      config = loadConfig(root);
+    } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
+      return { content: [{ type: 'text' as const, text: error.message }], isError: true };
+    }
     const result = scan({
-      root: safeRoot(args.path),
+      root,
       toolVersion: TOOL_VERSION,
+      config,
       includeCallsites: true,
       ...(args.includeTransitive !== undefined
         ? { includeTransitive: args.includeTransitive }
@@ -76,7 +98,12 @@ server.tool(
     });
 
     if (args.full === true) return json(result);
-    return json(summarise(result, args.maxFindings ? { maxFindings: args.maxFindings } : {}));
+    return json(
+      summarise(result, {
+        config: config.source ?? null,
+        ...(args.maxFindings ? { maxFindings: args.maxFindings } : {}),
+      }),
+    );
   },
 );
 

@@ -4,6 +4,7 @@ import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
+import { type EgressaConfig, applySuppressions } from './config/index.js';
 import { excludeProblem, walk } from './discovery/walk.js';
 import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -26,6 +27,13 @@ export interface ScanOptions {
   kbPath?: string;
   kb?: KnowledgeBase;
   exclude?: string[];
+  /**
+   * The repository's `.egressa.yml`, already loaded by `loadConfig`. Its
+   * excludes are added to `exclude`, its `includeTransitive` applies unless
+   * the option is given, and its suppressions mark findings. Loading stays with
+   * the caller so each surface reports a bad file in its own way.
+   */
+  config?: EgressaConfig;
   includeTransitive?: boolean;
   includeDev?: boolean;
   /** Off until the call-site analyzer lands; manifests alone are still useful. */
@@ -58,7 +66,7 @@ export function scan(options: ScanOptions): ScanResult {
   const {
     root,
     toolVersion,
-    includeTransitive = false,
+    config = {},
     includeDev = true,
     includeManifests = true,
     includeCallsites = false,
@@ -67,6 +75,10 @@ export function scan(options: ScanOptions): ScanResult {
     onlyVendor,
     now = new Date(),
   } = options;
+
+  // Config first, then the caller's, matching what `scan.exclude` records.
+  const exclude = [...(config.exclude ?? []), ...(options.exclude ?? [])];
+  const includeTransitive = options.includeTransitive ?? config.includeTransitive === true;
 
   const startedAt = now;
   const started = Date.now();
@@ -88,7 +100,7 @@ export function scan(options: ScanOptions): ScanResult {
   // A root that is not a readable directory must not read as a clean scan. A
   // typo'd path would otherwise produce zero findings, an empty error list and
   // the same output as a repository with nothing to report.
-  const excludeError = excludeProblem(options.exclude ?? []);
+  const excludeError = excludeProblem(exclude);
   if (excludeError) throw new TypeError(excludeError);
 
   const rootUsable = isReadableDirectory(root);
@@ -103,7 +115,7 @@ export function scan(options: ScanOptions): ScanResult {
   const { manifests, sources, infrastructure } = rootUsable
     ? walk({
         root,
-        ...(options.exclude ? { exclude: options.exclude } : {}),
+        ...(exclude.length > 0 ? { exclude } : {}),
       })
     : { manifests: [], sources: [], infrastructure: [] };
 
@@ -254,7 +266,7 @@ export function scan(options: ScanOptions): ScanResult {
   });
 
   const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
-  const findings = mergeSignals(filtered, { kb, staleVendorIds });
+  const findings = applySuppressions(mergeSignals(filtered, { kb, staleVendorIds }), config, now);
 
   return {
     $schema: `https://egressa.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,
@@ -278,11 +290,10 @@ export function scan(options: ScanOptions): ScanResult {
       ...(options.assumeAdequacyLapsed?.length
         ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed }
         : {}),
-      // The merged list actually handed to walk(), so the document records
-      // what was applied rather than re-deriving it from options.exclude,
-      // which could in principle diverge if a future caller passed it
-      // without going through walk().
-      ...(options.exclude?.length ? { exclude: options.exclude } : {}),
+      // The merged list actually handed to walk(), config first, so the
+      // document records what was applied rather than what either source
+      // asked for on its own.
+      ...(exclude.length > 0 ? { exclude } : {}),
     },
     summary: summarise(findings),
     findings,

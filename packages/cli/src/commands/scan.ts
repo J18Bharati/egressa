@@ -1,14 +1,20 @@
 import { statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { type ScanResult, excludeProblem, scan, toSarif } from '@egressa/core';
+import {
+  ConfigError,
+  type EgressaConfig,
+  type ScanResult,
+  excludeProblem,
+  loadConfig,
+  scan,
+  toSarif,
+} from '@egressa/core';
 import type { Confidence, Severity } from '@egressa/core';
 import { defineCommand } from 'citty';
-import { loadConfig } from '../config.js';
 import { writeOut } from '../emit.js';
 import { EXIT } from '../exit-codes.js';
 import { formatHuman } from '../format/human.js';
 import { formatMarkdown } from '../format/markdown.js';
-import { applySuppressions } from '../suppress.js';
 import { TOOL_VERSION } from '../version.js';
 
 // citty (via its bundled mri-style parser) only turns a repeated flag into an
@@ -104,22 +110,24 @@ export const scanCommand = defineCommand({
 
     // A config that cannot be honoured is a usage error, like a bad flag -- not
     // an internal failure (exit 3), which is where its throw used to land.
-    let config: ReturnType<typeof loadConfig>;
+    let config: EgressaConfig;
     try {
       config = loadConfig(root, args.config ? String(args.config) : undefined);
     } catch (error) {
-      process.stderr.write(`egressa: ${(error as Error).message}\n`);
+      if (!(error instanceof ConfigError)) throw error;
+      process.stderr.write(`egressa: ${error.message}\n`);
       process.exit(EXIT.USAGE);
     }
     // citty collects a repeated string flag into an array itself (a second
     // occurrence of --exclude turns the value from a string into string[]);
     // it never appears as an array after exactly one occurrence, so this has
-    // to accept string, string[] or undefined. Config and flag are unioned,
-    // not one replacing the other -- .egressa.yml is typically the team's
-    // committed baseline (deprecated trees, generated output) and the flag is
-    // a one-off narrowing for a single invocation; a user who adds --exclude
-    // almost never means "and also stop honouring the team's file".
-    const exclude = [...(config.exclude ?? []), ...toStringArray(args.exclude)];
+    // to accept string, string[] or undefined. scan() adds these to the
+    // config's own excludes rather than replacing them -- .egressa.yml is
+    // typically the team's committed baseline (deprecated trees, generated
+    // output) and the flag is a one-off narrowing for a single invocation; a
+    // user who adds --exclude almost never means "and also stop honouring the
+    // team's file". The config's globs were checked when it loaded.
+    const exclude = toStringArray(args.exclude);
     const excludeError = excludeProblem(exclude);
     if (excludeError) {
       process.stderr.write(`egressa: ${excludeError}\n`);
@@ -138,8 +146,10 @@ export const scanCommand = defineCommand({
         root,
         toolVersion: TOOL_VERSION,
         ...(args.kb ? { kbPath: String(args.kb) } : {}),
+        config,
         ...(exclude.length > 0 ? { exclude } : {}),
-        includeTransitive: Boolean(args['include-transitive']) || config.includeTransitive === true,
+        // Only when typed: `false` would override a config that turns it on.
+        ...(args['include-transitive'] ? { includeTransitive: true } : {}),
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,
         includeInfrastructure: args.infrastructure !== false,
@@ -157,15 +167,14 @@ export const scanCommand = defineCommand({
       process.exit(EXIT.KB);
     }
 
-    const suppressed = applySuppressions(result, config);
-    const output = render(suppressed, String(args.format), args.color !== false);
+    const output = render(result, String(args.format), args.color !== false);
 
     if (args.out) writeFileSync(String(args.out), `${output}\n`);
     // Awaited, not fire-and-forget: process.exit() below does not flush a
     // pipe, and a truncated findings document is worse than a failed one.
     else if (!args.quiet) await writeOut(`${output}\n`);
 
-    process.exit(exitCodeFor(suppressed, failOn));
+    process.exit(exitCodeFor(result, failOn));
   },
 });
 

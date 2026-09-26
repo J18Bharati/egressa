@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -215,5 +216,89 @@ describe('vendor lookups', () => {
     })) as { isError?: boolean; content: { text: string }[] };
     expect(response.isError).toBe(true);
     expect(response.content[0]?.text).toContain('cannot be negated');
+  });
+});
+
+describe('the repository’s own .egressa.yml', () => {
+  // Field test 3, G3. Only the CLI used to read it, so through MCP a team's
+  // suppressed finding came back unsuppressed and its excluded tree came back.
+  const repo = (config: string | null) => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-mcp-config-'));
+    writeFileSync(join(dir, 'pay.ts'), "fetch('https://api.stripe.com/v1/charges');\n");
+    for (const tree of ['legacy', 'tools']) {
+      mkdirSync(join(dir, tree));
+      writeFileSync(join(dir, tree, 'a.ts'), "fetch('https://api.openai.com/v1/x');\n");
+    }
+    if (config !== null) writeFileSync(join(dir, '.egressa.yml'), config);
+    return dir;
+  };
+  const CONFIG =
+    'exclude: ["legacy/**"]\nsuppressions:\n  - vendor: stripe\n    reason: SCCs signed, PRIV-1\n';
+  const errorFor = async (args: Record<string, unknown>) =>
+    (await client.callTool({ name: 'scan_repository', arguments: args })) as {
+      isError?: boolean;
+      content: { text: string }[];
+    };
+
+  it('applies its suppressions and excludes, and names the file', async () => {
+    const result = await call('scan_repository', { path: repo(CONFIG) });
+    const stripe = result.findings.find((f: { vendorId: string }) => f.vendorId === 'stripe');
+    expect(stripe.suppressed).toBe(true);
+    expect(stripe.suppression.reason).toContain('PRIV-1');
+    expect(result.summary.suppressed).toBe(1);
+    expect(result.scan.exclude).toEqual(['legacy/**']);
+    expect(result.scan.config).toBe('.egressa.yml');
+    // tools/ still holds an OpenAI call, so OpenAI stays; legacy/ is gone.
+    const openai = result.findings.find((f: { vendorId: string }) => f.vendorId === 'openai');
+    expect(openai.evidence.map((e: { file: string }) => e.file)).toEqual(['tools/a.ts']);
+  });
+
+  it('says there is no config when there is none', async () => {
+    const result = await call('scan_repository', { path: repo(null) });
+    expect(result.scan.config).toBeNull();
+    expect(result.summary.suppressed).toBe(0);
+  });
+
+  it('adds the exclude argument to the config’s own, config first', async () => {
+    const result = await call('scan_repository', { path: repo(CONFIG), exclude: ['tools/**'] });
+    expect(result.scan.exclude).toEqual(['legacy/**', 'tools/**']);
+    expect(result.findings.map((f: { vendorId: string }) => f.vendorId)).toEqual(['stripe']);
+  });
+
+  it('refuses a bad exclude argument before reading the config', async () => {
+    const response = await errorFor({ path: repo(CONFIG), exclude: ['!tools/**'] });
+    expect(response.isError).toBe(true);
+    expect(response.content[0]?.text).toContain('cannot be negated');
+  });
+
+  it('reports a config it cannot honour as a tool error', async () => {
+    const noReason = await errorFor({
+      path: repo('suppressions:\n  - vendor: stripe\n    reason: ""\n'),
+    });
+    expect(noReason.isError).toBe(true);
+    expect(noReason.content[0]?.text).toContain('must say why');
+
+    const malformed = await errorFor({ path: repo('exclude: [legacy/**\n') });
+    expect(malformed.isError).toBe(true);
+    expect(malformed.content[0]?.text).toContain('.egressa.yml');
+  });
+
+  it('gives the same document as the CLI', async () => {
+    const dir = repo(CONFIG);
+    const viaMcp = await call('scan_repository', { path: dir, full: true });
+    const viaCli = JSON.parse(
+      execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', 'scan', dir, '--format', 'json'], {
+        encoding: 'utf8',
+      }),
+    );
+    const shape = (doc: {
+      findings: { vendor: { id: string } | null; ruleId: string; suppressed: boolean }[];
+      scan: { exclude?: string[] };
+    }) => ({
+      findings: doc.findings.map((f) => [f.vendor?.id, f.ruleId, f.suppressed]).sort(),
+      exclude: doc.scan.exclude,
+    });
+    expect(shape(viaMcp)).toEqual(shape(viaCli));
+    expect(shape(viaMcp).findings).toContainEqual(['stripe', expect.any(String), true]);
   });
 });

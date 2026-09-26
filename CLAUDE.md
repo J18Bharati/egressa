@@ -59,6 +59,9 @@ schemas/            published findings + vendor JSON Schemas
 no `process.exit` — and returns a document rather than printing one. It does read files: the walk,
 the manifests and the source reads all happen inside core. *Formatting* is what lives in the CLI. The MCP server validates arguments and shapes results and
 contains zero analysis logic; behaviour changes go in core so all three surfaces get them at once.
+`.egressa.yml` is an example: each surface loads it with core's `loadConfig`, so it can report a bad
+file its own way, and `scan()` applies it. When only the CLI applied it, MCP silently dropped a
+team's suppressions and excludes.
 
 **Pipeline.** `discovery/walk.ts` (honours `.gitignore`/`.egressaignore`) → `manifests/` and
 `callsites/` produce signals → `merge/` matches signals to KB entries and aggregates to one finding

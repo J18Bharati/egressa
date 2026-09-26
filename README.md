@@ -62,6 +62,11 @@ they combine rather than compete:
   whatever `exclude:` already lists, not swapped in for it — the common case is "also skip this,
   just this once," not "stop honouring what the team committed."
 
+`.egressa.yml` is applied by the engine, so the MCP server honours it exactly as the CLI does: its
+excludes, and its suppressions, which mark a finding suppressed rather than remove it. The MCP
+summary names the file in `scan.config`, because an agent scanning someone else's repository should
+be able to say that the repository scoped its own scan.
+
 ```bash
 egressa scan . --exclude 'legacy/**' --exclude '**/*.generated.ts'
 ```

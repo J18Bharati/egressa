@@ -35,7 +35,8 @@ native parser could not load and only dependency manifests were read, so a vendo
 no SDK installed is invisible. The bundled copy normally runs in that mode.
 
 If the user has the MCP server configured, `scan_repository` returns the same data pre-summarised;
-either source is fine.
+either source is fine. Both honour the repository's `.egressa.yml`: suppressed findings are flagged,
+not removed, and the MCP summary names the file in `scan.config`.
 
 ## Then do the part the scanner cannot
 
