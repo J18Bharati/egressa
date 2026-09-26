@@ -55,11 +55,7 @@ export const vendorsCommand = defineCommand({
       process.exit(2);
     }
 
-    const entry =
-      kb.byId.get(query) ??
-      kb.lookupPackage('npm', query)?.vendor ??
-      kb.lookupHost(query)?.vendor ??
-      null;
+    const entry = kb.findVendor(query);
 
     if (!entry) {
       await writeOutAndExit(`No knowledge base entry matches "${query}".\n`, 0);

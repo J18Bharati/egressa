@@ -194,6 +194,15 @@ describe('vendor lookups', () => {
     expect(result.note).toContain('No knowledge base entry');
   });
 
+  it('finds a vendor by its PyPI package, and normalises a PyPI name', async () => {
+    const lookup = await call('lookup_vendor', { query: 'boto3' });
+    expect(lookup.found).toBe(true);
+    expect(lookup.vendor.id).toBe('aws');
+    const check = await call('check_package', { ecosystem: 'pypi', name: 'Twilio' });
+    expect(check.matched).toBe(true);
+    expect(check.vendor.id).toBe('twilio');
+  });
+
   it('lists vendors with their EU-region scope', async () => {
     const result = await call('list_vendors', {});
     // The roster grows; the shape of each row is what this asserts.

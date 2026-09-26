@@ -1,3 +1,4 @@
+import { normalisePypiName } from '@egressa/kb';
 import { LineIndex } from '../util/line-index.js';
 import type { DependencyRecord, ManifestParseResult } from './types.js';
 
@@ -18,14 +19,9 @@ import type { DependencyRecord, ManifestParseResult } from './types.js';
  * applies to hosts.
  */
 
-/**
- * PEP 503 normalisation: lower case, and any run of `-`, `_` or `.` becomes one
- * `-`. PyPI treats `Twilio`, `twilio` and `TWILIO` as one project, so the
- * knowledge base stores the normalised form and every reader emits it.
- */
-export function normalisePypiName(name: string): string {
-  return name.toLowerCase().replace(/[-_.]+/g, '-');
-}
+// PEP 503 normalisation lives beside the knowledge base lookup, which compares
+// names in the same form; it is re-exported here so the manifest API is unchanged.
+export { normalisePypiName };
 
 /** Group, extra and file names that mean "not installed with the product". */
 const DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;

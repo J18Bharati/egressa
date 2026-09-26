@@ -9,6 +9,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
+import { normalisePypiName } from '../src/pypi.js';
 
 const KB = join(process.cwd(), 'kb');
 const STALE_AFTER_DAYS = 180;
@@ -142,7 +143,7 @@ for (const file of vendorFiles) {
       // any other spelling can never match -- a silent recall gap. PyPI has no
       // namespaces either, so a wildcard there claims nothing real.
       if (ecosystem === 'pypi') {
-        const normalised = alias.name.toLowerCase().replace(/[-_.]+/g, '-');
+        const normalised = normalisePypiName(alias.name);
         if (alias.name !== normalised || alias.name.endsWith('/*')) {
           errors.push(
             `${where}: pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`,

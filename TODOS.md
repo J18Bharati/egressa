@@ -405,17 +405,15 @@ that branch, but the branch edited the render path. SARIF and JSON escape by con
 **Priority:** P2
 **Depends on:** None
 
-### Finish the Python surface: lookups, `unmatched`, constraints
+### Finish the Python surface: `unmatched`, constraints, spellings
 
-**What:** Four gaps left by the manifest reader, found by the branch review of
-`cli-and-routing-fixes`:
-- `egressa vendors show boto3` and MCP `lookup_vendor` look up npm only, and MCP `check_package`
-  does not normalise a pypi name.
+**What:** Gaps left by the manifest reader, found by the branch review of
+`cli-and-routing-fixes` (the lookups it found are fixed on `field-test-3-fixes`):
 - `unmatched.packages` is one set across ecosystems, so an npm and a pypi package with the same
   name are indistinguishable.
 - A file referenced by `-c` from a requirements file pins versions and installs nothing. Only
   `constraints*.txt` is skipped by name today.
-- The `kb:validate` pypi rule has no negative test, and it re-implements `normalisePypiName`.
+- The `kb:validate` pypi rule has no negative test.
 
 Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) added:
 - `requirements-constraints.txt` is read, because `isRequirementsFile` checks only a `constraints`
@@ -429,11 +427,10 @@ Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) add
   `--no-header --no-annotate`. Hashes on every line are a possible signal, but not a proof.
 - Unread equivalent spellings: `optional-dependencies` as an inline table or a dotted key under
   `[project]`, `[tool.poetry.dependencies.<name>]` sub-tables, `dependencies = {…}` under
-  `[tool.poetry]`, `dev-requirements.txt`/`test-requirements.txt`, and Fly's single-quoted
-  `primary_region`.
+  `[tool.poetry]`, and `dev-requirements.txt`/`test-requirements.txt`.
 
-**Why:** `docs/LIMITATIONS.md` now points a user at `unmatched` for missing Python aliases, and
-the lookup commands are how they would check one.
+**Why:** `docs/LIMITATIONS.md` points a user at `unmatched` for missing Python aliases, and an
+`unmatched` list that cannot say which registry a name came from cannot be acted on.
 
 **Context:** Keying `unmatched` by ecosystem changes the findings schema. That is free before the
 first release and needs a new schema file after it.

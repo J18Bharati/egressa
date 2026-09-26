@@ -110,17 +110,13 @@ server.tool(
 server.tool(
   'lookup_vendor',
   scoped(
-    'Look up a vendor in the knowledge base by id, npm package name, or hostname. ' +
+    'Look up a vendor in the knowledge base by id, npm or PyPI package name, or hostname. ' +
       'Returns the full sourced entry including its citations and last-verified date.',
   ),
   { query: z.string().describe('Vendor id, package name, or host') },
   async ({ query }) => {
     const kb = loadKnowledgeBase();
-    const entry =
-      kb.byId.get(query) ??
-      kb.lookupPackage('npm', query)?.vendor ??
-      kb.lookupHost(query)?.vendor ??
-      null;
+    const entry = kb.findVendor(query);
 
     if (!entry) {
       return json({

@@ -359,6 +359,13 @@ describe('cli end to end', () => {
     const { stdout } = run(['vendors', 'show', '@sentry/nextjs', '--kb', 'kb']);
     expect(stdout).toContain('Functional Software');
   });
+
+  it('resolves a vendor by PyPI package name', () => {
+    // It used to answer "No knowledge base entry" for a vendor the knowledge
+    // base carries, because only npm was tried.
+    const { stdout } = run(['vendors', 'show', 'boto3', '--kb', 'kb']);
+    expect(JSON.parse(stdout).id).toBe('aws');
+  });
 });
 
 describe('negated flags actually change the scan', () => {
