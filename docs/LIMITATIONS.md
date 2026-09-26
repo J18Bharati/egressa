@@ -200,7 +200,11 @@ it normally runs in this mode. `scan-transfers.sh` prefers a real build for that
 Call sites are analysed in JavaScript and TypeScript only. Python is read at the manifest level:
 declared dependencies in `requirements*.txt` and `pyproject.toml`, matched against `pypi` aliases.
 Three consequences follow. A Python service that calls a vendor by URL, with no SDK declared, is not
-detected. No Python lockfile is read, so `--include-transitive` adds nothing for Python. And a
+detected. `poetry.lock` and `uv.lock` are not read. A `requirements.txt` compiled by pip-compile
+or `uv pip compile` is read as a lockfile, split by its `# via` annotations. But output without
+annotations looks exactly like a hand-written file, and every package in it is read as declared:
+`poetry export`, `pipenv requirements`, and pip-compile or uv run with `--no-header --no-annotate`.
+A pip-compile header with no annotations is recognised, and nothing in that file is attributed. And a
 vendor is matched only if its knowledge base entry carries a `pypi` alias — today Twilio and AWS
 (`boto3`, `botocore`). Any other vendor's Python SDK lands in `unmatched`, which is the signal to
 add one.

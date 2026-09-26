@@ -424,6 +424,9 @@ Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) add
   `unmatched` mangled. pip joins continuation lines before parsing, and so should the reader. It
   should also refuse a token ending in an archive suffix.
 - A full-line comment ending in `\` is continued by the reader, but pip does not continue it.
+- Lockfile output without `# via` annotations is read as declared, so every transitive package in
+  it is attributed as direct: `poetry export`, `pipenv requirements`, and pip-compile/uv with
+  `--no-header --no-annotate`. Hashes on every line are a possible signal, but not a proof.
 - Unread equivalent spellings: `optional-dependencies` as an inline table or a dotted key under
   `[project]`, `[tool.poetry.dependencies.<name>]` sub-tables, `dependencies = {…}` under
   `[tool.poetry]`, `dev-requirements.txt`/`test-requirements.txt`, and Fly's single-quoted

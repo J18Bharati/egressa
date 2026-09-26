@@ -20,7 +20,9 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 - **Python dependency manifests are read.** `requirements*.txt` and `pyproject.toml` (PEP 621
   dependencies and extras, PEP 735 groups, Poetry tables), with PEP 503 name normalisation and
   dev-only detection. Both field tests missed Twilio in five production files because no Python
-  manifest was read. Declared dependencies only: no Python lockfile, and no Python call sites.
+  manifest was read. Declared dependencies only, and no Python call sites. A `requirements.txt`
+  compiled by pip-compile or `uv pip compile` is read as the lockfile it is: only packages its
+  `# via` annotations name as coming from a source file are declared, and the rest are transitive.
   Installed packages are not read, for the same reason as `node_modules`: `site-packages`,
   `dist-packages`, `__pypackages__`, any dot directory, and any directory holding a `pyvenv.cfg`,
   whatever it is named. A `pyproject.toml` is read with a small TOML tokeniser, so a multi-line
