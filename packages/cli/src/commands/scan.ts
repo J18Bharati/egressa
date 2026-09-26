@@ -45,7 +45,10 @@ export const scanCommand = defineCommand({
   args: {
     path: { type: 'positional', required: false, default: '.', description: 'Directory to scan' },
     format: { type: 'string', default: 'human', description: 'human | json | sarif | markdown' },
-    out: { type: 'string', description: 'Write output to a file instead of stdout' },
+    out: {
+      type: 'string',
+      description: 'Write output to a file instead of stdout (--out=- is stdout)',
+    },
     'fail-on': {
       type: 'string',
       default: 'none',
@@ -169,7 +172,11 @@ export const scanCommand = defineCommand({
 
     const output = render(result, String(args.format), args.color !== false);
 
-    if (args.out) writeFileSync(String(args.out), `${output}\n`);
+    // `-` is stdout, by the usual convention, and it is what the flag guard's
+    // hint recommends for a dash-led value. It used to write a file named `-`
+    // into whatever directory CI happened to run in.
+    const out = args.out ? String(args.out) : undefined;
+    if (out !== undefined && out !== '-') writeFileSync(out, `${output}\n`);
     // Awaited, not fire-and-forget: process.exit() below does not flush a
     // pipe, and a truncated findings document is worse than a failed one.
     else if (!args.quiet) await writeOut(`${output}\n`);

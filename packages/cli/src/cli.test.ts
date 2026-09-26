@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
@@ -320,6 +320,33 @@ describe('cli end to end', () => {
       expect(dismissed).toHaveLength(1);
       expect(JSON.stringify(dismissed[0].suppressions)).toContain('PRIV-1');
     });
+  });
+
+  it('writes --out=- to stdout, not to a file named -', () => {
+    // Run from an empty directory with absolute paths, so a regression leaves
+    // its stray file there rather than in the repository.
+    const cwd = mkdtempSync(join(tmpdir(), 'egressa-out-'));
+    const repo = process.cwd();
+    const stdout = execFileSync(
+      join(repo, 'node_modules/.bin/tsx'),
+      [
+        // The repository's tsconfig maps @egressa/* to source; without it tsx,
+        // started outside the repository, loads whatever was last built.
+        '--tsconfig',
+        join(repo, 'tsconfig.json'),
+        join(repo, 'packages/cli/src/cli.ts'),
+        'scan',
+        join(repo, 'fixtures/repos/express-stripe-sendgrid'),
+        '--kb',
+        join(repo, 'kb'),
+        '--format',
+        'json',
+        '--out=-',
+      ],
+      { cwd, encoding: 'utf8' },
+    );
+    expect(JSON.parse(stdout).schemaVersion).toBe(FINDINGS_SCHEMA_VERSION);
+    expect(existsSync(join(cwd, '-'))).toBe(false);
   });
 
   it('answers --version with the tool version', () => {
