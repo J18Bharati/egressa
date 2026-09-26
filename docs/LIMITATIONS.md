@@ -260,3 +260,13 @@ set, unnarrowed. That is the honest answer, and
 Not collected at all: files under dot-directories such as `.github/` and `.terraform/`, because the
 walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an
 ordinary constructor argument the call-site analyzer does not yet attribute to a provider.
+
+Two shapes hide a region that is written as a literal, and both are pinned by cases in
+`packages/core/src/infrastructure/key-literal.test.ts`:
+
+- **An unterminated heredoc or string in a `.tf` file** hides everything after it. The reader
+  carries heredocs, interpolations and strings across lines so that none of them can produce a
+  region, and a file that never closes one is read as still inside it.
+- **In `fly.toml`, a line inside a multi-line array that begins with `[`** is taken for a table
+  header, and `primary_region` is read only above the first table. So a top-level `primary_region`
+  written after such an array is not read. Fly's generated configuration does not have this layout.
