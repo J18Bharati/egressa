@@ -2038,9 +2038,9 @@ ${indent}`) + "'";
         return quotedString(value, ctx);
       }
       const indent = ctx.indent || (ctx.forceBlockIndent || containsDocumentMarker(value) ? "  " : "");
-      const literal = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
+      const literal2 = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
       if (!value)
-        return literal ? "|\n" : ">\n";
+        return literal2 ? "|\n" : ">\n";
       let chomp;
       let endStart;
       for (endStart = value.length; endStart > 0; --endStart) {
@@ -2089,7 +2089,7 @@ ${indent}`) + "'";
         if (onComment)
           onComment();
       }
-      if (!literal) {
+      if (!literal2) {
         const foldedValue = value.replace(/\n+/g, "\n$&").replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, "$1$2").replace(/\n+/g, `$&${indent}`);
         let literalFallback = false;
         const foldOptions = getFoldOptions(ctx, true);
@@ -9767,9 +9767,9 @@ var require_parse = __commonJS({
           safeChars.push(...chars);
           continue;
         }
-        const literal = normalizeSimpleBranch(branch);
-        if (literal && literal.length === 1) {
-          safeChars.push(literal);
+        const literal2 = normalizeSimpleBranch(branch);
+        if (literal2 && literal2.length === 1) {
+          safeChars.push(literal2);
           continue;
         }
         combinable = false;
@@ -9921,15 +9921,15 @@ var require_parse = __commonJS({
         extglobs.push(token);
       };
       const extglobClose = (token) => {
-        const literal = input.slice(token.startIndex, state.index + 1);
+        const literal2 = input.slice(token.startIndex, state.index + 1);
         const body = input.slice(token.startIndex + 2, state.index);
         const analysis = analyzeRepeatedExtglob(body, opts);
         if ((token.type === "plus" || token.type === "star") && analysis.risky) {
           const safeOutput = analysis.safeOutput ? (token.output ? "" : ONE_CHAR) + (opts.capture ? `(${analysis.safeOutput})` : analysis.safeOutput) : void 0;
           const open = tokens[token.tokensIndex];
           open.type = "text";
-          open.value = literal;
-          open.output = safeOutput || utils.escapeRegex(literal);
+          open.value = literal2;
+          open.output = safeOutput || utils.escapeRegex(literal2);
           for (let i2 = token.tokensIndex + 1; i2 < tokens.length; i2++) {
             tokens[i2].value = "";
             tokens[i2].output = "";
@@ -12257,8 +12257,790 @@ async function runMain(cmd, opts = {}) {
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync2 } from "fs";
-import { basename as basename2, join as join2 } from "path";
+var import_yaml = __toESM(require_dist(), 1);
+var import_ignore = __toESM(require_ignore(), 1);
+import { existsSync, readFileSync as readFileSync2 } from "fs";
+import { join as join2, relative as relative2 } from "path";
+import { readFileSync as readFileSync3 } from "fs";
+import { relative as relative3, sep as sep3 } from "path";
+
+// ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
+import { readdir, readdirSync, realpath, realpathSync, stat, statSync } from "fs";
+import { isAbsolute, posix, resolve as resolve2 } from "path";
+import { fileURLToPath } from "url";
+
+// ../../node_modules/.pnpm/fdir@6.5.0_picomatch@4.0.7/node_modules/fdir/dist/index.mjs
+import { createRequire } from "module";
+import { basename, dirname, normalize, relative, resolve, sep as sep2 } from "path";
+import * as nativeFs from "fs";
+var __require2 = /* @__PURE__ */ createRequire(import.meta.url);
+function cleanPath(path) {
+  let normalized = normalize(path);
+  if (normalized.length > 1 && normalized[normalized.length - 1] === sep2) normalized = normalized.substring(0, normalized.length - 1);
+  return normalized;
+}
+var SLASHES_REGEX = /[\\/]/g;
+function convertSlashes(path, separator) {
+  return path.replace(SLASHES_REGEX, separator);
+}
+var WINDOWS_ROOT_DIR_REGEX = /^[a-z]:[\\/]$/i;
+function isRootDirectory(path) {
+  return path === "/" || WINDOWS_ROOT_DIR_REGEX.test(path);
+}
+function normalizePath(path, options) {
+  const { resolvePaths, normalizePath: normalizePath$1, pathSeparator } = options;
+  const pathNeedsCleaning = process.platform === "win32" && path.includes("/") || path.startsWith(".");
+  if (resolvePaths) path = resolve(path);
+  if (normalizePath$1 || pathNeedsCleaning) path = cleanPath(path);
+  if (path === ".") return "";
+  const needsSeperator = path[path.length - 1] !== pathSeparator;
+  return convertSlashes(needsSeperator ? path + pathSeparator : path, pathSeparator);
+}
+function joinPathWithBasePath(filename, directoryPath) {
+  return directoryPath + filename;
+}
+function joinPathWithRelativePath(root, options) {
+  return function(filename, directoryPath) {
+    const sameRoot = directoryPath.startsWith(root);
+    if (sameRoot) return directoryPath.slice(root.length) + filename;
+    else return convertSlashes(relative(root, directoryPath), options.pathSeparator) + options.pathSeparator + filename;
+  };
+}
+function joinPath(filename) {
+  return filename;
+}
+function joinDirectoryPath(filename, directoryPath, separator) {
+  return directoryPath + filename + separator;
+}
+function build$7(root, options) {
+  const { relativePaths, includeBasePath } = options;
+  return relativePaths && root ? joinPathWithRelativePath(root, options) : includeBasePath ? joinPathWithBasePath : joinPath;
+}
+function pushDirectoryWithRelativePath(root) {
+  return function(directoryPath, paths) {
+    paths.push(directoryPath.substring(root.length) || ".");
+  };
+}
+function pushDirectoryFilterWithRelativePath(root) {
+  return function(directoryPath, paths, filters) {
+    const relativePath = directoryPath.substring(root.length) || ".";
+    if (filters.every((filter) => filter(relativePath, true))) paths.push(relativePath);
+  };
+}
+var pushDirectory = (directoryPath, paths) => {
+  paths.push(directoryPath || ".");
+};
+var pushDirectoryFilter = (directoryPath, paths, filters) => {
+  const path = directoryPath || ".";
+  if (filters.every((filter) => filter(path, true))) paths.push(path);
+};
+var empty$2 = () => {
+};
+function build$6(root, options) {
+  const { includeDirs, filters, relativePaths } = options;
+  if (!includeDirs) return empty$2;
+  if (relativePaths) return filters && filters.length ? pushDirectoryFilterWithRelativePath(root) : pushDirectoryWithRelativePath(root);
+  return filters && filters.length ? pushDirectoryFilter : pushDirectory;
+}
+var pushFileFilterAndCount = (filename, _paths, counts, filters) => {
+  if (filters.every((filter) => filter(filename, false))) counts.files++;
+};
+var pushFileFilter = (filename, paths, _counts, filters) => {
+  if (filters.every((filter) => filter(filename, false))) paths.push(filename);
+};
+var pushFileCount = (_filename, _paths, counts, _filters) => {
+  counts.files++;
+};
+var pushFile = (filename, paths) => {
+  paths.push(filename);
+};
+var empty$1 = () => {
+};
+function build$5(options) {
+  const { excludeFiles, filters, onlyCounts } = options;
+  if (excludeFiles) return empty$1;
+  if (filters && filters.length) return onlyCounts ? pushFileFilterAndCount : pushFileFilter;
+  else if (onlyCounts) return pushFileCount;
+  else return pushFile;
+}
+var getArray = (paths) => {
+  return paths;
+};
+var getArrayGroup = () => {
+  return [""].slice(0, 0);
+};
+function build$4(options) {
+  return options.group ? getArrayGroup : getArray;
+}
+var groupFiles = (groups, directory, files) => {
+  groups.push({
+    directory,
+    files,
+    dir: directory
+  });
+};
+var empty = () => {
+};
+function build$3(options) {
+  return options.group ? groupFiles : empty;
+}
+var resolveSymlinksAsync = function(path, state, callback$1) {
+  const { queue: queue2, fs, options: { suppressErrors } } = state;
+  queue2.enqueue();
+  fs.realpath(path, (error, resolvedPath) => {
+    if (error) return queue2.dequeue(suppressErrors ? null : error, state);
+    fs.stat(resolvedPath, (error$1, stat2) => {
+      if (error$1) return queue2.dequeue(suppressErrors ? null : error$1, state);
+      if (stat2.isDirectory() && isRecursive(path, resolvedPath, state)) return queue2.dequeue(null, state);
+      callback$1(stat2, resolvedPath);
+      queue2.dequeue(null, state);
+    });
+  });
+};
+var resolveSymlinks = function(path, state, callback$1) {
+  const { queue: queue2, fs, options: { suppressErrors } } = state;
+  queue2.enqueue();
+  try {
+    const resolvedPath = fs.realpathSync(path);
+    const stat2 = fs.statSync(resolvedPath);
+    if (stat2.isDirectory() && isRecursive(path, resolvedPath, state)) return;
+    callback$1(stat2, resolvedPath);
+  } catch (e2) {
+    if (!suppressErrors) throw e2;
+  }
+};
+function build$2(options, isSynchronous) {
+  if (!options.resolveSymlinks || options.excludeSymlinks) return null;
+  return isSynchronous ? resolveSymlinks : resolveSymlinksAsync;
+}
+function isRecursive(path, resolved, state) {
+  if (state.options.useRealPaths) return isRecursiveUsingRealPaths(resolved, state);
+  let parent = dirname(path);
+  let depth = 1;
+  while (parent !== state.root && depth < 2) {
+    const resolvedPath = state.symlinks.get(parent);
+    const isSameRoot = !!resolvedPath && (resolvedPath === resolved || resolvedPath.startsWith(resolved) || resolved.startsWith(resolvedPath));
+    if (isSameRoot) depth++;
+    else parent = dirname(parent);
+  }
+  state.symlinks.set(path, resolved);
+  return depth > 1;
+}
+function isRecursiveUsingRealPaths(resolved, state) {
+  return state.visited.includes(resolved + state.options.pathSeparator);
+}
+var onlyCountsSync = (state) => {
+  return state.counts;
+};
+var groupsSync = (state) => {
+  return state.groups;
+};
+var defaultSync = (state) => {
+  return state.paths;
+};
+var limitFilesSync = (state) => {
+  return state.paths.slice(0, state.options.maxFiles);
+};
+var onlyCountsAsync = (state, error, callback$1) => {
+  report(error, callback$1, state.counts, state.options.suppressErrors);
+  return null;
+};
+var defaultAsync = (state, error, callback$1) => {
+  report(error, callback$1, state.paths, state.options.suppressErrors);
+  return null;
+};
+var limitFilesAsync = (state, error, callback$1) => {
+  report(error, callback$1, state.paths.slice(0, state.options.maxFiles), state.options.suppressErrors);
+  return null;
+};
+var groupsAsync = (state, error, callback$1) => {
+  report(error, callback$1, state.groups, state.options.suppressErrors);
+  return null;
+};
+function report(error, callback$1, output, suppressErrors) {
+  if (error && !suppressErrors) callback$1(error, output);
+  else callback$1(null, output);
+}
+function build$1(options, isSynchronous) {
+  const { onlyCounts, group, maxFiles } = options;
+  if (onlyCounts) return isSynchronous ? onlyCountsSync : onlyCountsAsync;
+  else if (group) return isSynchronous ? groupsSync : groupsAsync;
+  else if (maxFiles) return isSynchronous ? limitFilesSync : limitFilesAsync;
+  else return isSynchronous ? defaultSync : defaultAsync;
+}
+var readdirOpts = { withFileTypes: true };
+var walkAsync = (state, crawlPath, directoryPath, currentDepth, callback$1) => {
+  state.queue.enqueue();
+  if (currentDepth < 0) return state.queue.dequeue(null, state);
+  const { fs } = state;
+  state.visited.push(crawlPath);
+  state.counts.directories++;
+  fs.readdir(crawlPath || ".", readdirOpts, (error, entries = []) => {
+    callback$1(entries, directoryPath, currentDepth);
+    state.queue.dequeue(state.options.suppressErrors ? null : error, state);
+  });
+};
+var walkSync = (state, crawlPath, directoryPath, currentDepth, callback$1) => {
+  const { fs } = state;
+  if (currentDepth < 0) return;
+  state.visited.push(crawlPath);
+  state.counts.directories++;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(crawlPath || ".", readdirOpts);
+  } catch (e2) {
+    if (!state.options.suppressErrors) throw e2;
+  }
+  callback$1(entries, directoryPath, currentDepth);
+};
+function build(isSynchronous) {
+  return isSynchronous ? walkSync : walkAsync;
+}
+var Queue = class {
+  count = 0;
+  constructor(onQueueEmpty) {
+    this.onQueueEmpty = onQueueEmpty;
+  }
+  enqueue() {
+    this.count++;
+    return this.count;
+  }
+  dequeue(error, output) {
+    if (this.onQueueEmpty && (--this.count <= 0 || error)) {
+      this.onQueueEmpty(error, output);
+      if (error) {
+        output.controller.abort();
+        this.onQueueEmpty = void 0;
+      }
+    }
+  }
+};
+var Counter = class {
+  _files = 0;
+  _directories = 0;
+  set files(num) {
+    this._files = num;
+  }
+  get files() {
+    return this._files;
+  }
+  set directories(num) {
+    this._directories = num;
+  }
+  get directories() {
+    return this._directories;
+  }
+  /**
+  * @deprecated use `directories` instead
+  */
+  /* c8 ignore next 3 */
+  get dirs() {
+    return this._directories;
+  }
+};
+var Aborter = class {
+  aborted = false;
+  abort() {
+    this.aborted = true;
+  }
+};
+var Walker = class {
+  root;
+  isSynchronous;
+  state;
+  joinPath;
+  pushDirectory;
+  pushFile;
+  getArray;
+  groupFiles;
+  resolveSymlink;
+  walkDirectory;
+  callbackInvoker;
+  constructor(root, options, callback$1) {
+    this.isSynchronous = !callback$1;
+    this.callbackInvoker = build$1(options, this.isSynchronous);
+    this.root = normalizePath(root, options);
+    this.state = {
+      root: isRootDirectory(this.root) ? this.root : this.root.slice(0, -1),
+      paths: [""].slice(0, 0),
+      groups: [],
+      counts: new Counter(),
+      options,
+      queue: new Queue((error, state) => this.callbackInvoker(state, error, callback$1)),
+      symlinks: /* @__PURE__ */ new Map(),
+      visited: [""].slice(0, 0),
+      controller: new Aborter(),
+      fs: options.fs || nativeFs
+    };
+    this.joinPath = build$7(this.root, options);
+    this.pushDirectory = build$6(this.root, options);
+    this.pushFile = build$5(options);
+    this.getArray = build$4(options);
+    this.groupFiles = build$3(options);
+    this.resolveSymlink = build$2(options, this.isSynchronous);
+    this.walkDirectory = build(this.isSynchronous);
+  }
+  start() {
+    this.pushDirectory(this.root, this.state.paths, this.state.options.filters);
+    this.walkDirectory(this.state, this.root, this.root, this.state.options.maxDepth, this.walk);
+    return this.isSynchronous ? this.callbackInvoker(this.state, null) : null;
+  }
+  walk = (entries, directoryPath, depth) => {
+    const { paths, options: { filters, resolveSymlinks: resolveSymlinks$1, excludeSymlinks, exclude, maxFiles, signal, useRealPaths, pathSeparator }, controller } = this.state;
+    if (controller.aborted || signal && signal.aborted || maxFiles && paths.length > maxFiles) return;
+    const files = this.getArray(this.state.paths);
+    for (let i2 = 0; i2 < entries.length; ++i2) {
+      const entry = entries[i2];
+      if (entry.isFile() || entry.isSymbolicLink() && !resolveSymlinks$1 && !excludeSymlinks) {
+        const filename = this.joinPath(entry.name, directoryPath);
+        this.pushFile(filename, files, this.state.counts, filters);
+      } else if (entry.isDirectory()) {
+        let path = joinDirectoryPath(entry.name, directoryPath, this.state.options.pathSeparator);
+        if (exclude && exclude(entry.name, path)) continue;
+        this.pushDirectory(path, paths, filters);
+        this.walkDirectory(this.state, path, path, depth - 1, this.walk);
+      } else if (this.resolveSymlink && entry.isSymbolicLink()) {
+        let path = joinPathWithBasePath(entry.name, directoryPath);
+        this.resolveSymlink(path, this.state, (stat2, resolvedPath) => {
+          if (stat2.isDirectory()) {
+            resolvedPath = normalizePath(resolvedPath, this.state.options);
+            if (exclude && exclude(entry.name, useRealPaths ? resolvedPath : path + pathSeparator)) return;
+            this.walkDirectory(this.state, resolvedPath, useRealPaths ? resolvedPath : path + pathSeparator, depth - 1, this.walk);
+          } else {
+            resolvedPath = useRealPaths ? resolvedPath : path;
+            const filename = basename(resolvedPath);
+            const directoryPath$1 = normalizePath(dirname(resolvedPath), this.state.options);
+            resolvedPath = this.joinPath(filename, directoryPath$1);
+            this.pushFile(resolvedPath, files, this.state.counts, filters);
+          }
+        });
+      }
+    }
+    this.groupFiles(this.state.groups, directoryPath, files);
+  };
+};
+function promise(root, options) {
+  return new Promise((resolve$1, reject) => {
+    callback(root, options, (err, output) => {
+      if (err) return reject(err);
+      resolve$1(output);
+    });
+  });
+}
+function callback(root, options, callback$1) {
+  let walker = new Walker(root, options, callback$1);
+  walker.start();
+}
+function sync(root, options) {
+  const walker = new Walker(root, options);
+  return walker.start();
+}
+var APIBuilder = class {
+  constructor(root, options) {
+    this.root = root;
+    this.options = options;
+  }
+  withPromise() {
+    return promise(this.root, this.options);
+  }
+  withCallback(cb) {
+    callback(this.root, this.options, cb);
+  }
+  sync() {
+    return sync(this.root, this.options);
+  }
+};
+var pm = null;
+try {
+  __require2.resolve("picomatch");
+  pm = __require2("picomatch");
+} catch {
+}
+var Builder = class {
+  globCache = {};
+  options = {
+    maxDepth: Infinity,
+    suppressErrors: true,
+    pathSeparator: sep2,
+    filters: []
+  };
+  globFunction;
+  constructor(options) {
+    this.options = {
+      ...this.options,
+      ...options
+    };
+    this.globFunction = this.options.globFunction;
+  }
+  group() {
+    this.options.group = true;
+    return this;
+  }
+  withPathSeparator(separator) {
+    this.options.pathSeparator = separator;
+    return this;
+  }
+  withBasePath() {
+    this.options.includeBasePath = true;
+    return this;
+  }
+  withRelativePaths() {
+    this.options.relativePaths = true;
+    return this;
+  }
+  withDirs() {
+    this.options.includeDirs = true;
+    return this;
+  }
+  withMaxDepth(depth) {
+    this.options.maxDepth = depth;
+    return this;
+  }
+  withMaxFiles(limit) {
+    this.options.maxFiles = limit;
+    return this;
+  }
+  withFullPaths() {
+    this.options.resolvePaths = true;
+    this.options.includeBasePath = true;
+    return this;
+  }
+  withErrors() {
+    this.options.suppressErrors = false;
+    return this;
+  }
+  withSymlinks({ resolvePaths = true } = {}) {
+    this.options.resolveSymlinks = true;
+    this.options.useRealPaths = resolvePaths;
+    return this.withFullPaths();
+  }
+  withAbortSignal(signal) {
+    this.options.signal = signal;
+    return this;
+  }
+  normalize() {
+    this.options.normalizePath = true;
+    return this;
+  }
+  filter(predicate) {
+    this.options.filters.push(predicate);
+    return this;
+  }
+  onlyDirs() {
+    this.options.excludeFiles = true;
+    this.options.includeDirs = true;
+    return this;
+  }
+  exclude(predicate) {
+    this.options.exclude = predicate;
+    return this;
+  }
+  onlyCounts() {
+    this.options.onlyCounts = true;
+    return this;
+  }
+  crawl(root) {
+    return new APIBuilder(root || ".", this.options);
+  }
+  withGlobFunction(fn) {
+    this.globFunction = fn;
+    return this;
+  }
+  /**
+  * @deprecated Pass options using the constructor instead:
+  * ```ts
+  * new fdir(options).crawl("/path/to/root");
+  * ```
+  * This method will be removed in v7.0
+  */
+  /* c8 ignore next 4 */
+  crawlWithOptions(root, options) {
+    this.options = {
+      ...this.options,
+      ...options
+    };
+    return new APIBuilder(root || ".", this.options);
+  }
+  glob(...patterns) {
+    if (this.globFunction) return this.globWithOptions(patterns);
+    return this.globWithOptions(patterns, ...[{ dot: true }]);
+  }
+  globWithOptions(patterns, ...options) {
+    const globFn = this.globFunction || pm;
+    if (!globFn) throw new Error("Please specify a glob function to use glob matching.");
+    var isMatch = this.globCache[patterns.join("\0")];
+    if (!isMatch) {
+      isMatch = globFn(patterns, ...options);
+      this.globCache[patterns.join("\0")] = isMatch;
+    }
+    this.options.filters.push((path) => isMatch(path));
+    return this;
+  }
+};
+
+// ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
+var import_picomatch = __toESM(require_picomatch2(), 1);
+var isReadonlyArray = Array.isArray;
+var BACKSLASHES = /\\/g;
+var DRIVE_RELATIVE_PATH = /^[A-Za-z]:$/;
+var isWin = process.platform === "win32";
+var ONLY_PARENT_DIRECTORIES = /^(\/?\.\.)+$/;
+function getPartialMatcher(patterns, options = {}) {
+  const patternsCount = patterns.length;
+  const patternsParts = Array(patternsCount);
+  const matchers = Array(patternsCount);
+  let i2, j;
+  for (i2 = 0; i2 < patternsCount; i2++) {
+    const parts = splitPattern(patterns[i2]);
+    patternsParts[i2] = parts;
+    const partsCount = parts.length;
+    const partMatchers = Array(partsCount);
+    for (j = 0; j < partsCount; j++) partMatchers[j] = (0, import_picomatch.default)(parts[j], options);
+    matchers[i2] = partMatchers;
+  }
+  return (input) => {
+    const inputParts = input.split("/");
+    if (inputParts[0] === ".." && ONLY_PARENT_DIRECTORIES.test(input)) return true;
+    for (i2 = 0; i2 < patternsCount; i2++) {
+      const patternParts = patternsParts[i2];
+      const matcher = matchers[i2];
+      const inputPatternCount = inputParts.length;
+      const minParts = Math.min(inputPatternCount, patternParts.length);
+      j = 0;
+      while (j < minParts) {
+        const part = patternParts[j];
+        if (part.includes("/")) return true;
+        if (!matcher[j](inputParts[j])) break;
+        if (!options.noglobstar && part === "**") return true;
+        j++;
+      }
+      if (j === inputPatternCount) return true;
+    }
+    return false;
+  };
+}
+var WIN32_ROOT_DIR = /^[A-Z]:\/$/i;
+var isRoot = isWin ? (p) => WIN32_ROOT_DIR.test(p) : (p) => p === "/";
+function buildFormat(cwd, root, absolute) {
+  if (cwd === root || root.startsWith(`${cwd}/`)) {
+    if (absolute) {
+      const start = cwd.length + +!isRoot(cwd);
+      return (p, isDir) => p.slice(start, isDir ? -1 : void 0) || ".";
+    }
+    const prefix = root.slice(cwd.length + 1);
+    if (prefix) return (p, isDir) => {
+      if (p === ".") return prefix;
+      const result = `${prefix}/${p}`;
+      return isDir ? result.slice(0, -1) : result;
+    };
+    return (p, isDir) => isDir && p !== "." ? p.slice(0, -1) : p;
+  }
+  if (absolute) return (p) => posix.relative(cwd, p) || ".";
+  return (p) => posix.relative(cwd, `${root}/${p}`) || ".";
+}
+function buildRelative(cwd, root) {
+  if (root.startsWith(`${cwd}/`)) {
+    const prefix = root.slice(cwd.length + 1);
+    return (p) => `${prefix}/${p}`;
+  }
+  return (p) => {
+    const result = posix.relative(cwd, `${root}/${p}`);
+    return p[p.length - 1] === "/" && result !== "" ? `${result}/` : result || ".";
+  };
+}
+function ensureNonDriveRelativePath(path) {
+  return path.replace(DRIVE_RELATIVE_PATH, (match) => `${match}/`);
+}
+var splitPatternOptions = { parts: true };
+function splitPattern(path) {
+  var _result$parts;
+  const result = import_picomatch.default.scan(path, splitPatternOptions);
+  return ((_result$parts = result.parts) === null || _result$parts === void 0 ? void 0 : _result$parts.length) ? result.parts : [path];
+}
+var POSIX_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}*?|]|^!|[!+@](?=\()|\\(?![()[\]{}!*+?@|]))/g;
+var WIN32_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}]|^!|[!+@](?=\())/g;
+var escapePosixPath = (path) => path.replace(POSIX_UNESCAPED_GLOB_SYMBOLS, "\\$&");
+var escapeWin32Path = (path) => path.replace(WIN32_UNESCAPED_GLOB_SYMBOLS, "\\$&");
+var escapePath = isWin ? escapeWin32Path : escapePosixPath;
+function isDynamicPattern(pattern, options) {
+  if ((options === null || options === void 0 ? void 0 : options.caseSensitiveMatch) === false) return true;
+  const scan2 = import_picomatch.default.scan(pattern);
+  return scan2.isGlob || scan2.negated;
+}
+function log(...tasks) {
+  console.log(`[tinyglobby ${(/* @__PURE__ */ new Date()).toLocaleTimeString("es")}]`, ...tasks);
+}
+function ensureStringArray(value) {
+  return typeof value === "string" ? [value] : value !== null && value !== void 0 ? value : [];
+}
+var PARENT_DIRECTORY = /^(\/?\.\.)+/;
+var ESCAPING_BACKSLASHES = /\\(?=[()[\]{}!*+?@|])/g;
+function normalizePattern(pattern, opts, props, isIgnore) {
+  var _PARENT_DIRECTORY$exe;
+  const cwd = opts.cwd;
+  let result = pattern;
+  if (pattern[pattern.length - 1] === "/") result = pattern.slice(0, -1);
+  if (result[result.length - 1] !== "*" && opts.expandDirectories) result += "/**";
+  const escapedCwd = escapePath(cwd);
+  result = isAbsolute(result.replace(ESCAPING_BACKSLASHES, "")) ? posix.relative(escapedCwd, result) : posix.normalize(result);
+  const parentDir = (_PARENT_DIRECTORY$exe = PARENT_DIRECTORY.exec(result)) === null || _PARENT_DIRECTORY$exe === void 0 ? void 0 : _PARENT_DIRECTORY$exe[0];
+  const parts = splitPattern(result);
+  if (parentDir) {
+    const n2 = (parentDir.length + 1) / 3;
+    let i2 = 0;
+    const cwdParts = escapedCwd.split("/");
+    while (i2 < n2 && parts[i2 + n2] === cwdParts[cwdParts.length + i2 - n2]) {
+      result = result.slice(0, (n2 - i2 - 1) * 3) + result.slice((n2 - i2) * 3 + parts[i2 + n2].length + 1) || ".";
+      i2++;
+    }
+    const potentialRoot = posix.join(cwd, parentDir.slice(i2 * 3));
+    if (potentialRoot[0] !== "." && props.root.length > potentialRoot.length) {
+      props.root = ensureNonDriveRelativePath(potentialRoot);
+      props.depthOffset = -n2 + i2;
+    }
+  }
+  if (!isIgnore && props.depthOffset >= 0) {
+    var _props$commonPath;
+    (_props$commonPath = props.commonPath) !== null && _props$commonPath !== void 0 || (props.commonPath = parts);
+    const newCommonPath = [];
+    const length = Math.min(props.commonPath.length, parts.length);
+    for (let i2 = 0; i2 < length; i2++) {
+      const part = parts[i2];
+      if (part === "**" && !parts[i2 + 1]) {
+        newCommonPath.pop();
+        break;
+      }
+      if (i2 === parts.length - 1 || part !== props.commonPath[i2] || isDynamicPattern(part)) break;
+      newCommonPath.push(part);
+    }
+    props.depthOffset = newCommonPath.length;
+    props.commonPath = newCommonPath;
+    props.root = ensureNonDriveRelativePath(newCommonPath.length > 0 ? posix.join(cwd, ...newCommonPath) : cwd);
+  }
+  return result;
+}
+function processPatterns(options, patterns, props) {
+  const matchPatterns = [];
+  const ignorePatterns = [];
+  for (const pattern of options.ignore) {
+    if (!pattern) continue;
+    if (pattern[0] !== "!" || pattern[1] === "(") ignorePatterns.push(normalizePattern(pattern, options, props, true));
+  }
+  for (const pattern of patterns) {
+    if (!pattern) continue;
+    if (pattern[0] !== "!" || pattern[1] === "(") matchPatterns.push(normalizePattern(pattern, options, props, false));
+    else if (pattern[1] !== "!" || pattern[2] === "(") ignorePatterns.push(normalizePattern(pattern.slice(1), options, props, true));
+  }
+  return {
+    match: matchPatterns,
+    ignore: ignorePatterns
+  };
+}
+function buildCrawler(options, patterns) {
+  const cwd = options.cwd;
+  const props = {
+    root: cwd,
+    depthOffset: 0
+  };
+  const processed = processPatterns(options, patterns, props);
+  if (options.debug) log("internal processing patterns:", processed);
+  const { absolute, caseSensitiveMatch, debug, dot, followSymbolicLinks, onlyDirectories } = options;
+  const root = props.root.replace(BACKSLASHES, "");
+  const matchOptions = {
+    dot,
+    nobrace: options.braceExpansion === false,
+    nocase: !caseSensitiveMatch,
+    noextglob: options.extglob === false,
+    noglobstar: options.globstar === false,
+    posix: true
+  };
+  const matcher = (0, import_picomatch.default)(processed.match, matchOptions);
+  const ignore2 = (0, import_picomatch.default)(processed.ignore, matchOptions);
+  const partialMatcher = getPartialMatcher(processed.match, matchOptions);
+  const format2 = buildFormat(cwd, root, absolute);
+  const excludeFormatter = absolute ? format2 : buildFormat(cwd, root, true);
+  const excludePredicate = (_3, p) => {
+    const relativePath = excludeFormatter(p, true);
+    return relativePath !== "." && !partialMatcher(relativePath) || ignore2(relativePath);
+  };
+  let maxDepth;
+  if (options.deep !== void 0) maxDepth = Math.round(options.deep - props.depthOffset);
+  const crawler = new Builder({
+    filters: [debug ? (p, isDirectory2) => {
+      const path = format2(p, isDirectory2);
+      const matches2 = matcher(path) && !ignore2(path);
+      if (matches2) log(`matched ${path}`);
+      return matches2;
+    } : (p, isDirectory2) => {
+      const path = format2(p, isDirectory2);
+      return matcher(path) && !ignore2(path);
+    }],
+    exclude: debug ? (_3, p) => {
+      const skipped = excludePredicate(_3, p);
+      log(`${skipped ? "skipped" : "crawling"} ${p}`);
+      return skipped;
+    } : excludePredicate,
+    fs: options.fs,
+    pathSeparator: "/",
+    relativePaths: !absolute,
+    resolvePaths: absolute,
+    includeBasePath: absolute,
+    resolveSymlinks: followSymbolicLinks,
+    excludeSymlinks: !followSymbolicLinks,
+    excludeFiles: onlyDirectories,
+    includeDirs: onlyDirectories || !options.onlyFiles,
+    maxDepth,
+    signal: options.signal
+  }).crawl(root);
+  if (options.debug) log("internal properties:", {
+    ...props,
+    root
+  });
+  return [crawler, cwd !== root && !absolute && buildRelative(cwd, root)];
+}
+function formatPaths(paths, mapper) {
+  if (mapper) for (let i2 = paths.length - 1; i2 >= 0; i2--) paths[i2] = mapper(paths[i2]);
+  return paths;
+}
+var defaultOptions = {
+  caseSensitiveMatch: true,
+  debug: !!process.env.TINYGLOBBY_DEBUG,
+  expandDirectories: true,
+  followSymbolicLinks: true,
+  onlyFiles: true
+};
+function getOptions(options) {
+  const opts = Object.assign({}, options);
+  for (const key in defaultOptions) if (opts[key] === void 0) Object.assign(opts, { [key]: defaultOptions[key] });
+  opts.cwd = (opts.cwd instanceof URL ? fileURLToPath(opts.cwd) : resolve2(opts.cwd || process.cwd())).replace(BACKSLASHES, "/");
+  opts.ignore = ensureStringArray(opts.ignore);
+  opts.fs && (opts.fs = {
+    readdir: opts.fs.readdir || readdir,
+    readdirSync: opts.fs.readdirSync || readdirSync,
+    realpath: opts.fs.realpath || realpath,
+    realpathSync: opts.fs.realpathSync || realpathSync,
+    stat: opts.fs.stat || stat,
+    statSync: opts.fs.statSync || statSync
+  });
+  if (opts.debug) log("globbing with options:", opts);
+  return opts;
+}
+function getCrawler(globInput, inputOptions = {}) {
+  var _ref;
+  if (globInput && (inputOptions === null || inputOptions === void 0 ? void 0 : inputOptions.patterns)) throw new Error("Cannot pass patterns as both an argument and an option");
+  const isModern = isReadonlyArray(globInput) || typeof globInput === "string";
+  const patterns = ensureStringArray((_ref = isModern ? globInput : globInput.patterns) !== null && _ref !== void 0 ? _ref : "**/*");
+  const options = getOptions(isModern ? inputOptions : globInput);
+  return patterns.length > 0 ? buildCrawler(options, patterns) : [];
+}
+function globSync(globInput, options) {
+  const [crawler, relative4] = getCrawler(globInput, options);
+  return crawler ? formatPaths(crawler.sync(), relative4) : [];
+}
+
+// ../core/dist/index.js
+import { readFileSync as readFileSync32 } from "fs";
+import { basename as basename2, join as join22 } from "path";
 
 // ../../node_modules/.pnpm/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
 function createScanner(text, ignoreTrivia = false) {
@@ -13155,789 +13937,7 @@ var ParseErrorCode;
 })(ParseErrorCode || (ParseErrorCode = {}));
 
 // ../core/dist/index.js
-var import_yaml = __toESM(require_dist(), 1);
 var import_yaml2 = __toESM(require_dist(), 1);
-var import_ignore = __toESM(require_ignore(), 1);
-import { readFileSync as readFileSync22 } from "fs";
-import { relative as relative2, sep as sep3 } from "path";
-
-// ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
-import { readdir, readdirSync, realpath, realpathSync, stat, statSync } from "fs";
-import { isAbsolute, posix, resolve as resolve2 } from "path";
-import { fileURLToPath } from "url";
-
-// ../../node_modules/.pnpm/fdir@6.5.0_picomatch@4.0.7/node_modules/fdir/dist/index.mjs
-import { createRequire } from "module";
-import { basename, dirname, normalize, relative, resolve, sep as sep2 } from "path";
-import * as nativeFs from "fs";
-var __require2 = /* @__PURE__ */ createRequire(import.meta.url);
-function cleanPath(path) {
-  let normalized = normalize(path);
-  if (normalized.length > 1 && normalized[normalized.length - 1] === sep2) normalized = normalized.substring(0, normalized.length - 1);
-  return normalized;
-}
-var SLASHES_REGEX = /[\\/]/g;
-function convertSlashes(path, separator) {
-  return path.replace(SLASHES_REGEX, separator);
-}
-var WINDOWS_ROOT_DIR_REGEX = /^[a-z]:[\\/]$/i;
-function isRootDirectory(path) {
-  return path === "/" || WINDOWS_ROOT_DIR_REGEX.test(path);
-}
-function normalizePath(path, options) {
-  const { resolvePaths, normalizePath: normalizePath$1, pathSeparator } = options;
-  const pathNeedsCleaning = process.platform === "win32" && path.includes("/") || path.startsWith(".");
-  if (resolvePaths) path = resolve(path);
-  if (normalizePath$1 || pathNeedsCleaning) path = cleanPath(path);
-  if (path === ".") return "";
-  const needsSeperator = path[path.length - 1] !== pathSeparator;
-  return convertSlashes(needsSeperator ? path + pathSeparator : path, pathSeparator);
-}
-function joinPathWithBasePath(filename, directoryPath) {
-  return directoryPath + filename;
-}
-function joinPathWithRelativePath(root, options) {
-  return function(filename, directoryPath) {
-    const sameRoot = directoryPath.startsWith(root);
-    if (sameRoot) return directoryPath.slice(root.length) + filename;
-    else return convertSlashes(relative(root, directoryPath), options.pathSeparator) + options.pathSeparator + filename;
-  };
-}
-function joinPath(filename) {
-  return filename;
-}
-function joinDirectoryPath(filename, directoryPath, separator) {
-  return directoryPath + filename + separator;
-}
-function build$7(root, options) {
-  const { relativePaths, includeBasePath } = options;
-  return relativePaths && root ? joinPathWithRelativePath(root, options) : includeBasePath ? joinPathWithBasePath : joinPath;
-}
-function pushDirectoryWithRelativePath(root) {
-  return function(directoryPath, paths) {
-    paths.push(directoryPath.substring(root.length) || ".");
-  };
-}
-function pushDirectoryFilterWithRelativePath(root) {
-  return function(directoryPath, paths, filters) {
-    const relativePath = directoryPath.substring(root.length) || ".";
-    if (filters.every((filter) => filter(relativePath, true))) paths.push(relativePath);
-  };
-}
-var pushDirectory = (directoryPath, paths) => {
-  paths.push(directoryPath || ".");
-};
-var pushDirectoryFilter = (directoryPath, paths, filters) => {
-  const path = directoryPath || ".";
-  if (filters.every((filter) => filter(path, true))) paths.push(path);
-};
-var empty$2 = () => {
-};
-function build$6(root, options) {
-  const { includeDirs, filters, relativePaths } = options;
-  if (!includeDirs) return empty$2;
-  if (relativePaths) return filters && filters.length ? pushDirectoryFilterWithRelativePath(root) : pushDirectoryWithRelativePath(root);
-  return filters && filters.length ? pushDirectoryFilter : pushDirectory;
-}
-var pushFileFilterAndCount = (filename, _paths, counts, filters) => {
-  if (filters.every((filter) => filter(filename, false))) counts.files++;
-};
-var pushFileFilter = (filename, paths, _counts, filters) => {
-  if (filters.every((filter) => filter(filename, false))) paths.push(filename);
-};
-var pushFileCount = (_filename, _paths, counts, _filters) => {
-  counts.files++;
-};
-var pushFile = (filename, paths) => {
-  paths.push(filename);
-};
-var empty$1 = () => {
-};
-function build$5(options) {
-  const { excludeFiles, filters, onlyCounts } = options;
-  if (excludeFiles) return empty$1;
-  if (filters && filters.length) return onlyCounts ? pushFileFilterAndCount : pushFileFilter;
-  else if (onlyCounts) return pushFileCount;
-  else return pushFile;
-}
-var getArray = (paths) => {
-  return paths;
-};
-var getArrayGroup = () => {
-  return [""].slice(0, 0);
-};
-function build$4(options) {
-  return options.group ? getArrayGroup : getArray;
-}
-var groupFiles = (groups, directory, files) => {
-  groups.push({
-    directory,
-    files,
-    dir: directory
-  });
-};
-var empty = () => {
-};
-function build$3(options) {
-  return options.group ? groupFiles : empty;
-}
-var resolveSymlinksAsync = function(path, state, callback$1) {
-  const { queue: queue2, fs, options: { suppressErrors } } = state;
-  queue2.enqueue();
-  fs.realpath(path, (error, resolvedPath) => {
-    if (error) return queue2.dequeue(suppressErrors ? null : error, state);
-    fs.stat(resolvedPath, (error$1, stat2) => {
-      if (error$1) return queue2.dequeue(suppressErrors ? null : error$1, state);
-      if (stat2.isDirectory() && isRecursive(path, resolvedPath, state)) return queue2.dequeue(null, state);
-      callback$1(stat2, resolvedPath);
-      queue2.dequeue(null, state);
-    });
-  });
-};
-var resolveSymlinks = function(path, state, callback$1) {
-  const { queue: queue2, fs, options: { suppressErrors } } = state;
-  queue2.enqueue();
-  try {
-    const resolvedPath = fs.realpathSync(path);
-    const stat2 = fs.statSync(resolvedPath);
-    if (stat2.isDirectory() && isRecursive(path, resolvedPath, state)) return;
-    callback$1(stat2, resolvedPath);
-  } catch (e2) {
-    if (!suppressErrors) throw e2;
-  }
-};
-function build$2(options, isSynchronous) {
-  if (!options.resolveSymlinks || options.excludeSymlinks) return null;
-  return isSynchronous ? resolveSymlinks : resolveSymlinksAsync;
-}
-function isRecursive(path, resolved, state) {
-  if (state.options.useRealPaths) return isRecursiveUsingRealPaths(resolved, state);
-  let parent = dirname(path);
-  let depth = 1;
-  while (parent !== state.root && depth < 2) {
-    const resolvedPath = state.symlinks.get(parent);
-    const isSameRoot = !!resolvedPath && (resolvedPath === resolved || resolvedPath.startsWith(resolved) || resolved.startsWith(resolvedPath));
-    if (isSameRoot) depth++;
-    else parent = dirname(parent);
-  }
-  state.symlinks.set(path, resolved);
-  return depth > 1;
-}
-function isRecursiveUsingRealPaths(resolved, state) {
-  return state.visited.includes(resolved + state.options.pathSeparator);
-}
-var onlyCountsSync = (state) => {
-  return state.counts;
-};
-var groupsSync = (state) => {
-  return state.groups;
-};
-var defaultSync = (state) => {
-  return state.paths;
-};
-var limitFilesSync = (state) => {
-  return state.paths.slice(0, state.options.maxFiles);
-};
-var onlyCountsAsync = (state, error, callback$1) => {
-  report(error, callback$1, state.counts, state.options.suppressErrors);
-  return null;
-};
-var defaultAsync = (state, error, callback$1) => {
-  report(error, callback$1, state.paths, state.options.suppressErrors);
-  return null;
-};
-var limitFilesAsync = (state, error, callback$1) => {
-  report(error, callback$1, state.paths.slice(0, state.options.maxFiles), state.options.suppressErrors);
-  return null;
-};
-var groupsAsync = (state, error, callback$1) => {
-  report(error, callback$1, state.groups, state.options.suppressErrors);
-  return null;
-};
-function report(error, callback$1, output, suppressErrors) {
-  if (error && !suppressErrors) callback$1(error, output);
-  else callback$1(null, output);
-}
-function build$1(options, isSynchronous) {
-  const { onlyCounts, group, maxFiles } = options;
-  if (onlyCounts) return isSynchronous ? onlyCountsSync : onlyCountsAsync;
-  else if (group) return isSynchronous ? groupsSync : groupsAsync;
-  else if (maxFiles) return isSynchronous ? limitFilesSync : limitFilesAsync;
-  else return isSynchronous ? defaultSync : defaultAsync;
-}
-var readdirOpts = { withFileTypes: true };
-var walkAsync = (state, crawlPath, directoryPath, currentDepth, callback$1) => {
-  state.queue.enqueue();
-  if (currentDepth < 0) return state.queue.dequeue(null, state);
-  const { fs } = state;
-  state.visited.push(crawlPath);
-  state.counts.directories++;
-  fs.readdir(crawlPath || ".", readdirOpts, (error, entries = []) => {
-    callback$1(entries, directoryPath, currentDepth);
-    state.queue.dequeue(state.options.suppressErrors ? null : error, state);
-  });
-};
-var walkSync = (state, crawlPath, directoryPath, currentDepth, callback$1) => {
-  const { fs } = state;
-  if (currentDepth < 0) return;
-  state.visited.push(crawlPath);
-  state.counts.directories++;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(crawlPath || ".", readdirOpts);
-  } catch (e2) {
-    if (!state.options.suppressErrors) throw e2;
-  }
-  callback$1(entries, directoryPath, currentDepth);
-};
-function build(isSynchronous) {
-  return isSynchronous ? walkSync : walkAsync;
-}
-var Queue = class {
-  count = 0;
-  constructor(onQueueEmpty) {
-    this.onQueueEmpty = onQueueEmpty;
-  }
-  enqueue() {
-    this.count++;
-    return this.count;
-  }
-  dequeue(error, output) {
-    if (this.onQueueEmpty && (--this.count <= 0 || error)) {
-      this.onQueueEmpty(error, output);
-      if (error) {
-        output.controller.abort();
-        this.onQueueEmpty = void 0;
-      }
-    }
-  }
-};
-var Counter = class {
-  _files = 0;
-  _directories = 0;
-  set files(num) {
-    this._files = num;
-  }
-  get files() {
-    return this._files;
-  }
-  set directories(num) {
-    this._directories = num;
-  }
-  get directories() {
-    return this._directories;
-  }
-  /**
-  * @deprecated use `directories` instead
-  */
-  /* c8 ignore next 3 */
-  get dirs() {
-    return this._directories;
-  }
-};
-var Aborter = class {
-  aborted = false;
-  abort() {
-    this.aborted = true;
-  }
-};
-var Walker = class {
-  root;
-  isSynchronous;
-  state;
-  joinPath;
-  pushDirectory;
-  pushFile;
-  getArray;
-  groupFiles;
-  resolveSymlink;
-  walkDirectory;
-  callbackInvoker;
-  constructor(root, options, callback$1) {
-    this.isSynchronous = !callback$1;
-    this.callbackInvoker = build$1(options, this.isSynchronous);
-    this.root = normalizePath(root, options);
-    this.state = {
-      root: isRootDirectory(this.root) ? this.root : this.root.slice(0, -1),
-      paths: [""].slice(0, 0),
-      groups: [],
-      counts: new Counter(),
-      options,
-      queue: new Queue((error, state) => this.callbackInvoker(state, error, callback$1)),
-      symlinks: /* @__PURE__ */ new Map(),
-      visited: [""].slice(0, 0),
-      controller: new Aborter(),
-      fs: options.fs || nativeFs
-    };
-    this.joinPath = build$7(this.root, options);
-    this.pushDirectory = build$6(this.root, options);
-    this.pushFile = build$5(options);
-    this.getArray = build$4(options);
-    this.groupFiles = build$3(options);
-    this.resolveSymlink = build$2(options, this.isSynchronous);
-    this.walkDirectory = build(this.isSynchronous);
-  }
-  start() {
-    this.pushDirectory(this.root, this.state.paths, this.state.options.filters);
-    this.walkDirectory(this.state, this.root, this.root, this.state.options.maxDepth, this.walk);
-    return this.isSynchronous ? this.callbackInvoker(this.state, null) : null;
-  }
-  walk = (entries, directoryPath, depth) => {
-    const { paths, options: { filters, resolveSymlinks: resolveSymlinks$1, excludeSymlinks, exclude, maxFiles, signal, useRealPaths, pathSeparator }, controller } = this.state;
-    if (controller.aborted || signal && signal.aborted || maxFiles && paths.length > maxFiles) return;
-    const files = this.getArray(this.state.paths);
-    for (let i2 = 0; i2 < entries.length; ++i2) {
-      const entry = entries[i2];
-      if (entry.isFile() || entry.isSymbolicLink() && !resolveSymlinks$1 && !excludeSymlinks) {
-        const filename = this.joinPath(entry.name, directoryPath);
-        this.pushFile(filename, files, this.state.counts, filters);
-      } else if (entry.isDirectory()) {
-        let path = joinDirectoryPath(entry.name, directoryPath, this.state.options.pathSeparator);
-        if (exclude && exclude(entry.name, path)) continue;
-        this.pushDirectory(path, paths, filters);
-        this.walkDirectory(this.state, path, path, depth - 1, this.walk);
-      } else if (this.resolveSymlink && entry.isSymbolicLink()) {
-        let path = joinPathWithBasePath(entry.name, directoryPath);
-        this.resolveSymlink(path, this.state, (stat2, resolvedPath) => {
-          if (stat2.isDirectory()) {
-            resolvedPath = normalizePath(resolvedPath, this.state.options);
-            if (exclude && exclude(entry.name, useRealPaths ? resolvedPath : path + pathSeparator)) return;
-            this.walkDirectory(this.state, resolvedPath, useRealPaths ? resolvedPath : path + pathSeparator, depth - 1, this.walk);
-          } else {
-            resolvedPath = useRealPaths ? resolvedPath : path;
-            const filename = basename(resolvedPath);
-            const directoryPath$1 = normalizePath(dirname(resolvedPath), this.state.options);
-            resolvedPath = this.joinPath(filename, directoryPath$1);
-            this.pushFile(resolvedPath, files, this.state.counts, filters);
-          }
-        });
-      }
-    }
-    this.groupFiles(this.state.groups, directoryPath, files);
-  };
-};
-function promise(root, options) {
-  return new Promise((resolve$1, reject) => {
-    callback(root, options, (err, output) => {
-      if (err) return reject(err);
-      resolve$1(output);
-    });
-  });
-}
-function callback(root, options, callback$1) {
-  let walker = new Walker(root, options, callback$1);
-  walker.start();
-}
-function sync(root, options) {
-  const walker = new Walker(root, options);
-  return walker.start();
-}
-var APIBuilder = class {
-  constructor(root, options) {
-    this.root = root;
-    this.options = options;
-  }
-  withPromise() {
-    return promise(this.root, this.options);
-  }
-  withCallback(cb) {
-    callback(this.root, this.options, cb);
-  }
-  sync() {
-    return sync(this.root, this.options);
-  }
-};
-var pm = null;
-try {
-  __require2.resolve("picomatch");
-  pm = __require2("picomatch");
-} catch {
-}
-var Builder = class {
-  globCache = {};
-  options = {
-    maxDepth: Infinity,
-    suppressErrors: true,
-    pathSeparator: sep2,
-    filters: []
-  };
-  globFunction;
-  constructor(options) {
-    this.options = {
-      ...this.options,
-      ...options
-    };
-    this.globFunction = this.options.globFunction;
-  }
-  group() {
-    this.options.group = true;
-    return this;
-  }
-  withPathSeparator(separator) {
-    this.options.pathSeparator = separator;
-    return this;
-  }
-  withBasePath() {
-    this.options.includeBasePath = true;
-    return this;
-  }
-  withRelativePaths() {
-    this.options.relativePaths = true;
-    return this;
-  }
-  withDirs() {
-    this.options.includeDirs = true;
-    return this;
-  }
-  withMaxDepth(depth) {
-    this.options.maxDepth = depth;
-    return this;
-  }
-  withMaxFiles(limit) {
-    this.options.maxFiles = limit;
-    return this;
-  }
-  withFullPaths() {
-    this.options.resolvePaths = true;
-    this.options.includeBasePath = true;
-    return this;
-  }
-  withErrors() {
-    this.options.suppressErrors = false;
-    return this;
-  }
-  withSymlinks({ resolvePaths = true } = {}) {
-    this.options.resolveSymlinks = true;
-    this.options.useRealPaths = resolvePaths;
-    return this.withFullPaths();
-  }
-  withAbortSignal(signal) {
-    this.options.signal = signal;
-    return this;
-  }
-  normalize() {
-    this.options.normalizePath = true;
-    return this;
-  }
-  filter(predicate) {
-    this.options.filters.push(predicate);
-    return this;
-  }
-  onlyDirs() {
-    this.options.excludeFiles = true;
-    this.options.includeDirs = true;
-    return this;
-  }
-  exclude(predicate) {
-    this.options.exclude = predicate;
-    return this;
-  }
-  onlyCounts() {
-    this.options.onlyCounts = true;
-    return this;
-  }
-  crawl(root) {
-    return new APIBuilder(root || ".", this.options);
-  }
-  withGlobFunction(fn) {
-    this.globFunction = fn;
-    return this;
-  }
-  /**
-  * @deprecated Pass options using the constructor instead:
-  * ```ts
-  * new fdir(options).crawl("/path/to/root");
-  * ```
-  * This method will be removed in v7.0
-  */
-  /* c8 ignore next 4 */
-  crawlWithOptions(root, options) {
-    this.options = {
-      ...this.options,
-      ...options
-    };
-    return new APIBuilder(root || ".", this.options);
-  }
-  glob(...patterns) {
-    if (this.globFunction) return this.globWithOptions(patterns);
-    return this.globWithOptions(patterns, ...[{ dot: true }]);
-  }
-  globWithOptions(patterns, ...options) {
-    const globFn = this.globFunction || pm;
-    if (!globFn) throw new Error("Please specify a glob function to use glob matching.");
-    var isMatch = this.globCache[patterns.join("\0")];
-    if (!isMatch) {
-      isMatch = globFn(patterns, ...options);
-      this.globCache[patterns.join("\0")] = isMatch;
-    }
-    this.options.filters.push((path) => isMatch(path));
-    return this;
-  }
-};
-
-// ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
-var import_picomatch = __toESM(require_picomatch2(), 1);
-var isReadonlyArray = Array.isArray;
-var BACKSLASHES = /\\/g;
-var DRIVE_RELATIVE_PATH = /^[A-Za-z]:$/;
-var isWin = process.platform === "win32";
-var ONLY_PARENT_DIRECTORIES = /^(\/?\.\.)+$/;
-function getPartialMatcher(patterns, options = {}) {
-  const patternsCount = patterns.length;
-  const patternsParts = Array(patternsCount);
-  const matchers = Array(patternsCount);
-  let i2, j;
-  for (i2 = 0; i2 < patternsCount; i2++) {
-    const parts = splitPattern(patterns[i2]);
-    patternsParts[i2] = parts;
-    const partsCount = parts.length;
-    const partMatchers = Array(partsCount);
-    for (j = 0; j < partsCount; j++) partMatchers[j] = (0, import_picomatch.default)(parts[j], options);
-    matchers[i2] = partMatchers;
-  }
-  return (input) => {
-    const inputParts = input.split("/");
-    if (inputParts[0] === ".." && ONLY_PARENT_DIRECTORIES.test(input)) return true;
-    for (i2 = 0; i2 < patternsCount; i2++) {
-      const patternParts = patternsParts[i2];
-      const matcher = matchers[i2];
-      const inputPatternCount = inputParts.length;
-      const minParts = Math.min(inputPatternCount, patternParts.length);
-      j = 0;
-      while (j < minParts) {
-        const part = patternParts[j];
-        if (part.includes("/")) return true;
-        if (!matcher[j](inputParts[j])) break;
-        if (!options.noglobstar && part === "**") return true;
-        j++;
-      }
-      if (j === inputPatternCount) return true;
-    }
-    return false;
-  };
-}
-var WIN32_ROOT_DIR = /^[A-Z]:\/$/i;
-var isRoot = isWin ? (p) => WIN32_ROOT_DIR.test(p) : (p) => p === "/";
-function buildFormat(cwd, root, absolute) {
-  if (cwd === root || root.startsWith(`${cwd}/`)) {
-    if (absolute) {
-      const start = cwd.length + +!isRoot(cwd);
-      return (p, isDir) => p.slice(start, isDir ? -1 : void 0) || ".";
-    }
-    const prefix = root.slice(cwd.length + 1);
-    if (prefix) return (p, isDir) => {
-      if (p === ".") return prefix;
-      const result = `${prefix}/${p}`;
-      return isDir ? result.slice(0, -1) : result;
-    };
-    return (p, isDir) => isDir && p !== "." ? p.slice(0, -1) : p;
-  }
-  if (absolute) return (p) => posix.relative(cwd, p) || ".";
-  return (p) => posix.relative(cwd, `${root}/${p}`) || ".";
-}
-function buildRelative(cwd, root) {
-  if (root.startsWith(`${cwd}/`)) {
-    const prefix = root.slice(cwd.length + 1);
-    return (p) => `${prefix}/${p}`;
-  }
-  return (p) => {
-    const result = posix.relative(cwd, `${root}/${p}`);
-    return p[p.length - 1] === "/" && result !== "" ? `${result}/` : result || ".";
-  };
-}
-function ensureNonDriveRelativePath(path) {
-  return path.replace(DRIVE_RELATIVE_PATH, (match) => `${match}/`);
-}
-var splitPatternOptions = { parts: true };
-function splitPattern(path) {
-  var _result$parts;
-  const result = import_picomatch.default.scan(path, splitPatternOptions);
-  return ((_result$parts = result.parts) === null || _result$parts === void 0 ? void 0 : _result$parts.length) ? result.parts : [path];
-}
-var POSIX_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}*?|]|^!|[!+@](?=\()|\\(?![()[\]{}!*+?@|]))/g;
-var WIN32_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}]|^!|[!+@](?=\())/g;
-var escapePosixPath = (path) => path.replace(POSIX_UNESCAPED_GLOB_SYMBOLS, "\\$&");
-var escapeWin32Path = (path) => path.replace(WIN32_UNESCAPED_GLOB_SYMBOLS, "\\$&");
-var escapePath = isWin ? escapeWin32Path : escapePosixPath;
-function isDynamicPattern(pattern, options) {
-  if ((options === null || options === void 0 ? void 0 : options.caseSensitiveMatch) === false) return true;
-  const scan2 = import_picomatch.default.scan(pattern);
-  return scan2.isGlob || scan2.negated;
-}
-function log(...tasks) {
-  console.log(`[tinyglobby ${(/* @__PURE__ */ new Date()).toLocaleTimeString("es")}]`, ...tasks);
-}
-function ensureStringArray(value) {
-  return typeof value === "string" ? [value] : value !== null && value !== void 0 ? value : [];
-}
-var PARENT_DIRECTORY = /^(\/?\.\.)+/;
-var ESCAPING_BACKSLASHES = /\\(?=[()[\]{}!*+?@|])/g;
-function normalizePattern(pattern, opts, props, isIgnore) {
-  var _PARENT_DIRECTORY$exe;
-  const cwd = opts.cwd;
-  let result = pattern;
-  if (pattern[pattern.length - 1] === "/") result = pattern.slice(0, -1);
-  if (result[result.length - 1] !== "*" && opts.expandDirectories) result += "/**";
-  const escapedCwd = escapePath(cwd);
-  result = isAbsolute(result.replace(ESCAPING_BACKSLASHES, "")) ? posix.relative(escapedCwd, result) : posix.normalize(result);
-  const parentDir = (_PARENT_DIRECTORY$exe = PARENT_DIRECTORY.exec(result)) === null || _PARENT_DIRECTORY$exe === void 0 ? void 0 : _PARENT_DIRECTORY$exe[0];
-  const parts = splitPattern(result);
-  if (parentDir) {
-    const n2 = (parentDir.length + 1) / 3;
-    let i2 = 0;
-    const cwdParts = escapedCwd.split("/");
-    while (i2 < n2 && parts[i2 + n2] === cwdParts[cwdParts.length + i2 - n2]) {
-      result = result.slice(0, (n2 - i2 - 1) * 3) + result.slice((n2 - i2) * 3 + parts[i2 + n2].length + 1) || ".";
-      i2++;
-    }
-    const potentialRoot = posix.join(cwd, parentDir.slice(i2 * 3));
-    if (potentialRoot[0] !== "." && props.root.length > potentialRoot.length) {
-      props.root = ensureNonDriveRelativePath(potentialRoot);
-      props.depthOffset = -n2 + i2;
-    }
-  }
-  if (!isIgnore && props.depthOffset >= 0) {
-    var _props$commonPath;
-    (_props$commonPath = props.commonPath) !== null && _props$commonPath !== void 0 || (props.commonPath = parts);
-    const newCommonPath = [];
-    const length = Math.min(props.commonPath.length, parts.length);
-    for (let i2 = 0; i2 < length; i2++) {
-      const part = parts[i2];
-      if (part === "**" && !parts[i2 + 1]) {
-        newCommonPath.pop();
-        break;
-      }
-      if (i2 === parts.length - 1 || part !== props.commonPath[i2] || isDynamicPattern(part)) break;
-      newCommonPath.push(part);
-    }
-    props.depthOffset = newCommonPath.length;
-    props.commonPath = newCommonPath;
-    props.root = ensureNonDriveRelativePath(newCommonPath.length > 0 ? posix.join(cwd, ...newCommonPath) : cwd);
-  }
-  return result;
-}
-function processPatterns(options, patterns, props) {
-  const matchPatterns = [];
-  const ignorePatterns = [];
-  for (const pattern of options.ignore) {
-    if (!pattern) continue;
-    if (pattern[0] !== "!" || pattern[1] === "(") ignorePatterns.push(normalizePattern(pattern, options, props, true));
-  }
-  for (const pattern of patterns) {
-    if (!pattern) continue;
-    if (pattern[0] !== "!" || pattern[1] === "(") matchPatterns.push(normalizePattern(pattern, options, props, false));
-    else if (pattern[1] !== "!" || pattern[2] === "(") ignorePatterns.push(normalizePattern(pattern.slice(1), options, props, true));
-  }
-  return {
-    match: matchPatterns,
-    ignore: ignorePatterns
-  };
-}
-function buildCrawler(options, patterns) {
-  const cwd = options.cwd;
-  const props = {
-    root: cwd,
-    depthOffset: 0
-  };
-  const processed = processPatterns(options, patterns, props);
-  if (options.debug) log("internal processing patterns:", processed);
-  const { absolute, caseSensitiveMatch, debug, dot, followSymbolicLinks, onlyDirectories } = options;
-  const root = props.root.replace(BACKSLASHES, "");
-  const matchOptions = {
-    dot,
-    nobrace: options.braceExpansion === false,
-    nocase: !caseSensitiveMatch,
-    noextglob: options.extglob === false,
-    noglobstar: options.globstar === false,
-    posix: true
-  };
-  const matcher = (0, import_picomatch.default)(processed.match, matchOptions);
-  const ignore2 = (0, import_picomatch.default)(processed.ignore, matchOptions);
-  const partialMatcher = getPartialMatcher(processed.match, matchOptions);
-  const format2 = buildFormat(cwd, root, absolute);
-  const excludeFormatter = absolute ? format2 : buildFormat(cwd, root, true);
-  const excludePredicate = (_3, p) => {
-    const relativePath = excludeFormatter(p, true);
-    return relativePath !== "." && !partialMatcher(relativePath) || ignore2(relativePath);
-  };
-  let maxDepth;
-  if (options.deep !== void 0) maxDepth = Math.round(options.deep - props.depthOffset);
-  const crawler = new Builder({
-    filters: [debug ? (p, isDirectory2) => {
-      const path = format2(p, isDirectory2);
-      const matches2 = matcher(path) && !ignore2(path);
-      if (matches2) log(`matched ${path}`);
-      return matches2;
-    } : (p, isDirectory2) => {
-      const path = format2(p, isDirectory2);
-      return matcher(path) && !ignore2(path);
-    }],
-    exclude: debug ? (_3, p) => {
-      const skipped = excludePredicate(_3, p);
-      log(`${skipped ? "skipped" : "crawling"} ${p}`);
-      return skipped;
-    } : excludePredicate,
-    fs: options.fs,
-    pathSeparator: "/",
-    relativePaths: !absolute,
-    resolvePaths: absolute,
-    includeBasePath: absolute,
-    resolveSymlinks: followSymbolicLinks,
-    excludeSymlinks: !followSymbolicLinks,
-    excludeFiles: onlyDirectories,
-    includeDirs: onlyDirectories || !options.onlyFiles,
-    maxDepth,
-    signal: options.signal
-  }).crawl(root);
-  if (options.debug) log("internal properties:", {
-    ...props,
-    root
-  });
-  return [crawler, cwd !== root && !absolute && buildRelative(cwd, root)];
-}
-function formatPaths(paths, mapper) {
-  if (mapper) for (let i2 = paths.length - 1; i2 >= 0; i2--) paths[i2] = mapper(paths[i2]);
-  return paths;
-}
-var defaultOptions = {
-  caseSensitiveMatch: true,
-  debug: !!process.env.TINYGLOBBY_DEBUG,
-  expandDirectories: true,
-  followSymbolicLinks: true,
-  onlyFiles: true
-};
-function getOptions(options) {
-  const opts = Object.assign({}, options);
-  for (const key in defaultOptions) if (opts[key] === void 0) Object.assign(opts, { [key]: defaultOptions[key] });
-  opts.cwd = (opts.cwd instanceof URL ? fileURLToPath(opts.cwd) : resolve2(opts.cwd || process.cwd())).replace(BACKSLASHES, "/");
-  opts.ignore = ensureStringArray(opts.ignore);
-  opts.fs && (opts.fs = {
-    readdir: opts.fs.readdir || readdir,
-    readdirSync: opts.fs.readdirSync || readdirSync,
-    realpath: opts.fs.realpath || realpath,
-    realpathSync: opts.fs.realpathSync || realpathSync,
-    stat: opts.fs.stat || stat,
-    statSync: opts.fs.statSync || statSync
-  });
-  if (opts.debug) log("globbing with options:", opts);
-  return opts;
-}
-function getCrawler(globInput, inputOptions = {}) {
-  var _ref;
-  if (globInput && (inputOptions === null || inputOptions === void 0 ? void 0 : inputOptions.patterns)) throw new Error("Cannot pass patterns as both an argument and an option");
-  const isModern = isReadonlyArray(globInput) || typeof globInput === "string";
-  const patterns = ensureStringArray((_ref = isModern ? globInput : globInput.patterns) !== null && _ref !== void 0 ? _ref : "**/*");
-  const options = getOptions(isModern ? inputOptions : globInput);
-  return patterns.length > 0 ? buildCrawler(options, patterns) : [];
-}
-function globSync(globInput, options) {
-  const [crawler, relative3] = getCrawler(globInput, options);
-  return crawler ? formatPaths(crawler.sync(), relative3) : [];
-}
-
-// ../core/dist/index.js
-import { readFileSync as readFileSync4, statSync as statSync2 } from "fs";
-import { join as join3 } from "path";
 
 // ../kb-loader/dist/index.js
 import { readFileSync, readdirSync as readdirSync2 } from "fs";
@@ -14000,6 +14000,9 @@ function normaliseHost(host) {
   value = value.replace(/\.$/, "");
   return /^[a-z0-9.-]+$/.test(value) && value.includes(".") ? value : null;
 }
+function normalisePypiName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
 var STALE_AFTER_DAYS = 180;
 function loadKnowledgeBase(options = {}) {
   const kbPath = options.kbPath ?? defaultKbPath();
@@ -14026,7 +14029,7 @@ function loadKnowledgeBase(options = {}) {
     for (const alias of vendor.aliases.hosts) hosts.add(vendor, alias);
   }
   const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v2) => v2.toUpperCase()));
-  return {
+  const kb = {
     version,
     vendors,
     byId,
@@ -14047,7 +14050,7 @@ function loadKnowledgeBase(options = {}) {
      * may pass its own `kbPath`.
      */
     lookupPackage(ecosystem, name) {
-      const key = `${ecosystem}:${name}`;
+      const key = `${ecosystem}:${ecosystem === "pypi" ? normalisePypiName(name) : name}`;
       const exact = packageIndex.get(key);
       if (exact) return exact;
       const matched = scopeIndex.filter((entry) => key.startsWith(entry.scope));
@@ -14059,6 +14062,22 @@ function loadKnowledgeBase(options = {}) {
     },
     lookupHost(host) {
       return hosts.lookup(host);
+    },
+    /**
+     * A question like "is `boto3` a known vendor?" does not say which registry
+     * it means. Trying npm alone answered "no entry" for a vendor the knowledge
+     * base carries under PyPI. Two registries can use one name for two
+     * different projects, though, and naming either vendor then would be a
+     * guess, so that case answers nothing -- the same refusal `lookupPackage`
+     * makes for two overlapping scopes.
+     */
+    findVendor(query) {
+      const byVendorId = byId.get(query);
+      if (byVendorId) return byVendorId;
+      const npm = kb.lookupPackage("npm", query)?.vendor;
+      const pypi = kb.lookupPackage("pypi", query)?.vendor;
+      if (npm && pypi && npm.id !== pypi.id) return null;
+      return npm ?? pypi ?? hosts.lookup(query)?.vendor ?? null;
     },
     decisionFor(country) {
       const upper = country.toUpperCase();
@@ -14074,6 +14093,7 @@ function loadKnowledgeBase(options = {}) {
       return vendors.filter((v2) => Date.parse(v2.lastVerified) < cutoff);
     }
   };
+  return kb;
 }
 function defaultKbPath() {
   const here = dirname2(fileURLToPath2(import.meta.url));
@@ -14088,9 +14108,12 @@ function defaultKbPath() {
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync3 } from "fs";
-import { basename as basename22, join as join22 } from "path";
 var import_yaml3 = __toESM(require_dist(), 1);
+import { readFileSync as readFileSync5, statSync as statSync2 } from "fs";
+import { join as join4 } from "path";
+import { readFileSync as readFileSync4 } from "fs";
+import { basename as basename22, join as join3 } from "path";
+var import_yaml4 = __toESM(require_dist(), 1);
 import { createHash } from "crypto";
 var FINDINGS_SCHEMA_VERSION = "1.1.0";
 var TAGS = ["gdpr", "data-transfer", "third-party"];
@@ -14171,6 +14194,155 @@ var RULES = {
 var RULE_IDS = Object.keys(RULES);
 var DISCLAIMER = "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.";
 var DISCLAIMER_SHORT = "Detection only - not a compliance assessment.";
+var DEFAULT_EXCLUDES = [
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/out/**",
+  "**/.next/**",
+  "**/.nuxt/**",
+  "**/.svelte-kit/**",
+  "**/coverage/**",
+  "**/vendor/**",
+  // Installed Python packages, for the same reason as node_modules: they hold
+  // every dependency's own manifests, which describe what *those* use, and an
+  // editable install's pyproject.toml reads as this repository's own. Dot
+  // directories (.venv, .tox, .nox) are never walked at all, and a virtualenv
+  // under any other name is pruned by its pyvenv.cfg in walk().
+  "**/venv/**",
+  "**/site-packages/**",
+  "**/dist-packages/**",
+  "**/__pypackages__/**",
+  "**/*.min.js",
+  "**/*.bundle.js",
+  "**/*.map"
+];
+var MANIFEST_PATTERNS = [
+  "**/package.json",
+  "**/package-lock.json",
+  "**/npm-shrinkwrap.json",
+  "**/pnpm-lock.yaml",
+  "**/yarn.lock",
+  "**/pyproject.toml",
+  "**/requirements.txt",
+  "**/requirements-*.txt",
+  "**/requirements_*.txt",
+  "**/requirements/*.txt"
+];
+var SOURCE_PATTERNS = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
+var INFRA_PATTERNS = [
+  "**/vercel.json",
+  "**/serverless.{yml,yaml}",
+  "**/fly.toml",
+  "**/*.tf"
+];
+function excludeProblem(globs) {
+  const notString = globs.filter((glob) => typeof glob !== "string");
+  if (notString.length > 0) {
+    return `exclude entries must be glob strings, got ${notString.map((g3) => JSON.stringify(g3)).join(", ")}`;
+  }
+  const negated = globs.filter((glob) => glob.startsWith("!"));
+  if (negated.length > 0) {
+    return `exclude globs cannot be negated (${negated.join(", ")}); list only what to skip`;
+  }
+  return null;
+}
+function walk(options) {
+  const { root, exclude = [], respectIgnoreFiles = true } = options;
+  const virtualenvs = globSync("**/pyvenv.cfg", {
+    cwd: root,
+    ignore: [...DEFAULT_EXCLUDES, ...exclude],
+    dot: false
+  }).map(
+    (p) => p.split(sep3).join("/").replace(/\/?pyvenv\.cfg$/, "")
+  ).filter((dir) => dir !== "").map((dir) => `${dir}/**`);
+  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
+  const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
+  const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
+  return {
+    manifests: collect(MANIFEST_PATTERNS),
+    sources: collect(SOURCE_PATTERNS),
+    infrastructure: collect(INFRA_PATTERNS)
+  };
+}
+function buildIgnoreFilter(root) {
+  const matcher = (0, import_ignore.default)();
+  let found = false;
+  for (const name of [".gitignore", ".egressaignore"]) {
+    try {
+      matcher.add(readFileSync3(`${root}/${name}`, "utf8"));
+      found = true;
+    } catch {
+    }
+  }
+  return found ? matcher : null;
+}
+var ConfigError = class extends Error {
+  name = "ConfigError";
+};
+function loadConfig(root, explicitPath) {
+  const path = explicitPath ?? join2(root, ".egressa.yml");
+  if (!existsSync(path)) return {};
+  let parsed;
+  try {
+    parsed = (0, import_yaml.parse)(readFileSync2(path, "utf8"));
+  } catch (error) {
+    throw new ConfigError(`${path}: ${error.message}`);
+  }
+  if (!parsed || typeof parsed !== "object") return {};
+  const exclude = parsed.exclude;
+  if (typeof exclude === "string") parsed.exclude = [exclude];
+  else if (exclude !== void 0 && exclude !== null && !Array.isArray(exclude)) {
+    throw new ConfigError(`${path}: exclude must be a glob or a list of globs`);
+  }
+  const excludeError = excludeProblem(parsed.exclude ?? []);
+  if (excludeError) throw new ConfigError(`${path}: ${excludeError}`);
+  for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
+    if (!suppression?.reason || String(suppression.reason).trim() === "") {
+      throw new ConfigError(
+        `${path}: suppression ${index + 1} has no reason. Every suppression must say why it was accepted.`
+      );
+    }
+  }
+  return { ...parsed, source: relative2(root, path) || path };
+}
+function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
+  const rules = config.suppressions ?? [];
+  if (rules.length === 0) return findings;
+  return findings.flatMap((finding) => {
+    const rule = rules.find((r3) => matches(r3, finding));
+    if (!rule) return [finding];
+    const expired = rule.expires !== void 0 && Date.parse(rule.expires) < now.getTime();
+    const suppression = {
+      reason: rule.reason,
+      ...rule.acceptedBy ? { acceptedBy: rule.acceptedBy } : {},
+      ...rule.expires ? { expires: rule.expires } : {},
+      expired,
+      source: "config"
+    };
+    const marked = { ...finding, suppressed: !expired, suppression };
+    return expired ? [marked, expiredNote(finding, rule)] : [marked];
+  });
+}
+function matches(rule, finding) {
+  if (rule.vendor && finding.vendor?.id !== rule.vendor) return false;
+  if (rule.rule && finding.ruleId !== rule.rule) return false;
+  return Boolean(rule.vendor || rule.rule);
+}
+function expiredNote(finding, rule) {
+  return {
+    ...finding,
+    id: `${finding.id}-expired`,
+    ruleId: "config/expired-suppression",
+    severity: "note",
+    suppressed: false,
+    suppression: null,
+    remediation: {
+      summary: `The suppression for ${finding.vendor?.name ?? finding.ruleId} expired on ${rule.expires}. Review whether the original acceptance still holds, then extend or remove the entry.`,
+      links: []
+    }
+  };
+}
 var LineIndex = class {
   constructor(text) {
     this.text = text;
@@ -14373,7 +14545,7 @@ function readWorkspaceGlobs(root) {
 function parsePnpmLock(text, manifestPath) {
   const index = new LineIndex(text);
   const errors = [];
-  const doc = (0, import_yaml.parseDocument)(text, { keepSourceTokens: true });
+  const doc = (0, import_yaml2.parseDocument)(text, { keepSourceTokens: true });
   if (doc.errors.length > 0) {
     return {
       dependencies: [],
@@ -14389,9 +14561,9 @@ function parsePnpmLock(text, manifestPath) {
   );
   const packages = doc.get("packages");
   const dependencies = [];
-  if ((0, import_yaml.isMap)(packages)) {
+  if ((0, import_yaml2.isMap)(packages)) {
     for (const item of packages.items) {
-      if (!(0, import_yaml.isPair)(item) || !(0, import_yaml.isScalar)(item.key)) continue;
+      if (!(0, import_yaml2.isPair)(item) || !(0, import_yaml2.isScalar)(item.key)) continue;
       const rawKey = String(item.key.value);
       const parsed = parsePackageKey(rawKey);
       if (!parsed) continue;
@@ -14430,9 +14602,9 @@ function parsePackageKey(raw) {
 function collectDirectNames(importers, deps, devDeps) {
   const runtime = /* @__PURE__ */ new Set();
   const dev = /* @__PURE__ */ new Set();
-  if ((0, import_yaml.isMap)(importers)) {
+  if ((0, import_yaml2.isMap)(importers)) {
     for (const importer of importers.items) {
-      if (!(0, import_yaml.isPair)(importer)) continue;
+      if (!(0, import_yaml2.isPair)(importer)) continue;
       addNames(
         runtime,
         importer.value?.get?.("dependencies")
@@ -14445,13 +14617,10 @@ function collectDirectNames(importers, deps, devDeps) {
   return { runtime, dev };
 }
 function addNames(target, node) {
-  if (!(0, import_yaml.isMap)(node)) return;
+  if (!(0, import_yaml2.isMap)(node)) return;
   for (const item of node.items) {
-    if ((0, import_yaml.isPair)(item) && (0, import_yaml.isScalar)(item.key)) target.add(String(item.key.value));
+    if ((0, import_yaml2.isPair)(item) && (0, import_yaml2.isScalar)(item.key)) target.add(String(item.key.value));
   }
-}
-function normalisePypiName(name) {
-  return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 var DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
 function requirementName(text) {
@@ -14467,7 +14636,7 @@ function requirementName(text) {
     spec: (rest.split(";")[0] ?? "").trim()
   };
 }
-function record(index, path, offset, length, name, version, dev) {
+function record(index, path, offset, length, name, version, dev, direct = true, transitiveVia = []) {
   return {
     name,
     version,
@@ -14475,8 +14644,9 @@ function record(index, path, offset, length, name, version, dev) {
     manifestPath: path,
     loc: index.locationAt(path, offset, length),
     snippet: index.snippetAt(offset),
-    direct: true,
-    dev
+    direct,
+    dev,
+    ...transitiveVia.length > 0 ? { transitiveVia } : {}
   };
 }
 function isRequirementsFile(path) {
@@ -14492,11 +14662,16 @@ function isDevRequirementsFile(path) {
   const stem = file.replace(/\.txt$/i, "").replace(/^requirements[-_.]?/i, "");
   return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
 }
+var COMPILED_HEADER = /autogenerated by (?:pip-compile|uv via)/i;
+var SOURCE_ENTRY = /^-r\s+\S|\((?:pyproject\.toml|setup\.py|setup\.cfg)\)/;
 function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   const index = new LineIndex(text);
-  const dependencies = [];
+  const found = [];
+  let header = false;
   let offset = 0;
   let continuation = false;
+  let current = null;
+  let inViaBlock = false;
   for (const physical of text.split("\n")) {
     const lineOffset = offset;
     offset += physical.length + 1;
@@ -14504,17 +14679,68 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
     const continued = continuation;
     continuation = raw.trimEnd().endsWith("\\");
     if (continued) continue;
+    const comment = /^(\s*)#\s?(.*)$/.exec(raw);
+    if (comment) {
+      const [, indent = "", body = ""] = comment;
+      if (COMPILED_HEADER.test(body)) header = true;
+      if (indent === "" || !current) {
+        current = null;
+        inViaBlock = false;
+        continue;
+      }
+      const via = /^via\b\s*(.*)$/.exec(body.trim());
+      if (via) {
+        current.via ??= [];
+        current.via.push(...viaEntries(via[1] ?? ""));
+        inViaBlock = (via[1] ?? "").trim() === "";
+      } else if (inViaBlock && body.trim() !== "") {
+        current.via?.push(body.trim());
+      }
+      continue;
+    }
+    if (raw.trim() === "") {
+      current = null;
+      inViaBlock = false;
+      continue;
+    }
+    const inline = /(?:^|\s)#\s*(.*)$/.exec(raw)?.[1] ?? "";
     const line = raw.replace(/(^|\s)#.*$/, "").replace(/\\\s*$/, "");
+    current = null;
+    inViaBlock = false;
     if (line.trim() === "" || line.trim().startsWith("-")) continue;
     const requirement = requirementName(line);
     if (!requirement) continue;
-    const at = lineOffset + requirement.at;
     const written = line.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
-    dependencies.push(
-      record(index, path, at, written.length, requirement.name, requirement.spec, dev)
-    );
+    const inlineVia = /^via\b\s*(.*)$/.exec(inline.trim());
+    current = {
+      at: lineOffset + requirement.at,
+      length: written.length,
+      name: requirement.name,
+      spec: requirement.spec,
+      via: inlineVia ? viaEntries(inlineVia[1] ?? "") : null
+    };
+    found.push(current);
   }
-  return { dependencies, errors: [] };
+  const annotated = found.filter((f3) => f3.via !== null).length;
+  const compiled = header || found.length > 0 && annotated === found.length;
+  const errors = [];
+  const unannotated = header && annotated === 0 && found.length > 0;
+  if (unannotated) {
+    errors.push({
+      file: path,
+      message: "compiled without `# via` annotations, so its declared packages cannot be told from transitive ones; none is attributed. Scan the source file it was compiled from.",
+      fatal: false
+    });
+  }
+  const dependencies = found.map((f3) => {
+    const direct = !unannotated && (!compiled || f3.via === null || f3.via.some((entry) => SOURCE_ENTRY.test(entry)));
+    const parents = direct ? [] : (f3.via ?? []).filter((entry) => !entry.startsWith("-") && !SOURCE_ENTRY.test(entry)).map((entry) => normalisePypiName(entry.split(/\s/)[0] ?? entry));
+    return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, parents);
+  });
+  return { dependencies, errors };
+}
+function viaEntries(text) {
+  return text.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
 }
 function tokenise(text) {
   const tokens = [];
@@ -14744,7 +14970,7 @@ function parseYarnClassicLock(text, manifestPath) {
 }
 function parseYarnBerryLock(text, manifestPath) {
   const index = new LineIndex(text);
-  const doc = (0, import_yaml2.parseDocument)(text);
+  const doc = (0, import_yaml3.parseDocument)(text);
   if (doc.errors.length > 0) {
     return {
       dependencies: [],
@@ -14755,9 +14981,9 @@ function parseYarnBerryLock(text, manifestPath) {
   }
   const dependencies = [];
   const contents = doc.contents;
-  if (!(0, import_yaml2.isMap)(contents)) return { dependencies, errors: [] };
+  if (!(0, import_yaml3.isMap)(contents)) return { dependencies, errors: [] };
   for (const item of contents.items) {
-    if (!(0, import_yaml2.isPair)(item) || !(0, import_yaml2.isScalar)(item.key)) continue;
+    if (!(0, import_yaml3.isPair)(item) || !(0, import_yaml3.isScalar)(item.key)) continue;
     const key = String(item.key.value);
     if (key === "__metadata") continue;
     const value = item.value;
@@ -14801,7 +15027,7 @@ function analyzeManifests(options) {
   for (const path of manifestPaths) {
     let text;
     try {
-      text = readFileSync2(join2(root, path), "utf8");
+      text = readFileSync32(join22(root, path), "utf8");
     } catch (error) {
       errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
       continue;
@@ -14860,89 +15086,6 @@ function dedupe(records) {
   return out.sort(
     (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
   );
-}
-var DEFAULT_EXCLUDES = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/out/**",
-  "**/.next/**",
-  "**/.nuxt/**",
-  "**/.svelte-kit/**",
-  "**/coverage/**",
-  "**/vendor/**",
-  // Installed Python packages, for the same reason as node_modules: they hold
-  // every dependency's own manifests, which describe what *those* use, and an
-  // editable install's pyproject.toml reads as this repository's own. Dot
-  // directories (.venv, .tox, .nox) are never walked at all, and a virtualenv
-  // under any other name is pruned by its pyvenv.cfg in walk().
-  "**/venv/**",
-  "**/site-packages/**",
-  "**/dist-packages/**",
-  "**/__pypackages__/**",
-  "**/*.min.js",
-  "**/*.bundle.js",
-  "**/*.map"
-];
-var MANIFEST_PATTERNS = [
-  "**/package.json",
-  "**/package-lock.json",
-  "**/npm-shrinkwrap.json",
-  "**/pnpm-lock.yaml",
-  "**/yarn.lock",
-  "**/pyproject.toml",
-  "**/requirements.txt",
-  "**/requirements-*.txt",
-  "**/requirements_*.txt",
-  "**/requirements/*.txt"
-];
-var SOURCE_PATTERNS = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
-var INFRA_PATTERNS = [
-  "**/vercel.json",
-  "**/serverless.{yml,yaml}",
-  "**/fly.toml",
-  "**/*.tf"
-];
-function excludeProblem(globs) {
-  const notString = globs.filter((glob) => typeof glob !== "string");
-  if (notString.length > 0) {
-    return `exclude entries must be glob strings, got ${notString.map((g3) => JSON.stringify(g3)).join(", ")}`;
-  }
-  const negated = globs.filter((glob) => glob.startsWith("!"));
-  if (negated.length > 0) {
-    return `exclude globs cannot be negated (${negated.join(", ")}); list only what to skip`;
-  }
-  return null;
-}
-function walk(options) {
-  const { root, exclude = [], respectIgnoreFiles = true } = options;
-  const virtualenvs = globSync("**/pyvenv.cfg", {
-    cwd: root,
-    ignore: [...DEFAULT_EXCLUDES, ...exclude],
-    dot: false
-  }).map(
-    (p) => p.split(sep3).join("/").replace(/\/?pyvenv\.cfg$/, "")
-  ).filter((dir) => dir !== "").map((dir) => `${dir}/**`);
-  const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
-  const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
-  const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
-  return {
-    manifests: collect(MANIFEST_PATTERNS),
-    sources: collect(SOURCE_PATTERNS),
-    infrastructure: collect(INFRA_PATTERNS)
-  };
-}
-function buildIgnoreFilter(root) {
-  const matcher = (0, import_ignore.default)();
-  let found = false;
-  for (const name of [".gitignore", ".egressaignore"]) {
-    try {
-      matcher.add(readFileSync22(`${root}/${name}`, "utf8"));
-      found = true;
-    } catch {
-    }
-  }
-  return found ? matcher : null;
 }
 function resolveRegion(vendor, raw) {
   const code = raw.trim().toLowerCase();
@@ -15438,8 +15581,8 @@ function analyzeFile(text, filePath, extraSinks = []) {
       if (aliased) bindings.set(name, { ...aliased, declaredAt: node.start });
       continue;
     }
-    const literal = literalBindingFor(init2);
-    if (literal) bindings.set(name, { ...literal, declaredAt: node.start });
+    const literal2 = literalBindingFor(init2);
+    if (literal2) bindings.set(name, { ...literal2, declaredAt: node.start });
   }
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
@@ -15841,13 +15984,15 @@ function walk2(node, visit2) {
     walk2(candidate[key], visit2);
   }
 }
-function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed) {
+function regionsFromKeyLiterals(text, filePath, keys, provider, options) {
+  const { language, insideBlockNamed } = options;
   const index = new LineIndex(text);
   const out = [];
+  const value = language === "toml" ? `(?:"(${literal('"')})"|'(${literal("'")})')` : `"(${literal('"')})"`;
   const matchers = keys.map(
-    (key) => [key, new RegExp(`(^|[^A-Za-z0-9_-])${key}\\s*=\\s*"([^"\\\\$]+)"`, "g")]
+    (key) => [key, new RegExp(`(^|[^A-Za-z0-9_.-])${key}\\s*=\\s*${value}`, "g")]
   );
-  const scanner = { inBlockComment: false };
+  const state = { inBlockComment: false, stack: [] };
   let offset = 0;
   let depth = 0;
   let inBlock = insideBlockNamed === void 0;
@@ -15855,10 +16000,13 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
   for (const line of text.split("\n")) {
     const lineOffset = offset;
     offset += line.length + 1;
-    const { code, brace } = scanLine(line, scanner);
+    const { code, brace } = scanLine(line, state, language);
+    const first = line.search(/\S/);
+    if (insideBlockNamed === void 0 && first !== -1 && code[first] && line[first] === "[") {
+      break;
+    }
     let contentFrom = 0;
     if (insideBlockNamed !== void 0 && !inBlock) {
-      const first = line.search(/\S/);
       const header = line.slice(Math.max(first, 0)).match(/^([a-z_]+)\s+"([^"]+)"\s*\{/);
       if (first !== -1 && code[first] && header && header[1] === insideBlockNamed && header[2] === provider) {
         inBlock = true;
@@ -15883,8 +16031,10 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
           if (!code[at]) continue;
           if (insideBlockNamed !== void 0) {
             if (at < contentFrom || at >= closesAt || before[at] !== blockDepth + 1) continue;
+          } else if (at !== first) {
+            continue;
           }
-          const region = match[2];
+          const region = match[2] ?? match[3];
           if (!region) continue;
           out.push({
             provider,
@@ -15903,10 +16053,18 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, insideBlockNamed
   }
   return out;
 }
-function scanLine(line, state) {
+function literal(quote) {
+  return `[^${quote}\\\\$%{}]+`;
+}
+var HEREDOC = /^<<-?([A-Za-z_][A-Za-z0-9_-]*)/;
+function scanLine(line, state, language) {
   const code = new Array(line.length).fill(false);
   const brace = new Array(line.length).fill(0);
-  const stack = [];
+  if (state.heredoc !== void 0) {
+    if (line.trim() === state.heredoc) state.heredoc = void 0;
+    return { code, brace };
+  }
+  const { stack } = state;
   let i2 = 0;
   while (i2 < line.length) {
     if (state.inBlockComment) {
@@ -15916,26 +16074,52 @@ function scanLine(line, state) {
       } else i2++;
       continue;
     }
+    if (state.tomlMulti !== void 0) {
+      const delim = state.tomlMulti;
+      if (delim === '"""' && line[i2] === "\\") i2 += 2;
+      else if (line.startsWith(delim, i2)) {
+        let run = 3;
+        while (run < 5 && line[i2 + run] === delim[0]) run++;
+        state.tomlMulti = void 0;
+        i2 += run;
+      } else i2++;
+      continue;
+    }
     const ch = line[i2];
     const top = stack.at(-1);
     if (top?.kind === "string") {
-      if (ch === "\\") i2 += 2;
+      if (ch === "\\" && (language === "hcl" || top.quote === '"')) i2 += 2;
       else if (ch === top.quote) {
         stack.pop();
         i2++;
-      } else if (top.quote === '"' && line.startsWith("${", i2)) {
+      } else if (language === "hcl" && (line.startsWith("$${", i2) || line.startsWith("%%{", i2))) {
+        i2 += 3;
+      } else if (language === "hcl" && (line.startsWith("${", i2) || line.startsWith("%{", i2))) {
         stack.push({ kind: "interp", depth: 0 });
         i2 += 2;
       } else i2++;
       continue;
     }
-    if (ch === '"' || ch === "'") {
+    if (language === "toml" && (line.startsWith('"""', i2) || line.startsWith("'''", i2))) {
+      state.tomlMulti = line.startsWith('"""', i2) ? '"""' : "'''";
+      i2 += 3;
+      continue;
+    }
+    if (ch === '"' || language === "toml" && ch === "'") {
       stack.push({ kind: "string", quote: ch });
       i2++;
       continue;
     }
-    if (!top && (ch === "#" || line.startsWith("//", i2))) break;
-    if (!top && line.startsWith("/*", i2)) {
+    if (language === "hcl") {
+      const heredoc = line.slice(i2).match(HEREDOC);
+      if (heredoc) {
+        state.heredoc = heredoc[1];
+        i2 += heredoc[0].length;
+        continue;
+      }
+    }
+    if (!top && (ch === "#" || language === "hcl" && line.startsWith("//", i2))) break;
+    if (!top && language === "hcl" && line.startsWith("/*", i2)) {
       state.inBlockComment = true;
       i2 += 2;
       continue;
@@ -15963,7 +16147,7 @@ function analyzeInfrastructure(options) {
   for (const path of configPaths) {
     let text;
     try {
-      text = readFileSync3(join22(root, path), "utf8");
+      text = readFileSync4(join3(root, path), "utf8");
     } catch (error) {
       errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
       continue;
@@ -15974,10 +16158,17 @@ function analyzeInfrastructure(options) {
       else if (name === "serverless.yml" || name === "serverless.yaml") {
         regions.push(...parseServerlessYaml(text, path));
       } else if (name === "fly.toml") {
-        regions.push(...regionsFromKeyLiterals(text, path, ["primary_region"], "fly"));
+        regions.push(
+          ...regionsFromKeyLiterals(text, path, ["primary_region"], "fly", { language: "toml" })
+        );
       } else if (name.endsWith(".tf")) {
         for (const provider of ["aws", "gcp", "azure"]) {
-          regions.push(...regionsFromKeyLiterals(text, path, ["region"], provider, "provider"));
+          regions.push(
+            ...regionsFromKeyLiterals(text, path, ["region"], provider, {
+              language: "hcl",
+              insideBlockNamed: "provider"
+            })
+          );
         }
       }
     } catch (error) {
@@ -16011,7 +16202,7 @@ function parseVercelJson(text, path) {
   return out;
 }
 function parseServerlessYaml(text, path) {
-  const doc = (0, import_yaml3.parseDocument)(text, { keepSourceTokens: true });
+  const doc = (0, import_yaml4.parseDocument)(text, { keepSourceTokens: true });
   if (doc.errors.length > 0) return [];
   const provider = doc.get("provider");
   if (!provider?.get) return [];
@@ -16175,7 +16366,7 @@ function scan(options) {
   const {
     root,
     toolVersion,
-    includeTransitive = false,
+    config = {},
     includeDev = true,
     includeManifests = true,
     includeCallsites = false,
@@ -16184,6 +16375,8 @@ function scan(options) {
     onlyVendor,
     now = /* @__PURE__ */ new Date()
   } = options;
+  const exclude = [...config.exclude ?? [], ...options.exclude ?? []];
+  const includeTransitive = options.includeTransitive ?? config.includeTransitive === true;
   const startedAt = now;
   const started = Date.now();
   const kb = options.kb ?? loadKnowledgeBase({
@@ -16194,7 +16387,7 @@ function scan(options) {
   const signals = [];
   const unmatchedPackages = /* @__PURE__ */ new Set();
   const unmatchedHosts = /* @__PURE__ */ new Set();
-  const excludeError = excludeProblem(options.exclude ?? []);
+  const excludeError = excludeProblem(exclude);
   if (excludeError) throw new TypeError(excludeError);
   const rootUsable = isReadableDirectory(root);
   if (!rootUsable) {
@@ -16206,7 +16399,7 @@ function scan(options) {
   }
   const { manifests, sources, infrastructure } = rootUsable ? walk({
     root,
-    ...options.exclude ? { exclude: options.exclude } : {}
+    ...exclude.length > 0 ? { exclude } : {}
   }) : { manifests: [], sources: [], infrastructure: [] };
   const vendorSinks = vendorConstructorSinks(
     kb.vendors.map((v2) => ({
@@ -16249,7 +16442,7 @@ function scan(options) {
     for (const file of sources) {
       let text;
       try {
-        text = readFileSync4(join3(root, file), "utf8");
+        text = readFileSync5(join4(root, file), "utf8");
       } catch (error2) {
         errors.push({ file, message: `unreadable: ${error2.message}`, fatal: false });
         continue;
@@ -16324,7 +16517,7 @@ function scan(options) {
     return meetsConfidence(signal.confidence, minConfidence);
   });
   const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
-  const findings = mergeSignals(filtered, { kb, staleVendorIds });
+  const findings = applySuppressions(mergeSignals(filtered, { kb, staleVendorIds }), config, now);
   return {
     $schema: `https://egressa.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,
     schemaVersion: FINDINGS_SCHEMA_VERSION,
@@ -16345,11 +16538,10 @@ function scan(options) {
       manifestsScanned,
       engine,
       ...options.assumeAdequacyLapsed?.length ? { assumedAdequacyLapsed: options.assumeAdequacyLapsed } : {},
-      // The merged list actually handed to walk(), so the document records
-      // what was applied rather than re-deriving it from options.exclude,
-      // which could in principle diverge if a future caller passed it
-      // without going through walk().
-      ...options.exclude?.length ? { exclude: options.exclude } : {}
+      // The merged list actually handed to walk(), config first, so the
+      // document records what was applied rather than what either source
+      // asked for on its own.
+      ...exclude.length > 0 ? { exclude } : {}
     },
     summary: summarise(findings),
     findings,
@@ -16431,30 +16623,6 @@ var explainCommand = defineCommand({
 // src/commands/scan.ts
 import { statSync as statSync3, writeFileSync } from "fs";
 import { resolve as resolve4 } from "path";
-
-// src/config.ts
-var import_yaml4 = __toESM(require_dist(), 1);
-import { existsSync, readFileSync as readFileSync5 } from "fs";
-import { join as join4 } from "path";
-function loadConfig(root, explicitPath) {
-  const path = explicitPath ?? join4(root, ".egressa.yml");
-  if (!existsSync(path)) return {};
-  const parsed = (0, import_yaml4.parse)(readFileSync5(path, "utf8"));
-  if (!parsed || typeof parsed !== "object") return {};
-  const exclude = parsed.exclude;
-  if (typeof exclude === "string") parsed.exclude = [exclude];
-  else if (exclude !== void 0 && exclude !== null && !Array.isArray(exclude)) {
-    throw new Error(`${path}: exclude must be a glob or a list of globs`);
-  }
-  for (const [index, suppression] of (parsed.suppressions ?? []).entries()) {
-    if (!suppression.reason || suppression.reason.trim() === "") {
-      throw new Error(
-        `${path}: suppression ${index + 1} has no reason. Every suppression must say why it was accepted.`
-      );
-    }
-  }
-  return parsed;
-}
 
 // src/emit.ts
 function writeOut(text) {
@@ -16668,72 +16836,6 @@ function euRegionCell(finding) {
   return `available (${eu.scope ?? "scope not recorded"})`;
 }
 
-// src/suppress.ts
-function applySuppressions(result, config, now = /* @__PURE__ */ new Date()) {
-  const rules = config.suppressions ?? [];
-  if (rules.length === 0) return result;
-  const expiredNotes = [];
-  const findings = result.findings.map((finding) => {
-    const rule = rules.find((r3) => matches(r3, finding));
-    if (!rule) return finding;
-    const expired = rule.expires !== void 0 && Date.parse(rule.expires) < now.getTime();
-    if (expired) {
-      expiredNotes.push(expiredNote(finding, rule));
-      return {
-        ...finding,
-        suppressed: false,
-        suppression: {
-          reason: rule.reason,
-          ...rule.acceptedBy ? { acceptedBy: rule.acceptedBy } : {},
-          ...rule.expires ? { expires: rule.expires } : {},
-          expired: true,
-          source: "config"
-        }
-      };
-    }
-    return {
-      ...finding,
-      suppressed: true,
-      suppression: {
-        reason: rule.reason,
-        ...rule.acceptedBy ? { acceptedBy: rule.acceptedBy } : {},
-        ...rule.expires ? { expires: rule.expires } : {},
-        expired: false,
-        source: "config"
-      }
-    };
-  });
-  const all = [...findings, ...expiredNotes];
-  return {
-    ...result,
-    findings: all,
-    summary: {
-      ...result.summary,
-      findingCount: all.length,
-      suppressed: all.filter((f3) => f3.suppressed).length
-    }
-  };
-}
-function matches(rule, finding) {
-  if (rule.vendor && finding.vendor?.id !== rule.vendor) return false;
-  if (rule.rule && finding.ruleId !== rule.rule) return false;
-  return Boolean(rule.vendor || rule.rule);
-}
-function expiredNote(finding, rule) {
-  return {
-    ...finding,
-    id: `${finding.id}-expired`,
-    ruleId: "config/expired-suppression",
-    severity: "note",
-    suppressed: false,
-    suppression: null,
-    remediation: {
-      summary: `The suppression for ${finding.vendor?.name ?? finding.ruleId} expired on ${rule.expires}. Review whether the original acceptance still holds, then extend or remove the entry.`,
-      links: []
-    }
-  };
-}
-
 // src/version.ts
 var TOOL_VERSION = "0.2.0";
 
@@ -16757,7 +16859,10 @@ var scanCommand = defineCommand({
   args: {
     path: { type: "positional", required: false, default: ".", description: "Directory to scan" },
     format: { type: "string", default: "human", description: "human | json | sarif | markdown" },
-    out: { type: "string", description: "Write output to a file instead of stdout" },
+    out: {
+      type: "string",
+      description: "Write output to a file instead of stdout (--out=- is stdout)"
+    },
     "fail-on": {
       type: "string",
       default: "none",
@@ -16818,11 +16923,12 @@ var scanCommand = defineCommand({
     try {
       config = loadConfig(root, args.config ? String(args.config) : void 0);
     } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
       process.stderr.write(`egressa: ${error.message}
 `);
       process.exit(EXIT.USAGE);
     }
-    const exclude = [...config.exclude ?? [], ...toStringArray(args.exclude)];
+    const exclude = toStringArray(args.exclude);
     const excludeError = excludeProblem(exclude);
     if (excludeError) {
       process.stderr.write(`egressa: ${excludeError}
@@ -16839,8 +16945,10 @@ var scanCommand = defineCommand({
         root,
         toolVersion: TOOL_VERSION,
         ...args.kb ? { kbPath: String(args.kb) } : {},
+        config,
         ...exclude.length > 0 ? { exclude } : {},
-        includeTransitive: Boolean(args["include-transitive"]) || config.includeTransitive === true,
+        // Only when typed: `false` would override a config that turns it on.
+        ...args["include-transitive"] ? { includeTransitive: true } : {},
         includeDev: args.dev !== false,
         includeManifests: args.manifests !== false,
         includeInfrastructure: args.infrastructure !== false,
@@ -16856,13 +16964,13 @@ var scanCommand = defineCommand({
       );
       process.exit(EXIT.KB);
     }
-    const suppressed = applySuppressions(result, config);
-    const output = render(suppressed, String(args.format), args.color !== false);
-    if (args.out) writeFileSync(String(args.out), `${output}
+    const output = render(result, String(args.format), args.color !== false);
+    const out = args.out ? String(args.out) : void 0;
+    if (out !== void 0 && out !== "-") writeFileSync(out, `${output}
 `);
     else if (!args.quiet) await writeOut(`${output}
 `);
-    process.exit(exitCodeFor(suppressed, failOn));
+    process.exit(exitCodeFor(result, failOn));
   }
 });
 function render(result, format2, color) {
@@ -16975,7 +17083,7 @@ var vendorsCommand = defineCommand({
 `);
       process.exit(2);
     }
-    const entry = kb.byId.get(query) ?? kb.lookupPackage("npm", query)?.vendor ?? kb.lookupHost(query)?.vendor ?? null;
+    const entry = kb.findVendor(query);
     if (!entry) {
       await writeOutAndExit(`No knowledge base entry matches "${query}".
 `, 0);

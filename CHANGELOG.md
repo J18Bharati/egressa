@@ -78,6 +78,27 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   (`mask-user-input`, then `mask`, then `mask-user-input`). Every documented version masks inputs,
   and the row records the history rather than a single value.
 
+- **A heredoc, a template directive or a TOML multi-line string could produce a region the file
+  does not declare.** A heredoc that writes a `provider "aws"` block was reported as `us-west-2` at
+  high confidence and narrowed the jurisdiction. The region reader now carries heredocs,
+  interpolations, strings and multi-line strings across lines, and recognises `%{…}`. In `fly.toml`,
+  `primary_region` is read only as a top-level key, so `[env]` and multi-line strings no longer
+  contribute one. A single-quoted `primary_region` is now read.
+- **A compiled `requirements.txt` made every transitive package a direct, high-confidence vendor.**
+  See the Python entry under Added: pip-compile and uv output is now read as a lockfile.
+- **The MCP server ignored `.egressa.yml`.** Through MCP a team's suppressed finding came back
+  unsuppressed and its excluded tree was scanned. Loading and applying the config moved into core,
+  so both surfaces apply it. The MCP summary now carries each finding's suppression and names the
+  file in `scan.config`. A config error of any kind, including malformed YAML, names the file and is a
+  usage error (CLI exit 2, MCP tool error).
+- **An expired-suppression note was appended after every other finding, and was not counted.** It
+  now follows the finding it reactivates, so a truncated MCP summary cannot keep one without the
+  other, and it counts in `byRule` and `bySeverity` like any other finding.
+- **`egressa vendors show` and MCP `lookup_vendor` tried npm only**, so `boto3` had "no knowledge base
+  entry". They now try PyPI too, and answer nothing when npm and PyPI name different vendors. MCP
+  `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.
+- **`--out=-` wrote a file named `-`.** It now means stdout.
+
 ### Knowledge base — `2026.09.21` → `2026.09.26`
 
 - `pypi` aliases for Twilio (`twilio`) and AWS (`boto3`, `botocore`), each checked against the
