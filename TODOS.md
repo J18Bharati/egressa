@@ -78,6 +78,25 @@ the field is restructured.
 **Priority:** P1
 **Depends on:** None
 
+### Decide what belongs in a vendor's default jurisdiction set
+
+**What:** Write down a convention for which jurisdictions a vendor entry lists as default
+processing, as opposed to regions a customer has to select, and re-author Twilio against it.
+
+**Why:** Twilio lists US, IE and AU, all `primary` with no `regionSelected`, although its own notes say
+US1 is the default and IE1 and AU1 are chosen by the customer. AWS lists only what a default customer
+reaches. Under Twilio's convention AWS would be a `warning`; under AWS's, Twilio would be a `note`. The
+first `warning` on a real repository (field test 3) rests on `decision:AU:none`, for a client that sets
+no region at all. That is A12 in `docs/reviews/2026-09-26-field-test-3-triage.md`.
+
+**Context:** `regionSelected` matters only once a region is detected (`exposure/rules.ts:92`), so
+marking AU selectable does not change the default set alone. The convention belongs in
+`kb/KB_POLICY.md`, and every entry with more than one `primary` country needs checking against it.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Restructure `dpfCertified` from a boolean to a record
 
 **What:** Replace `dpfCertified: boolean` with a structured value carrying framework (EU-US, UK
@@ -198,6 +217,12 @@ does not show the failure is impossible.
 **Context:** T16 in `docs/reviews/2026-09-21-external-run-triage.md`. It was accepted there and
 never tracked here.
 
+The transfers specialist needs a count as well (F6 in `docs/reviews/2026-09-26-field-test-3-triage.md`).
+In that run it mapped 7 of 9 scanner findings, and the Step 3 no-commentary rule gave it no way to say
+so. Have `transfers.md` emit one structured line such as
+`{"_scanner":{"findings":9,"emitted":7,"dropped":[…]}}`, and have Step 4 check
+`emitted + dropped == findings`.
+
 **Effort:** S
 **Priority:** P2
 **Depends on:** None
@@ -247,6 +272,15 @@ schema file. That makes this cheaper now than it will ever be again.
 Raised as T5.3 in `docs/reviews/2026-09-21-external-run-triage.md`, where it was recorded as
 renderer-only. It is not — the engineering review caught that SARIF flattens it too, and the type
 turns out to discard `role` before any renderer sees it.
+
+The same change should carry the **evaluated** jurisdiction set (A11 in
+`docs/reviews/2026-09-26-field-test-3-triage.md`). `transfer.jurisdictions` is never narrowed by a
+region. Only `exposure.inputs` records `narrowedTo:`, which `human.ts` string-parses back out. So in
+markdown and SARIF, a `us-east-2` finding reads identically to the vendor default, including "EEA",
+and the `[unmapped]` marker exists only in human output. Add the evaluated set and the region to the
+finding, and render both in all four formats. While in those messages, replace "N references in this
+repository" with "N evidence entries" (E15), since `reference` is now a signal kind meaning "named, not
+called".
 
 **Effort:** M
 **Priority:** P2
@@ -383,6 +417,18 @@ that branch, but the branch edited the render path. SARIF and JSON escape by con
   `constraints*.txt` is skipped by name today.
 - The `kb:validate` pypi rule has no negative test, and it re-implements `normalisePypiName`.
 
+Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) added:
+- `requirements-constraints.txt` is read, because `isRequirementsFile` checks only a `constraints`
+  prefix. Fix this one first: it is the only precision item here.
+- A wheel filename (`twilio-9.0.0-py3-none-any.whl`) and a name split by `\` continuation both reach
+  `unmatched` mangled. pip joins continuation lines before parsing, and so should the reader. It
+  should also refuse a token ending in an archive suffix.
+- A full-line comment ending in `\` is continued by the reader, but pip does not continue it.
+- Unread equivalent spellings: `optional-dependencies` as an inline table or a dotted key under
+  `[project]`, `[tool.poetry.dependencies.<name>]` sub-tables, `dependencies = {…}` under
+  `[tool.poetry]`, `dev-requirements.txt`/`test-requirements.txt`, and Fly's single-quoted
+  `primary_region`.
+
 **Why:** `docs/LIMITATIONS.md` now points a user at `unmatched` for missing Python aliases, and
 the lookup commands are how they would check one.
 
@@ -480,6 +526,19 @@ publish.
 **Effort:** M
 **Priority:** P2
 **Depends on:** Create the GitHub repository and push
+
+### Make `smoke:pack` pull its image
+
+**What:** Pass `--pull=always` to the `docker run` in `scripts/smoke-pack.mjs`, or print the image
+digest on the `ok` line.
+
+**Why:** Field test 3 ran it against a cached `node:20-slim` five months old. A "clean container" check
+that uses whatever image happens to be cached is not testing a current Node 20, and the pull path was
+never exercised. That is G4 in `docs/reviews/2026-09-26-field-test-3-triage.md`.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
 
 ## Testing
 
