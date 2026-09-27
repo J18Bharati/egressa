@@ -117,8 +117,8 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   Warnings section, and SARIF reports each error as a `toolExecutionNotifications` entry on the
   run's invocation, so a GitHub code-scanning user sees them too.
 - **An expired-suppression note was appended after every other finding, and was not counted.** It
-  now follows the finding it reactivates, so a truncated MCP summary cannot keep one without the
-  other, and it counts in `byRule` and `bySeverity` like any other finding.
+  now follows the finding it reactivates, and a truncated MCP summary that keeps the finding keeps
+  the note too, even one past `maxFindings`, and it counts in `byRule` and `bySeverity` like any other finding.
 - **`egressa vendors show` and MCP `lookup_vendor` tried npm only**, so `boto3` had "no knowledge base
   entry". They now try PyPI too, and answer nothing when npm and PyPI name different vendors. MCP
   `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.

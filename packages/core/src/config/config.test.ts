@@ -408,3 +408,20 @@ describe('a suppression that matches nothing says so', () => {
     expect(warnings([{ vendor: 'stripe', reason: 'x' }])).toEqual([]);
   });
 });
+
+describe('a summary cut right after an expired finding', () => {
+  // Field test 4, E16. Adjacency alone did not protect the pair: at
+  // maxFindings 1 the finding was kept and its reminder cut.
+  it('keeps the expiry note with its finding', () => {
+    const out = result({
+      suppressions: [{ vendor: 'stripe', reason: 'x', expires: '2026-01-01' }],
+    });
+    const shown = summarise(out, { maxFindings: 1 });
+    expect(shown.findings.map((f) => f.ruleId)).toEqual([
+      out.findings[0]?.ruleId,
+      'config/expired-suppression',
+    ]);
+    expect(shown.truncated).toBe(false);
+    expect(shown.omittedFindings).toBe(0);
+  });
+});

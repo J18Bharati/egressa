@@ -86,7 +86,13 @@ export interface SummarisedScan {
 export function summarise(result: ScanResult, options: SummaryOptions = {}): SummarisedScan {
   const maxFindings = options.maxFindings ?? 20;
   const maxEvidence = options.maxEvidencePerFinding ?? 3;
-  const shown = result.findings.slice(0, maxFindings);
+  // An expired suppression's note follows its finding. A cut between the two
+  // would keep the reactivated finding and drop the reminder to revisit it, so
+  // the note comes along even past the limit.
+  const last = result.findings[maxFindings - 1];
+  const next = result.findings[maxFindings];
+  const keep = last && next?.id === `${last.id}-expired` ? maxFindings + 1 : maxFindings;
+  const shown = result.findings.slice(0, keep);
 
   return {
     disclaimer: result.disclaimer,
