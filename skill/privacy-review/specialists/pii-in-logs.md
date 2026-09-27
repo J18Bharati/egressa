@@ -1,7 +1,7 @@
 # Personal data in logs specialist
 
 Dispatch when `SCOPE_LOGGING` is true.
-Emit findings per `references/finding-schema.md`. Cite only provisions in `references/legal-basis.md`.
+Emit findings per `references/finding-schema.md`. Take every `provision` and every `citation` from `references/legal-basis.md`.
 
 Logs leave the system a person designed and land in places nobody planned: a log aggregator in
 another country, a retention window measured in years, an error tracker every engineer can read.

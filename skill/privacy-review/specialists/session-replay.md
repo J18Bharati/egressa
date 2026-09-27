@@ -1,7 +1,7 @@
 # Session replay specialist
 
 Dispatch when `SCOPE_SESSION_REPLAY` is true.
-Emit findings per `references/finding-schema.md`. Cite only provisions in `references/legal-basis.md`.
+Emit findings per `references/finding-schema.md`. Take every `provision` and every `citation` from `references/legal-basis.md`.
 
 Session replay records what a person typed and saw. The recording itself is ordinary product
 practice; what matters in code is whether text inputs are masked, and most vendors already mask

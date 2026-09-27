@@ -1,7 +1,7 @@
 # Retention and deletion specialist
 
 Dispatch when `SCOPE_SCHEMA`, `SCOPE_CACHE` or `SCOPE_IAC` is true.
-Emit findings per `references/finding-schema.md`. Cite only provisions in `references/legal-basis.md`.
+Emit findings per `references/finding-schema.md`. Take every `provision` and every `citation` from `references/legal-basis.md`.
 
 **Read the boundary section first.** Storage limitation is strong law and a weak code signal, and
 this specialist is deliberately the narrowest in the set. Most of what a reviewer instinctively

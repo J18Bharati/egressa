@@ -215,7 +215,11 @@ the code is consistent with several deployment realities; `undecidable` means no
 reading answers it. **A `config` or `undecidable` finding must emit a `question`, never a `fix`.** A
 remediation instruction attached to a question you cannot answer is how this produces a false
 accusation, which is the same failure `resolve-host.ts` avoids by naming a variable instead of
-guessing a host.
+guessing a host. A fourth value, `context`, carries neither: only the transfers specialist
+uses it, for EU and adequate-country transfers, which are reported beside the findings rather than
+as problems with a fix. The transfers specialist also ends with one `_scanner` JSON line accounting
+for every scanner finding it emitted, merged or dropped, which Step 4 checks adds up; before it
+existed, the only account of a dropped finding was prose that Step 4 discarded.
 
 **Never emit a score.** `docs/ROADMAP.md` forbids a grade. gstack's `/review`, which this is modelled
 on, ends with `PR Quality Score: X/10`; copying that would ship the exact number the project promised

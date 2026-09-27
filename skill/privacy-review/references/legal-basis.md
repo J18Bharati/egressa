@@ -175,6 +175,22 @@ tolerance, not an exemption.
 February 2026 EDPB report is a coordinated investigation, not a sanction. Do not imply a fine
 exists here.
 
+## Cross-border transfers — GDPR Chapter V
+
+**Provision.** `GDPR Chapter V (Arts 44-49)`. A transfer of personal data to a third country is
+permitted only on one of the grounds the chapter sets out: an adequacy decision (Art 45),
+appropriate safeguards such as standard contractual clauses (Art 46), or a derogation (Art 49).
+Cite the GDPR instrument URL from the table above; no enforcement decision is cited for this check.
+
+**What the transfers specialist may say.** Which vendor the code sends data to, and what the
+scanner's knowledge base records about where that vendor processes it and under which mechanism,
+with its verification date. A transfer to a country with an adequacy decision is still a transfer
+to a third country: the decision is the ground it relies on, so a withdrawn decision changes the
+answer. The US decision covers only organisations listed as Data Privacy Framework participants.
+
+**What it may not say.** Whether a transfer is permitted. That depends on the controller's own
+agreements and assessments, none of which are in the code.
+
 ## Do not build these
 
 Both come from the research and both would generate confident, wrong accusations.

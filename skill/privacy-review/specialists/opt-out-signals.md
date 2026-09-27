@@ -1,7 +1,7 @@
 # Opt-out signals specialist
 
 Dispatch when `SCOPE_TRACKERS` or `SCOPE_TRACKER_CODE` is true.
-Emit findings per `references/finding-schema.md`. Cite only provisions in `references/legal-basis.md`.
+Emit findings per `references/finding-schema.md`. Take every `provision` and every `citation` from `references/legal-basis.md`.
 
 This check is unusual and that is what makes it good: **the law here demands a machine-readable
 signal be read and acted on.** California's regulations name an opt-out preference signal, Colorado's

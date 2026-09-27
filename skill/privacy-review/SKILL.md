@@ -126,7 +126,7 @@ Each specialist prompt contains, in this order:
 1. The full text of `references/finding-schema.md` — the output contract.
 2. The full text of `references/language-rules.md` — the vocabulary contract.
 3. The full text of `references/legal-basis.md` — the only provisions and citations a specialist may
-   use. Pass it in full rather than summarising it: it also carries the list of widely repeated
+   use. A vendor document the scanner supplies may be quoted as evidence, never cited. Pass it in full rather than summarising it: it also carries the list of widely repeated
    enforcement claims that did not survive checking, and a specialist that has not seen that list
    will cite them.
 4. The specialist's own checklist file.
@@ -138,16 +138,32 @@ Each specialist prompt contains, in this order:
 > You are a privacy review specialist. Apply the checklist below to the files under review. Open
 > and read every file you report on — never report a finding from a grep result alone. For each
 > finding emit one JSON object on its own line, per the schema. Emit `fix` only when
-> `decidability` is `code`; otherwise emit `question`. If you find nothing, output `NO FINDINGS`
-> and nothing else. Output no preamble, no summary, no commentary.
+> `decidability` is `code`; otherwise emit `question`, except that a `context` line carries neither.
+> If you find nothing, output `NO FINDINGS`. Output no preamble, no summary, no commentary. If your
+> checklist asks for a `_scanner` line, emit it last, whatever else you output.
 
 The transfers specialist is different: it shells out to the existing scanner rather than reading
-code itself. Its checklist says how.
+code itself. Its checklist says how, and it reports what the scanner did in its `_scanner` line
+rather than in prose, which Step 4 would discard.
 
 ## Step 4 — Merge
 
 Collect each specialist's lines. Skip anything that is not valid JSON, and say how many lines you
 skipped rather than silently dropping them.
+
+**Every dispatched specialist must return JSON lines or `NO FINDINGS`.** Name any that returned
+neither, and report its lane as not reviewed in `NOT CHECKED`. A missing block is not a clean one.
+
+**Check the transfers specialist's `_scanner` line** (`references/finding-schema.md`). It is not a
+finding and not a skipped line. Check that `emitted + context + merged + dropped` equals `findings`,
+and that the finding and context lines it returned match `emitted`, `context` and `merged`. If the
+line is missing or the counts disagree, say so in `NOT CHECKED`, with the numbers: a scanner
+finding that no line accounts for was dropped without a reason. Carry its `engine` (when not `oxc`),
+`unmatched` counts, `errors` and `notChecked` into `NOT CHECKED`, and list what it `dropped`.
+
+**`context` lines are fenced.** Only `specialist: "transfers"` may emit one, and only for
+`transfer/eu-processing` or `transfer/adequate-country-egress` in its `summary`. Count any other
+`context` line as skipped.
 
 **Deduplicate by `fingerprint`.** Where two specialists report the same fingerprint, keep the
 higher `confidence`, mark it confirmed by both, and raise confidence by 1 to a maximum of 10.
@@ -155,7 +171,8 @@ Cross-specialist agreement is real evidence: a cookie write flagged by both cons
 opt-out signals is more likely to be a genuine finding than either alone.
 
 **Do not merge across `decidability`.** A `code` finding and an `undecidable` finding at the same
-line are two different claims, and collapsing them loses the honest one.
+line are two different claims, and collapsing them loses the honest one. A `context` line is never
+merged with a finding.
 
 Then drop anything below `confidence: 3`. Do not report it, and do not list it in an appendix — a
 sub-3 finding is a guess, and an appendix of guesses is still a page of accusations.
@@ -166,7 +183,7 @@ Group by `decidability`, in this order. The grouping is the point: it puts what 
 knows above what it merely suspects, which is the opposite of how a scanner usually sorts.
 
 ```
-PRIVACY REVIEW — <n> findings across <m> specialists
+PRIVACY REVIEW — <n> findings (+<k> context) across <m> specialists
 Mode: <diff against main | whole repository>  ·  Files reviewed: <n>
 
 SETTLED BY THE CODE (<n>)
@@ -184,11 +201,20 @@ NOT DECIDABLE FROM SOURCE (<n>)
     Provision: <provision>  ·  <specialist>
     You need to check: <question>
 
+CONTEXT (<k>)
+  <path>:<line> — <summary>
+    Provision: <provision>  ·  <specialist>
+
 NOT CHECKED
   <the blind spots, always, even when findings is zero>
 ```
 
 Sort within each group by severity, then confidence descending.
+
+`CONTEXT` lists transfers to the EU or to a country with an adequacy decision. They are not
+problems to fix, and not nothing either: a transfer to an adequate country is still a third-country
+transfer, relying on the decision as its basis, so say which decision and never call it "no issue".
+They are not counted in `<n>`.
 
 **The `NOT CHECKED` block is mandatory and is never omitted, least of all on a clean run.** A run
 with no findings means the checks that ran found nothing, and saying more than that is the failure
@@ -202,7 +228,9 @@ skipped:
 - Whether the organisation has a lawful basis, a retention schedule, a processor agreement, or
   records of processing. None of that is in the code, and all of it decides the actual answer.
 - Files the analysis skipped: `node_modules`, build output, minified and vendored bundles.
-- Specialists that were gated off, by name.
+- Specialists that were gated off, by name, and any dispatched specialist that returned no block.
+- From the transfers specialist's `_scanner` line: a degraded engine, the `unmatched` counts, the
+  scanner's own errors, the blind spots it names, and whether its counts added up.
 - Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
   a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two
   runs needs to know the selection was made defensively rather than on a real signal.
@@ -234,5 +262,6 @@ Say so if the user asks why there are two.
 
 Re-read `references/language-rules.md`. Then check your draft against it — specifically, that you
 have not written that anything is a breach, that you have attached each provision only where it
-genuinely applies, and that every `config` and `undecidable` finding ends in a question rather
-than an instruction.
+genuinely applies, that every `config` and `undecidable` finding ends in a question rather
+than an instruction, that no `context` line carries a fix, and that every `citation` came from
+`references/legal-basis.md`.
