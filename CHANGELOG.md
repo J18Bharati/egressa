@@ -117,8 +117,9 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   Warnings section, and SARIF reports each error as a `toolExecutionNotifications` entry on the
   run's invocation, so a GitHub code-scanning user sees them too.
 - **An expired-suppression note was appended after every other finding, and was not counted.** It
-  now follows the finding it reactivates, and a truncated MCP summary that keeps the finding keeps
-  the note too, even one past `maxFindings`, and it counts in `byRule` and `bySeverity` like any other finding.
+  now follows the finding it reactivates, a truncated MCP summary that keeps the finding keeps the
+  note too, even one past `maxFindings`, and it counts in `byRule` and `bySeverity` like any other
+  finding.
 - **`egressa vendors show` and MCP `lookup_vendor` tried npm only**, so `boto3` had "no knowledge base
   entry". They now try PyPI too. A query is read as a vendor id in any case, an npm name, a PyPI name
   and a host, and answers nothing when two readings name different vendors, where an id used to win
@@ -132,6 +133,19 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   usage error, never exit 1. `--no-include-transitive` overrides a config that turns it on.
 - **A `.egressa.yml` symlinked outside the repository is refused, and a YAML error no longer quotes
   the file.** Through MCP, the quoted lines of whatever file the link pointed at reached the agent.
+
+### Changed
+
+- **`.egressa.yml` is read strictly.** An unknown key, a YAML merge key, a file that is not UTF-8 or
+  not a mapping, and a symlink that does not resolve are usage errors, where each used to load as
+  something else or as no config. A config that loaded before may now exit 2; the message names the
+  key and suggests the likely one.
+- **A date-only `expires` holds through the end of that day in UTC.** It used to expire at the start
+  of it. `expires` must be ISO 8601, and a time must carry its zone.
+- **The privacy-review contract has a fourth decidability, `context`,** used only by the transfers
+  specialist for EU and adequate-country transfers, and a `_scanner` line in which that specialist
+  accounts for every scanner finding. Step 4 checks the counts and names any specialist that returned
+  no block.
 
 ### Knowledge base — `2026.09.21` → `2026.09.26`
 

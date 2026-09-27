@@ -205,28 +205,6 @@ routes. Needs a citation from `references/legal-basis.md` before any checklist w
 **Priority:** P2
 **Depends on:** None
 
-### Assert one structured block per dispatched specialist
-
-**What:** Step 4 of `SKILL.md` names every dispatched specialist that returned no structured block,
-and reports that specialist's lane as not reviewed rather than as silent.
-
-**Why:** In the 2026-09-21 run, one specialist's output was lost entirely and the result read as a
-clean lane. It did not recur on 2026-09-25, where six of six returned blocks, but one clean run
-does not show the failure is impossible.
-
-**Context:** T16 in `docs/reviews/2026-09-21-external-run-triage.md`. It was accepted there and
-never tracked here.
-
-The transfers specialist needs a count as well (F6 in `docs/reviews/2026-09-26-field-test-3-triage.md`).
-In that run it mapped 7 of 9 scanner findings, and the Step 3 no-commentary rule gave it no way to say
-so. Have `transfers.md` emit one structured line such as
-`{"_scanner":{"findings":9,"emitted":7,"dropped":[…]}}`, and have Step 4 check
-`emitted + dropped == findings`.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
 ### Let two specialists' findings on one line be seen to agree
 
 **What:** Change the fingerprint so the Step 4 merge can recognise the same `file:line` raised by
@@ -471,6 +449,29 @@ first release and needs a new schema file after it.
 **Priority:** P2
 **Depends on:** None
 
+### Capture real pip-compile output for the golden set
+
+**What:** Add a pip-compile pass to `scripts/gen-compiled-requirements.sh`, over the same stub-wheel
+index: `--annotation-style split` and `line`, each with and without `--generate-hashes`, and
+`--strip-extras` on and off. Commit the outputs beside the uv ones in
+`fixtures/lockfiles/requirements/` and add them to the declared-set table in `python.test.ts`.
+
+**Why:** Only uv's output is real in the golden set. pip-compile's shapes are covered by hand-written
+cases, and hand-written cases are how the compiled-requirements reader broke in field tests 3 and 4.
+Two reported shapes are still guesses about what pip-compile writes: a line-style `# via` on the last
+`--hash` line (A15) and `# via pkg[extra]`. The reader handles both, but nobody has seen either.
+
+**Pros:** Closes the last generator the reader supports without real output; settles A15.
+**Cons:** pip-tools cannot be installed offline, so this needs one networked install by hand.
+
+**Context:** `docs/reviews/2026-09-27-field-test-4-triage.md`, A14 and A15. The script builds stub
+wheels with fixed timestamps and serves them from a file index, so pip-compile can run offline once
+pip-tools itself is installed.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
 ### Refuse a manifest reached through a symlink out of the scan root
 
 **What:** Skip any discovered manifest whose real path is outside the root.
@@ -661,6 +662,13 @@ in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Assert one structured block per dispatched specialist
+**Completed:** field-test-4-fixes (2026-09-28) -- Step 4 of the privacy-review `SKILL.md` names any
+dispatched specialist that returned neither JSON nor `NO FINDINGS` and reports its lane as not
+reviewed. The transfers specialist ends with a `_scanner` line accounting for every scanner finding
+it emitted, merged or dropped, and Step 4 checks the counts add up (F6, F8). Whether specialists
+follow it is checked by the next field test, not by a test here.
 
 ### Read Python dependency manifests
 **Completed:** cli-and-routing-fixes (2026-09-26) -- `packages/core/src/manifests/python.ts` reads

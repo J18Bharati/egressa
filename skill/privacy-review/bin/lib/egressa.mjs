@@ -12259,7 +12259,7 @@ async function runMain(cmd, opts = {}) {
 // ../core/dist/index.js
 var import_yaml = __toESM(require_dist(), 1);
 var import_ignore = __toESM(require_ignore(), 1);
-import { existsSync, readFileSync as readFileSync2, realpathSync as realpathSync2 } from "fs";
+import { lstatSync, readFileSync as readFileSync2, realpathSync as realpathSync2, statSync as statSync2 } from "fs";
 import { isAbsolute as isAbsolute2, join as join2, relative as relative2 } from "path";
 import { readFileSync as readFileSync3 } from "fs";
 import { relative as relative3, sep as sep3 } from "path";
@@ -14066,18 +14066,23 @@ function loadKnowledgeBase(options = {}) {
     /**
      * A question like "is `boto3` a known vendor?" does not say which registry
      * it means. Trying npm alone answered "no entry" for a vendor the knowledge
-     * base carries under PyPI. Two registries can use one name for two
-     * different projects, though, and naming either vendor then would be a
-     * guess, so that case answers nothing -- the same refusal `lookupPackage`
-     * makes for two overlapping scopes.
+     * base carries under PyPI. So every reading is tried -- a vendor id in any
+     * case, an npm name, a PyPI name, a host -- and when two of them name
+     * different vendors the query answers nothing: naming either would be a
+     * guess, the same refusal `lookupPackage` makes for two overlapping
+     * scopes. The first version let an id win over a package and a package
+     * over a host, silently.
      */
     findVendor(query) {
-      const byVendorId = byId.get(query);
-      if (byVendorId) return byVendorId;
-      const npm = kb.lookupPackage("npm", query)?.vendor;
-      const pypi = kb.lookupPackage("pypi", query)?.vendor;
-      if (npm && pypi && npm.id !== pypi.id) return null;
-      return npm ?? pypi ?? hosts.lookup(query)?.vendor ?? null;
+      const lower = query.toLowerCase();
+      const readings = [
+        byId.get(query) ?? vendors.find((v2) => v2.id.toLowerCase() === lower),
+        kb.lookupPackage("npm", query)?.vendor,
+        kb.lookupPackage("pypi", query)?.vendor,
+        hosts.lookup(query)?.vendor
+      ].filter((v2) => v2 !== void 0);
+      const [first] = readings;
+      return first && readings.every((v2) => v2.id === first.id) ? first : null;
     },
     decisionFor(country) {
       const upper = country.toUpperCase();
@@ -14109,7 +14114,8 @@ function defaultKbPath() {
 
 // ../core/dist/index.js
 var import_yaml3 = __toESM(require_dist(), 1);
-import { readFileSync as readFileSync5, statSync as statSync2 } from "fs";
+import { isAbsolute as isAbsolute22 } from "path";
+import { readFileSync as readFileSync5, statSync as statSync22 } from "fs";
 import { join as join4 } from "path";
 import { readFileSync as readFileSync4 } from "fs";
 import { basename as basename22, join as join3 } from "path";
@@ -14282,39 +14288,66 @@ var ConfigError = class extends Error {
 };
 function loadConfig(root, explicitPath) {
   const path = explicitPath ?? join2(root, ".egressa.yml");
-  if (!existsSync(path)) {
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
     if (explicitPath !== void 0) throw new ConfigError(`${path}: no such file`);
     return {};
   }
+  let target;
+  try {
+    target = statSync2(path);
+  } catch {
+    throw new ConfigError(`${path}: is a symlink that does not resolve`);
+  }
+  if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
   if (explicitPath === void 0) {
     const inside = relative2(realpathSync2(root), realpathSync2(path));
     if (inside.startsWith("..") || isAbsolute2(inside)) {
       throw new ConfigError(`${path}: resolves outside the repository; not read`);
     }
   }
+  let bytes;
+  try {
+    bytes = readFileSync2(path);
+  } catch (error) {
+    const code = error.code ?? "unknown error";
+    throw new ConfigError(`${path}: cannot be read (${code})`);
+  }
   let parsed;
   try {
-    parsed = (0, import_yaml.parse)(readFileSync2(path, "utf8"));
+    parsed = (0, import_yaml.parse)(decode(bytes, path));
   } catch (error) {
+    if (error instanceof ConfigError) throw error;
     const summary = (error.message.split("\n")[0] ?? "").replace(/:\s*$/, "");
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  if (!parsed || typeof parsed !== "object") return {};
-  const exclude = parsed.exclude;
-  if (typeof exclude === "string") parsed.exclude = [exclude];
+  const source = relative2(root, path) || path;
+  if (parsed === null || parsed === void 0) return { source };
+  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new ConfigError(
+      `${path}: must be a mapping of settings such as exclude and suppressions`
+    );
+  }
+  const config = parsed;
+  refuseUnknownKeys(config, TOP_LEVEL_KEYS, path);
+  if (config.version !== void 0 && config.version !== null && config.version !== 1) {
+    throw new ConfigError(`${path}: version must be 1`);
+  }
+  const exclude = config.exclude;
+  if (typeof exclude === "string") config.exclude = [exclude];
   else if (exclude !== void 0 && exclude !== null && !Array.isArray(exclude)) {
     throw new ConfigError(`${path}: exclude must be a glob or a list of globs`);
   }
-  const excludeError = excludeProblem(parsed.exclude ?? []);
+  const excludeError = excludeProblem(config.exclude ?? []);
   if (excludeError) throw new ConfigError(`${path}: ${excludeError}`);
-  const transitive = parsed.includeTransitive;
+  const transitive = config.includeTransitive;
   if (transitive !== void 0 && transitive !== null && typeof transitive !== "boolean") {
     throw new ConfigError(`${path}: includeTransitive must be true or false`);
   }
-  if (parsed.failOn !== void 0 && parsed.failOn !== null && typeof parsed.failOn !== "string") {
-    throw new ConfigError(`${path}: failOn must be text`);
+  const failOn = config.failOn;
+  if (failOn !== void 0 && failOn !== null && !FAIL_ON_LEVELS.includes(failOn)) {
+    throw new ConfigError(`${path}: failOn must be one of ${FAIL_ON_LEVELS.join(", ")}`);
   }
-  const suppressions = parsed.suppressions;
+  const suppressions = config.suppressions;
   if (suppressions !== void 0 && suppressions !== null && !Array.isArray(suppressions)) {
     throw new ConfigError(`${path}: suppressions must be a list`);
   }
@@ -14324,6 +14357,7 @@ function loadConfig(root, explicitPath) {
       throw new ConfigError(`${at} must be a mapping`);
     }
     const s2 = entry;
+    refuseUnknownKeys(s2, SUPPRESSION_KEYS, at);
     if (typeof s2.reason !== "string" && s2.reason !== void 0 && s2.reason !== null) {
       throw new ConfigError(`${at}: reason must be text`);
     }
@@ -14338,11 +14372,67 @@ function loadConfig(root, explicitPath) {
     if (s2.vendor === void 0 && s2.rule === void 0) {
       throw new ConfigError(`${at} names neither a vendor nor a rule, so it would match nothing`);
     }
-    if (typeof s2.expires === "string" && !Number.isFinite(Date.parse(s2.expires))) {
-      throw new ConfigError(`${at}: expires must be a date such as 2027-01-31`);
+    if (typeof s2.expires === "string" && expiryInstant(s2.expires) === null) {
+      throw new ConfigError(
+        `${at}: expires must be a date such as 2027-01-31, or a time with a zone such as 2027-01-31T17:00Z`
+      );
     }
   }
-  return { ...parsed, source: relative2(root, path) || path };
+  return { ...config, source };
+}
+var FAIL_ON_LEVELS = ["none", "note", "warning", "error"];
+var TOP_LEVEL_KEYS = ["version", "exclude", "includeTransitive", "failOn", "suppressions"];
+var SUPPRESSION_KEYS = ["vendor", "rule", "reason", "acceptedBy", "expires"];
+function refuseUnknownKeys(value, allowed, at) {
+  for (const key of Object.keys(value)) {
+    if (allowed.includes(key)) continue;
+    if (key === "<<") {
+      throw new ConfigError(`${at}: merge keys are not supported; write each setting out in full`);
+    }
+    if (!/^[\w.-]{1,40}$/.test(key)) throw new ConfigError(`${at}: an unrecognised key`);
+    const near = allowed.find((name) => editDistance(name.toLowerCase(), key.toLowerCase()) <= 2);
+    throw new ConfigError(`${at}: unknown key "${key}"${near ? ` (did you mean "${near}"?)` : ""}`);
+  }
+}
+function editDistance(a2, b2) {
+  let previous = Array.from({ length: b2.length + 1 }, (_3, j) => j);
+  for (let i2 = 1; i2 <= a2.length; i2++) {
+    const current = [i2];
+    for (let j = 1; j <= b2.length; j++) {
+      current[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (current[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (a2[i2 - 1] === b2[j - 1] ? 0 : 1)
+      );
+    }
+    previous = current;
+  }
+  return previous[b2.length] ?? 0;
+}
+function decode(bytes, path) {
+  if (bytes[0] === 255 && bytes[1] === 254 || bytes[0] === 254 && bytes[1] === 255) {
+    throw new ConfigError(`${path}: is UTF-16; save it as UTF-8`);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new ConfigError(`${path}: is not valid UTF-8`);
+  }
+}
+var EXPIRY = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2})))?$/;
+function expiryInstant(value) {
+  const match = EXPIRY.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second, zoneHour, zoneMinute] = match.map(Number);
+  const date = Date.UTC(year, month - 1, day);
+  const check = new Date(date);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
+    return null;
+  }
+  if (match[4] === void 0) return date + 864e5;
+  if (hour > 23 || minute > 59 || (second || 0) > 59) return null;
+  if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
+  return Date.parse(value);
 }
 function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
   const rules = config.suppressions ?? [];
@@ -14350,7 +14440,7 @@ function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
   return findings.flatMap((finding) => {
     const rule = rules.find((r3) => matches(r3, finding));
     if (!rule) return [finding];
-    const expired = rule.expires !== void 0 && Date.parse(rule.expires) < now.getTime();
+    const expired = rule.expires !== void 0 && now.getTime() >= (expiryInstant(rule.expires) ?? Number.NEGATIVE_INFINITY);
     const suppression = {
       reason: rule.reason,
       ...rule.acceptedBy ? { acceptedBy: rule.acceptedBy } : {},
@@ -14361,6 +14451,41 @@ function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
     const marked = { ...finding, suppressed: !expired, suppression };
     return expired ? [marked, expiredNote(finding, rule)] : [marked];
   });
+}
+function suppressionProblems(findings, config, vendorIds, narrowedBy) {
+  const rules = config.suppressions ?? [];
+  const problems = [];
+  const takenBy = findings.map((finding) => rules.findIndex((rule) => matches(rule, finding)));
+  for (const [index, rule] of rules.entries()) {
+    const at = `suppression ${index + 1}`;
+    if (rule.vendor !== void 0 && !vendorIds.has(rule.vendor)) {
+      const near = [...vendorIds].find((id) => id.toLowerCase() === rule.vendor?.toLowerCase());
+      problems.push(
+        `${at} names vendor "${rule.vendor}", which is not in the knowledge base${near ? ` (did you mean "${near}"?)` : ""}`
+      );
+      continue;
+    }
+    if (rule.rule !== void 0 && !RULE_IDS.includes(rule.rule)) {
+      problems.push(`${at} names rule "${rule.rule}", which is not a rule`);
+      continue;
+    }
+    const label = [
+      ...rule.vendor ? [`vendor ${rule.vendor}`] : [],
+      ...rule.rule ? [`rule ${rule.rule}`] : []
+    ].join(", ");
+    const matched = findings.flatMap((finding, i2) => matches(rule, finding) ? [i2] : []);
+    if (matched.length === 0) {
+      problems.push(
+        narrowedBy.length > 0 ? `${at} (${label}) matched no finding in this scan, which was narrowed (${narrowedBy.join("; ")}), so it may match in a full scan` : `${at} (${label}) matched no finding in this scan`
+      );
+    } else if (matched.every((i2) => (takenBy[i2] ?? -1) < index)) {
+      const earlier = Math.min(...matched.map((i2) => takenBy[i2] ?? 0)) + 1;
+      problems.push(
+        `${at} (${label}) matches nothing that suppression ${earlier} does not already take`
+      );
+    }
+  }
+  return problems;
 }
 function matches(rule, finding) {
   if (rule.vendor && finding.vendor?.id !== rule.vendor) return false;
@@ -14702,6 +14827,8 @@ function isDevRequirementsFile(path) {
 }
 var COMPILED_HEADER = /autogenerated by (?:pip-compile|uv via)/i;
 var SOURCE_ENTRY = /^-r\s+\S|\((?:[^()]*\/)?(?:pyproject\.toml|setup\.py|setup\.cfg)(?::[^()]*)?\)\s*$/;
+var PACKAGE_ENTRY = /^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?:\[[^\]]*\])?$/;
+var OMITTED_TRAILER = /^The following packages (?:were excluded from the output|are considered to be unsafe)/i;
 function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   const index = new LineIndex(text);
   const found = [];
@@ -14710,13 +14837,24 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   let continuation = false;
   let current = null;
   let inViaBlock = false;
+  const omitted = /* @__PURE__ */ new Set();
+  let inOmittedTrailer = false;
+  const annotate = (target, entries) => {
+    target.via ??= [];
+    target.via.push(...viaEntries(entries));
+    inViaBlock = entries.trim() === "";
+  };
   for (const physical of text.split("\n")) {
     const lineOffset = offset;
     offset += physical.length + 1;
     const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
     const continued = continuation;
     continuation = raw.trimEnd().endsWith("\\");
-    if (continued) continue;
+    if (continued) {
+      const via = /^via\b\s*(.*)$/.exec(/\s#\s*(.*)$/.exec(raw)?.[1]?.trim() ?? "");
+      if (via && current) annotate(current, via[1] ?? "");
+      continue;
+    }
     const comment = /^(\s*)#\s?(.*)$/.exec(raw);
     if (comment) {
       const [, indent = "", body = ""] = comment;
@@ -14724,18 +14862,20 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
       if (indent === "" || !current) {
         current = null;
         inViaBlock = false;
+        if (indent === "" && OMITTED_TRAILER.test(body.trim())) inOmittedTrailer = true;
+        else if (indent === "" && inOmittedTrailer) {
+          const name = requirementName(body.trim());
+          if (name) omitted.add(name.name);
+        }
         continue;
       }
       const via = /^via\b\s*(.*)$/.exec(body.trim());
-      if (via) {
-        current.via ??= [];
-        current.via.push(...viaEntries(via[1] ?? ""));
-        inViaBlock = (via[1] ?? "").trim() === "";
-      } else if (inViaBlock && body.trim() !== "") {
-        current.via?.push(body.trim());
-      }
+      if (via) annotate(current, via[1] ?? "");
+      else if (inViaBlock && /^\s{2,}\S/.test(body)) current.via?.push(body.trim());
+      else inViaBlock = false;
       continue;
     }
+    inOmittedTrailer = false;
     if (raw.trim() === "") {
       current = null;
       inViaBlock = false;
@@ -14760,14 +14900,18 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
     found.push(current);
   }
   const inFile = new Set(found.map((f3) => f3.name));
-  const packageEntry = (entry) => !entry.startsWith("-") && !SOURCE_ENTRY.test(entry) ? normalisePypiName(entry.split(/\s/)[0] ?? entry) : null;
+  const packageEntry = (entry) => {
+    const name = PACKAGE_ENTRY.exec(entry)?.[1];
+    return name === void 0 ? null : normalisePypiName(name);
+  };
   const isSource = (entry) => {
     if (SOURCE_ENTRY.test(entry)) return true;
     const name = packageEntry(entry);
-    return name !== null && !inFile.has(name);
+    return name !== null && !inFile.has(name) && !omitted.has(name);
   };
+  const wellFormed = (entry) => entry.startsWith("-") || SOURCE_ENTRY.test(entry) || packageEntry(entry) !== null;
   const annotated = found.filter((f3) => f3.via !== null).length;
-  const compiled = header || found.length > 0 && annotated === found.length && found.some((f3) => f3.via?.some(isSource));
+  const compiled = header || found.length > 0 && annotated === found.length && found.every((f3) => f3.via?.every(wellFormed)) && found.some((f3) => f3.via?.some(isSource));
   const errors = [];
   const unannotated = header && annotated === 0 && found.length > 0;
   if (unannotated) {
@@ -15317,9 +15461,21 @@ function toSarif(result, options) {
           ...result.scan.assumedAdequacyLapsed ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed } : {},
           ...result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}
         },
+        ...result.errors.length > 0 ? { invocations: [toInvocation(result)] } : {},
         results: result.findings.map((finding) => toResult(finding, result))
       }
     ]
+  };
+}
+function toInvocation(result) {
+  return {
+    executionSuccessful: !result.errors.some((e2) => e2.fatal),
+    toolExecutionNotifications: result.errors.map((e2) => ({
+      level: e2.fatal ? "error" : "warning",
+      message: { text: e2.message },
+      // An absolute path is the machine's, not the repository's.
+      ...isAbsolute22(e2.file) ? {} : { locations: [{ physicalLocation: { artifactLocation: { uri: e2.file } } }] }
+    }))
   };
 }
 function toReportingDescriptor(id, result) {
@@ -16077,7 +16233,7 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, options) {
           if (!code[at]) continue;
           if (insideBlockNamed !== void 0) {
             if (at < contentFrom || at >= closesAt || before[at] !== blockDepth + 1) continue;
-          } else if (language === "toml" && at !== first) {
+          } else if (language === "toml" && (at !== first || before[at] !== 0)) {
             continue;
           }
           const region = match[2] ?? match[3];
@@ -16102,7 +16258,7 @@ function regionsFromKeyLiterals(text, filePath, keys, provider, options) {
 function literal(quote) {
   return `[^${quote}\\\\$%{}]+`;
 }
-var HEREDOC = /^<<-?([A-Za-z_][A-Za-z0-9_-]*)/;
+var HEREDOC = /^<<-?([\p{ID_Start}_][\p{ID_Continue}-]*)/u;
 function scanLine(line, state, language) {
   const code = new Array(line.length).fill(false);
   const brace = new Array(line.length).fill(0);
@@ -16407,7 +16563,7 @@ var severityOrder = (f3) => SEVERITY_ORDER[f3.severity];
 var confidenceOrder = (f3) => CONFIDENCE_ORDER[f3.confidence];
 function isReadableDirectory(root) {
   try {
-    return statSync2(root).isDirectory();
+    return statSync22(root).isDirectory();
   } catch {
     return false;
   }
@@ -16567,7 +16723,18 @@ function scan(options) {
     return meetsConfidence(signal.confidence, minConfidence);
   });
   const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
-  const findings = applySuppressions(mergeSignals(filtered, { kb, staleVendorIds }), config, now);
+  const merged = mergeSignals(filtered, { kb, staleVendorIds });
+  const narrowedBy = [
+    ...onlyVendor ? ["only some vendors were scanned"] : [],
+    ...minConfidence !== "low" ? [`findings below ${minConfidence} confidence were dropped`] : [],
+    ...includeDev ? [] : ["dev dependencies were skipped"],
+    ...includeManifests ? [] : ["manifests were not read"],
+    ...!includeCallsites ? ["call sites were not analysed"] : degraded ? ["call sites could not be analysed"] : []
+  ];
+  for (const message of suppressionProblems(merged, config, new Set(kb.byId.keys()), narrowedBy)) {
+    errors.push({ file: config.source ?? ".egressa.yml", message, fatal: false });
+  }
+  const findings = applySuppressions(merged, config, now);
   return {
     $schema: `https://egressa.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,
     schemaVersion: FINDINGS_SCHEMA_VERSION,
@@ -16591,7 +16758,8 @@ function scan(options) {
       // The merged list actually handed to walk(), config first, so the
       // document records what was applied rather than what either source
       // asked for on its own.
-      ...exclude.length > 0 ? { exclude } : {}
+      ...exclude.length > 0 ? { exclude } : {},
+      config: config.source ?? null
     },
     summary: summarise(findings),
     findings,
@@ -16871,6 +17039,11 @@ function formatMarkdown(result, options = {}) {
     for (const p of result.unmatched.packages) lines.push(`- \`${p}\``);
     lines.push("", "No entry exists for these, so no jurisdiction can be reported.", "");
   }
+  if (result.errors.length > 0) {
+    lines.push("### Warnings", "");
+    for (const e2 of result.errors) lines.push(`- \`${e2.file}\`: ${e2.message}`);
+    lines.push("");
+  }
   lines.push("---", "", DISCLAIMER);
   return lines.join("\n");
 }
@@ -16903,7 +17076,6 @@ function isDirectory(path) {
   }
 }
 var SEVERITY_RANK2 = { note: 1, warning: 2, error: 3 };
-var FAIL_ON = ["none", "note", "warning", "error"];
 var scanCommand = defineCommand({
   meta: { name: "scan", description: "Scan a repository for third-party data egress" },
   args: {
@@ -17050,8 +17222,8 @@ function exitCodeFor(result, failOn) {
   return triggered ? EXIT.FINDINGS : EXIT.CLEAN;
 }
 function parseFailOn(value) {
-  if (FAIL_ON.includes(value)) return value;
-  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON.join(", ")}
+  if (FAIL_ON_LEVELS.includes(value)) return value;
+  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON_LEVELS.join(", ")}
 `);
   process.exit(EXIT.USAGE);
 }
