@@ -72,6 +72,15 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     lines.push('', 'No entry exists for these, so no jurisdiction can be reported.', '');
   }
 
+  // Parse and config warnings: a suppression that matched nothing, a compiled
+  // requirements file with nothing to attribute. The human format prints
+  // these too; leaving them out here hid them from every PR comment.
+  if (result.errors.length > 0) {
+    lines.push('### Warnings', '');
+    for (const e of result.errors) lines.push(`- \`${e.file}\`: ${e.message}`);
+    lines.push('');
+  }
+
   lines.push('---', '', DISCLAIMER);
   return lines.join('\n');
 }

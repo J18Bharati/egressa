@@ -103,6 +103,14 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   so both surfaces apply it. The MCP summary now carries each finding's suppression and names the
   file in `scan.config`. A config error of any kind, including malformed YAML, names the file and is a
   usage error (CLI exit 2, MCP tool error).
+- **Only the MCP summary said a repository's own config was applied.** `scan.config` is now part
+  of the findings document itself (schema `1.1.0`, optional), so the CLI's JSON and MCP's full
+  document name the file too, or say `null`.
+- **The MCP summary dropped the scan's errors, fatal ones included.** A mistyped path returned an
+  empty summary that read as a clean scan, and a parse warning never reached the agent. The
+  summary now carries `errors` (up to twenty, with `omittedErrors`). Markdown output gains a
+  Warnings section, and SARIF reports each error as a `toolExecutionNotifications` entry on the
+  run's invocation, so a GitHub code-scanning user sees them too.
 - **An expired-suppression note was appended after every other finding, and was not counted.** It
   now follows the finding it reactivates, so a truncated MCP summary cannot keep one without the
   other, and it counts in `byRule` and `bySeverity` like any other finding.

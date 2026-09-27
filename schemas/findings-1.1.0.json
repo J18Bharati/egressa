@@ -112,6 +112,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "config": {
+          "type": ["string", "null"],
+          "description": "The repository's own configuration file, relative to the root, or null when none was applied."
         }
       }
     },

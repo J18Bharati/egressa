@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { DISCLAIMER } from '../claims.js';
 import { RULES, RULE_IDS } from '../rules.js';
 import type { Finding, ScanResult, Severity } from '../types.js';
@@ -54,9 +55,29 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
             : {}),
           ...(result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}),
         },
+        ...(result.errors.length > 0 ? { invocations: [toInvocation(result)] } : {}),
         results: result.findings.map((finding) => toResult(finding, result)),
       },
     ],
+  };
+}
+
+/**
+ * The scan's own errors, as SARIF records them: a notification per error on
+ * the run's invocation. GitHub is where a CI gate is read, and a config
+ * warning or a parse error shown everywhere else must not be missing there.
+ */
+function toInvocation(result: ScanResult) {
+  return {
+    executionSuccessful: !result.errors.some((e) => e.fatal),
+    toolExecutionNotifications: result.errors.map((e) => ({
+      level: e.fatal ? 'error' : 'warning',
+      message: { text: e.message },
+      // An absolute path is the machine's, not the repository's.
+      ...(isAbsolute(e.file)
+        ? {}
+        : { locations: [{ physicalLocation: { artifactLocation: { uri: e.file } } }] }),
+    })),
   };
 }
 

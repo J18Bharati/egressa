@@ -35,8 +35,8 @@ There are no write tools and the server makes no network calls.
 
 `scan_repository` applies the repository's `.egressa.yml`, the same way the CLI does. Its excludes
 come first in `scan.exclude`, followed by any `exclude` argument. A finding its suppressions accept is
-kept and marked `suppressed`, with the reason, and never removed. The summary's `scan.config` names
-the file, or is `null` when there is none, so an agent can report that a repository excluded or
+kept and marked `suppressed`, with the reason, and never removed. `scan.config`, in the summary and
+in the full document, names the file, or is `null` when there is none, so an agent can report that a repository excluded or
 accepted something itself. A config that cannot be honoured (a malformed file, a suppression with no
 reason, a negated glob) is a tool error, not a scan.
 
@@ -48,7 +48,9 @@ whether each call site is live production code, and summarise within the claim s
 ## Token budgeting
 
 `scan_repository` returns a summary plus the strongest findings, with evidence truncated to three
-locations per finding, and sets `truncated` and `omittedFindings` when it withheld anything. A full
+locations per finding, and sets `truncated` and `omittedFindings` when it withheld anything. It also
+carries the scan's `errors`, fatal and not, up to twenty with `omittedErrors` counting the rest: a
+path that does not exist returns its fatal error rather than an empty summary that reads as clean. A full
 findings document for a repository with thirty vendors will otherwise flood a model's context, and
 an agent that runs out of room mid-review is worse than one that asked for more.
 

@@ -16,13 +16,10 @@ import type { Finding, ScanResult } from './types.js';
 export interface SummaryOptions {
   maxFindings?: number;
   maxEvidencePerFinding?: number;
-  /**
-   * Where the repository's own configuration was read from, or null when it
-   * has none. An agent scanning a repository it does not own needs to know
-   * when that repository excluded files or suppressed findings itself.
-   */
-  config?: string | null;
 }
+
+/** Errors beyond this many are counted in `omittedErrors`, not listed. */
+const MAX_ERRORS = 20;
 
 export interface SummarisedFinding {
   ruleId: string;
@@ -67,15 +64,22 @@ export interface SummarisedScan {
     exclude?: string[];
     /**
      * The configuration file applied, relative to the root, or null for none.
-     * Absent when the caller did not say, which is not the same as none.
+     * An agent scanning a repository it does not own needs to know when that
+     * repository excluded files or suppressed findings itself.
      */
-    config?: string | null;
+    config: string | null;
   };
   summary: ScanResult['summary'];
   findings: SummarisedFinding[];
   truncated: boolean;
   omittedFindings: number;
   unmatched: ScanResult['unmatched'];
+  /**
+   * Every error the scan reported, fatal ones first seen as the reason a
+   * summary is empty. Without them a mistyped path read as a clean scan.
+   */
+  errors: ScanResult['errors'];
+  omittedErrors: number;
   assumedAdequacyLapsed?: string[];
 }
 
@@ -93,13 +97,15 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
       manifestsScanned: result.scan.manifestsScanned,
       degraded: result.scan.engine.degraded,
       ...(result.scan.exclude ? { exclude: result.scan.exclude } : {}),
-      ...(options.config !== undefined ? { config: options.config } : {}),
+      config: result.scan.config ?? null,
     },
     summary: result.summary,
     findings: shown.map((finding) => toSummarised(finding, maxEvidence)),
     truncated: result.findings.length > shown.length,
     omittedFindings: result.findings.length - shown.length,
     unmatched: result.unmatched,
+    errors: result.errors.slice(0, MAX_ERRORS),
+    omittedErrors: Math.max(0, result.errors.length - MAX_ERRORS),
     ...(result.scan.assumedAdequacyLapsed
       ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }
       : {}),

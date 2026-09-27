@@ -294,6 +294,7 @@ export function scan(options: ScanOptions): ScanResult {
       // document records what was applied rather than what either source
       // asked for on its own.
       ...(exclude.length > 0 ? { exclude } : {}),
+      config: config.source ?? null,
     },
     summary: summarise(findings),
     findings,

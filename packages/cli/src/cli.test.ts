@@ -99,6 +99,16 @@ describe('markdown output', () => {
     expect(md).toContain('Stripe, LLC');
   });
 
+  it("lists the scan's warnings, which it used to leave out", () => {
+    const md = formatMarkdown({
+      ...result(),
+      errors: [{ file: '.egressa.yml', message: 'suppression 1 matched no finding', fatal: false }],
+    });
+    expect(md).toContain('### Warnings');
+    expect(md).toContain('`.egressa.yml`: suppression 1 matched no finding');
+    expect(md.indexOf('### Warnings')).toBeLessThan(md.indexOf('does not assess or certify'));
+  });
+
   it('says how many findings it withheld when truncating', () => {
     const md = formatMarkdown(result(), { maxFindings: 0 });
     expect(md).toContain('1 further finding(s) not shown');
