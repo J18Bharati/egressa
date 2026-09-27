@@ -339,3 +339,72 @@ describe('a date-only expiry', () => {
     expect(on('2026-09-06T11:00Z').findings[0]?.suppressed).toBe(false);
   });
 });
+
+describe('a suppression that matches nothing says so', () => {
+  // Field test 4, E18. `vendor: Stripe` (the id is `stripe`) loaded, matched
+  // nothing, and the reviewer believed the risk accepted.
+  const warnings = (suppressions: object[], options: object = {}) =>
+    scan({
+      root: 'fixtures/repos/express-stripe-sendgrid',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      now: NOW,
+      includeCallsites: true,
+      config: { source: '.egressa.yml', suppressions: suppressions as never },
+      ...options,
+    })
+      .errors.filter((e) => e.file === '.egressa.yml')
+      .map((e) => [e.fatal, e.message]);
+
+  it('names a vendor that is not in the knowledge base, with a hint', () => {
+    expect(warnings([{ vendor: 'Stripe', reason: 'x' }])).toEqual([
+      [
+        false,
+        'suppression 1 names vendor "Stripe", which is not in the knowledge base (did you mean "stripe"?)',
+      ],
+    ]);
+  });
+
+  it('names a rule that does not exist', () => {
+    expect(warnings([{ rule: 'transfer/adequate-egress', reason: 'x' }])).toEqual([
+      [false, 'suppression 1 names rule "transfer/adequate-egress", which is not a rule'],
+    ]);
+  });
+
+  it('says a known vendor matched no finding in this scan', () => {
+    expect(warnings([{ vendor: 'sentry', reason: 'x' }])).toEqual([
+      [false, 'suppression 1 (vendor sentry) matched no finding in this scan'],
+    ]);
+  });
+
+  it('says so more carefully when the scan was narrowed', () => {
+    const narrowed = warnings([{ vendor: 'sentry', reason: 'x' }], {
+      onlyVendor: ['stripe'],
+      includeCallsites: false,
+    });
+    expect(narrowed).toEqual([
+      [
+        false,
+        'suppression 1 (vendor sentry) matched no finding in this scan, which was narrowed (only some vendors were scanned; call sites were not analysed), so it may match in a full scan',
+      ],
+    ]);
+  });
+
+  it('says when an earlier suppression already takes everything it matches', () => {
+    expect(
+      warnings([
+        { vendor: 'stripe', reason: 'x' },
+        { rule: 'transfer/adequate-country-egress', reason: 'y' },
+      ]),
+    ).toEqual([
+      [
+        false,
+        'suppression 2 (rule transfer/adequate-country-egress) matches nothing that suppression 1 does not already take',
+      ],
+    ]);
+  });
+
+  it('says nothing about a suppression that matched', () => {
+    expect(warnings([{ vendor: 'stripe', reason: 'x' }])).toEqual([]);
+  });
+});

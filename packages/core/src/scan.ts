@@ -4,7 +4,7 @@ import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
-import { type EgressaConfig, applySuppressions } from './config/index.js';
+import { type EgressaConfig, applySuppressions, suppressionProblems } from './config/index.js';
 import { excludeProblem, walk } from './discovery/walk.js';
 import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -266,7 +266,22 @@ export function scan(options: ScanOptions): ScanResult {
   });
 
   const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
-  const findings = applySuppressions(mergeSignals(filtered, { kb, staleVendorIds }), config, now);
+  const merged = mergeSignals(filtered, { kb, staleVendorIds });
+  const narrowedBy = [
+    ...(onlyVendor ? ['only some vendors were scanned'] : []),
+    ...(minConfidence !== 'low' ? [`findings below ${minConfidence} confidence were dropped`] : []),
+    ...(includeDev ? [] : ['dev dependencies were skipped']),
+    ...(includeManifests ? [] : ['manifests were not read']),
+    ...(!includeCallsites
+      ? ['call sites were not analysed']
+      : degraded
+        ? ['call sites could not be analysed']
+        : []),
+  ];
+  for (const message of suppressionProblems(merged, config, new Set(kb.byId.keys()), narrowedBy)) {
+    errors.push({ file: config.source ?? '.egressa.yml', message, fatal: false });
+  }
+  const findings = applySuppressions(merged, config, now);
 
   return {
     $schema: `https://egressa.dev/schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`,

@@ -325,6 +325,16 @@ describe('cli end to end', () => {
       expect(vendors(['--no-include-transitive'])).toEqual([]);
     });
 
+    it('warns in human output about a suppression that matched nothing, without changing the exit code', () => {
+      const dir = repo('suppressions:\n  - {vendor: Stripe, reason: accepted}\n');
+      writeFileSync(join(dir, 'pay.ts'), "fetch('https://api.stripe.com/v1/charges');\n");
+      const { code, stdout } = run(['scan', dir, '--kb', 'kb']);
+      expect(code).toBe(EXIT.CLEAN);
+      expect(stdout).toContain(
+        'warning: .egressa.yml: suppression 1 names vendor "Stripe", which is not in the knowledge base (did you mean "stripe"?)',
+      );
+    });
+
     it('reports a suppression with no reason as a usage error', () => {
       const { code, stderr } = runErr([
         'scan',

@@ -106,6 +106,11 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 - **Only the MCP summary said a repository's own config was applied.** `scan.config` is now part
   of the findings document itself (schema `1.1.0`, optional), so the CLI's JSON and MCP's full
   document name the file too, or say `null`.
+- **A suppression that matched nothing said nothing.** `vendor: Stripe` (the id is `stripe`) loaded,
+  matched no finding, and read as an accepted risk. The scan now reports, as a non-fatal error, a
+  suppression naming a vendor or rule that does not exist (with a hint for a case slip), one that
+  matched no finding, qualified when the scan was narrowed and it might match in a full one, and
+  one whose every match an earlier suppression already takes.
 - **The MCP summary dropped the scan's errors, fatal ones included.** A mistyped path returned an
   empty summary that read as a clean scan, and a parse warning never reached the agent. The
   summary now carries `errors` (up to twenty, with `omittedErrors`). Markdown output gains a

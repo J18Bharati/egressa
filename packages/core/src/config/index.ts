@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { excludeProblem } from '../discovery/walk.js';
+import { RULE_IDS } from '../rules.js';
 import type { Finding } from '../types.js';
 
 export interface SuppressionRule {
@@ -297,6 +298,64 @@ export function applySuppressions(
     const marked = { ...finding, suppressed: !expired, suppression };
     return expired ? [marked, expiredNote(finding, rule)] : [marked];
   });
+}
+
+/**
+ * What is wrong with the configured suppressions, one message each, for a scan
+ * to report as non-fatal errors. A suppression that matches nothing used to say
+ * nothing: `vendor: Stripe` (the id is `stripe`) loaded cleanly, and the
+ * reviewer reading the file believed the risk accepted while the scanner kept
+ * reporting it.
+ *
+ * `findings` are the scan's findings before suppression. `narrowedBy` names
+ * whatever made this scan see less than a full one -- a vendor filter, a
+ * confidence floor, call sites not analysed -- because a suppression that
+ * matches nothing in a narrowed scan may still match in a full one, and saying
+ * it is stale would be a wrong fact.
+ */
+export function suppressionProblems(
+  findings: Finding[],
+  config: EgressaConfig,
+  vendorIds: ReadonlySet<string>,
+  narrowedBy: string[],
+): string[] {
+  const rules = config.suppressions ?? [];
+  const problems: string[] = [];
+  // The suppression each finding is taken by: the first that matches it.
+  const takenBy = findings.map((finding) => rules.findIndex((rule) => matches(rule, finding)));
+
+  for (const [index, rule] of rules.entries()) {
+    const at = `suppression ${index + 1}`;
+    if (rule.vendor !== undefined && !vendorIds.has(rule.vendor)) {
+      const near = [...vendorIds].find((id) => id.toLowerCase() === rule.vendor?.toLowerCase());
+      problems.push(
+        `${at} names vendor "${rule.vendor}", which is not in the knowledge base${near ? ` (did you mean "${near}"?)` : ''}`,
+      );
+      continue;
+    }
+    if (rule.rule !== undefined && !(RULE_IDS as readonly string[]).includes(rule.rule)) {
+      problems.push(`${at} names rule "${rule.rule}", which is not a rule`);
+      continue;
+    }
+    const label = [
+      ...(rule.vendor ? [`vendor ${rule.vendor}`] : []),
+      ...(rule.rule ? [`rule ${rule.rule}`] : []),
+    ].join(', ');
+    const matched = findings.flatMap((finding, i) => (matches(rule, finding) ? [i] : []));
+    if (matched.length === 0) {
+      problems.push(
+        narrowedBy.length > 0
+          ? `${at} (${label}) matched no finding in this scan, which was narrowed (${narrowedBy.join('; ')}), so it may match in a full scan`
+          : `${at} (${label}) matched no finding in this scan`,
+      );
+    } else if (matched.every((i) => (takenBy[i] ?? -1) < index)) {
+      const earlier = Math.min(...matched.map((i) => takenBy[i] ?? 0)) + 1;
+      problems.push(
+        `${at} (${label}) matches nothing that suppression ${earlier} does not already take`,
+      );
+    }
+  }
+  return problems;
 }
 
 function matches(rule: SuppressionRule, finding: Finding): boolean {
