@@ -267,6 +267,31 @@ for (const [scope, owner] of scopeOwners) {
   }
 }
 
+// A name that reads as two vendors. `findVendor` answers a bare query by
+// trying it as a vendor id, an npm name, a PyPI name and a host, and refuses
+// when two readings disagree -- so each collision here is a lookup that would
+// silently answer nothing, found by the contributor who can say which vendor
+// the name belongs to.
+for (const [key, owner] of packageOwners) {
+  const [ecosystem, name = ''] = key.split(/:(.*)/s);
+  if (name.endsWith('/*')) continue;
+  if (vendorIds.has(name) && name !== owner) {
+    errors.push(`${fileFor(owner)}: package alias "${key}" is the id of vendor "${name}"`);
+  }
+  if (ecosystem === 'npm') {
+    const pypiOwner = packageOwners.get(`pypi:${normalisePypiName(name)}`);
+    if (pypiOwner && pypiOwner !== owner) {
+      errors.push(
+        `${fileFor(owner)}: "${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`,
+      );
+    }
+  }
+  for (const [hostKey, hostOwner] of hostOwners) {
+    if (hostOwner !== owner && hostKey.split('|')[0] === name) {
+      errors.push(`${fileFor(owner)}: package alias "${key}" is a host of vendor "${hostOwner}"`);
+    }
+  }
+}
 // --- adequacy status ------------------------------------------------------
 const adequacy = load(join(KB, 'adequacy-status.json'));
 if (!validateAdequacy(adequacy)) {

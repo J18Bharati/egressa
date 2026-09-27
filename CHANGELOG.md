@@ -120,8 +120,11 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   now follows the finding it reactivates, and a truncated MCP summary that keeps the finding keeps
   the note too, even one past `maxFindings`, and it counts in `byRule` and `bySeverity` like any other finding.
 - **`egressa vendors show` and MCP `lookup_vendor` tried npm only**, so `boto3` had "no knowledge base
-  entry". They now try PyPI too, and answer nothing when npm and PyPI name different vendors. MCP
-  `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.
+  entry". They now try PyPI too. A query is read as a vendor id in any case, an npm name, a PyPI name
+  and a host, and answers nothing when two readings name different vendors, where an id used to win
+  over a package and a package over a host. `kb:validate` rejects the data that would make a lookup
+  ambiguous: an alias that is another vendor's id or host, and one name used by different vendors on
+  npm and PyPI. MCP `check_package` compares a PyPI name in PEP 503 form, so `Twilio` matches.
 - **`--out=-` wrote a file named `-`.** It now means stdout.
 - **`.egressa.yml` is validated as a whole.** Every suppression field must be text, a suppression
   must name a vendor or a rule, and `expires` must be a date. An unparseable one used to compare as

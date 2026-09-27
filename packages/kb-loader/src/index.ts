@@ -131,18 +131,23 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
     /**
      * A question like "is `boto3` a known vendor?" does not say which registry
      * it means. Trying npm alone answered "no entry" for a vendor the knowledge
-     * base carries under PyPI. Two registries can use one name for two
-     * different projects, though, and naming either vendor then would be a
-     * guess, so that case answers nothing -- the same refusal `lookupPackage`
-     * makes for two overlapping scopes.
+     * base carries under PyPI. So every reading is tried -- a vendor id in any
+     * case, an npm name, a PyPI name, a host -- and when two of them name
+     * different vendors the query answers nothing: naming either would be a
+     * guess, the same refusal `lookupPackage` makes for two overlapping
+     * scopes. The first version let an id win over a package and a package
+     * over a host, silently.
      */
     findVendor(query) {
-      const byVendorId = byId.get(query);
-      if (byVendorId) return byVendorId;
-      const npm = kb.lookupPackage('npm', query)?.vendor;
-      const pypi = kb.lookupPackage('pypi', query)?.vendor;
-      if (npm && pypi && npm.id !== pypi.id) return null;
-      return npm ?? pypi ?? hosts.lookup(query)?.vendor ?? null;
+      const lower = query.toLowerCase();
+      const readings = [
+        byId.get(query) ?? vendors.find((v) => v.id.toLowerCase() === lower),
+        kb.lookupPackage('npm', query)?.vendor,
+        kb.lookupPackage('pypi', query)?.vendor,
+        hosts.lookup(query)?.vendor,
+      ].filter((v): v is VendorEntry => v !== undefined);
+      const [first] = readings;
+      return first && readings.every((v) => v.id === first.id) ? first : null;
     },
 
     decisionFor(country) {

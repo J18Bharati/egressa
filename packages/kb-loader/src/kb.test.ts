@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -213,5 +214,77 @@ describe('HostTrie precedence', () => {
     const trie = new HostTrie();
     trie.add(vendorA, alias('example.com', 'exact'));
     expect(trie.lookup('sub.example.com')).toBeNull();
+  });
+});
+
+describe('what field test 4 found findVendor answering', () => {
+  // A copy of the knowledge base with one alias added to `vendor`.
+  const withAlias = (vendor: string, ecosystem: string, name: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-'));
+    cpSync('kb', join(dir, 'kb'), { recursive: true });
+    const file = join(dir, 'kb', 'vendors', `${vendor}.json`);
+    const entry = JSON.parse(readFileSync(file, 'utf8'));
+    entry.aliases.packages[ecosystem] = [
+      ...(entry.aliases.packages[ecosystem] ?? []),
+      { name, kind: 'official-sdk', detectTransitive: false },
+    ];
+    writeFileSync(file, JSON.stringify(entry));
+    return dir;
+  };
+
+  it('finds a vendor id in any case', () => {
+    expect(kb.findVendor('Stripe')?.id).toBe('stripe');
+    expect(kb.findVendor('AWS')?.id).toBe('aws');
+  });
+
+  it('answers nothing when an id and a package name different vendors', () => {
+    const dir = withAlias('resend', 'npm', 'sentry');
+    expect(loadKnowledgeBase({ kbPath: join(dir, 'kb') }).findVendor('sentry')).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('answers nothing when a package and a host name different vendors', () => {
+    const dir = withAlias('resend', 'npm', 'sentry.io');
+    expect(loadKnowledgeBase({ kbPath: join(dir, 'kb') }).findVendor('sentry.io')).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe('and kb:validate refuses the data that would make it ambiguous', () => {
+    const validate = (dir: string) => {
+      try {
+        execFileSync(
+          join(process.cwd(), 'node_modules/.bin/tsx'),
+          [
+            '--tsconfig',
+            join(process.cwd(), 'tsconfig.json'),
+            join(process.cwd(), 'packages/kb-loader/scripts/validate.ts'),
+          ],
+          { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        return '';
+      } catch (error) {
+        return (error as { stderr: string }).stderr;
+      }
+    };
+
+    it("an alias equal to another vendor's id", () => {
+      const dir = withAlias('resend', 'npm', 'sentry');
+      expect(validate(dir)).toContain('package alias "npm:sentry" is the id of vendor "sentry"');
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('one name used by different vendors on npm and on PyPI', () => {
+      const dir = withAlias('stripe', 'npm', 'boto3');
+      expect(validate(dir)).toContain(
+        '"boto3" is an npm alias of "stripe" and a pypi alias of "aws"',
+      );
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("a package alias equal to another vendor's host", () => {
+      const dir = withAlias('resend', 'npm', 'sentry.io');
+      expect(validate(dir)).toContain('package alias "npm:sentry.io" is a host of vendor "sentry"');
+      rmSync(dir, { recursive: true, force: true });
+    });
   });
 });
