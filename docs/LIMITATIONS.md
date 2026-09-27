@@ -204,7 +204,12 @@ detected. `poetry.lock` and `uv.lock` are not read. A `requirements.txt` compile
 or `uv pip compile` is read as a lockfile, split by its `# via` annotations. But output without
 annotations looks exactly like a hand-written file, and every package in it is read as declared:
 `poetry export`, `pipenv requirements`, and pip-compile or uv run with `--no-header --no-annotate`.
-A pip-compile header with no annotations is recognised, and nothing in that file is attributed. And a
+A pip-compile or uv header with no annotations is recognised, and nothing in that file is attributed.
+A `# via` parent that is not itself a line in the file is read as the project, because `uv export`
+writes no line for a project that is not a package; so a package dropped from the output some other
+way than `--no-emit-package`, which uv lists in a trailer, would make its children read as declared.
+The committed real output in `fixtures/lockfiles/requirements/` is uv's; pip-compile's has not been
+captured, so its shapes are covered by hand-written cases only. And a
 vendor is matched only if its knowledge base entry carries a `pypi` alias — today Twilio and AWS
 (`boto3`, `botocore`). Any other vendor's Python SDK lands in `unmatched`, which is the signal to
 add one.

@@ -89,7 +89,15 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 - **A compiled `requirements.txt` made every transitive package a direct, high-confidence vendor.**
   See the Python entry under Added: pip-compile and uv output is now read as a lockfile. A source
   in a subdirectory or a dependency group counts as a source, and a `# via` parent that is not in
-  the file is taken as the project itself, so no declared SDK is dropped.
+  the file is taken as the project itself, so no declared SDK is dropped. Only a bare package name
+  counts as that parent, and not one the generator's trailer lists as excluded from the output.
+- **uv's `--emit-index-annotation` brought the transitive-package problem back.** Its
+  `# from <index>` line after a multi-parent `# via` block was read as a parent named `from`, absent
+  from the file and so the project: `botocore` became AWS at high confidence. A via block now ends
+  at any comment that is not a `#   <entry>` line. `# via pkg[extra]` names `pkg`, and an
+  annotation on a `--hash` continuation line is read. The reader is tested against real
+  `uv pip compile` and `uv export` output, regenerated offline by
+  `scripts/gen-compiled-requirements.sh`.
 - **The MCP server ignored `.egressa.yml`.** Through MCP a team's suppressed finding came back
   unsuppressed and its excluded tree was scanned. Loading and applying the config moved into core,
   so both surfaces apply it. The MCP summary now carries each finding's suppression and names the
