@@ -57,13 +57,16 @@ export interface KeyLiteralOptions {
  *   `default_tags { tags = { region = "emea" } }` is not, and a `}` that closes
  *   the provider mid-line ends it there rather than at the end of the line.
  * - In TOML, `primary_region` is a top-level key. It is read only as the first
- *   code on a line, and only before the first line opening with `[`. So
- *   `[env]`, dotted keys and inline tables are never read as the app's region.
+ *   code on a line, outside any inline table, and only before the first line
+ *   opening with `[`. So `[env]`, dotted keys and inline tables, including a
+ *   multi-line one, are never read as the app's region.
  *
  * Every rule fails towards hiding a region. An unterminated heredoc or string
  * hides the rest of the file. A line inside a multi-line TOML array that opens
- * with `[` ends the top level early. Both are recorded in `docs/LIMITATIONS.md`
- * and pinned by tests, so lifting either is a decision, not an accident.
+ * with `[` ends the top level early. A provider header must be the first code
+ * on its line and carry a quoted label, and a quoted TOML key is not read. Each
+ * is recorded in `docs/LIMITATIONS.md` and pinned by a test, so lifting one is
+ * a decision, not an accident.
  */
 export function regionsFromKeyLiterals(
   text: string,
@@ -146,7 +149,9 @@ export function regionsFromKeyLiterals(
           if (!code[at]) continue;
           if (insideBlockNamed !== undefined) {
             if (at < contentFrom || at >= closesAt || before[at] !== blockDepth + 1) continue;
-          } else if (language === 'toml' && at !== first) {
+          } else if (language === 'toml' && (at !== first || before[at] !== 0)) {
+            // A TOML 1.1 inline table can span lines, so a key at the start of
+            // a line can still be inside one.
             continue;
           }
           const region = match[2] ?? match[3];
@@ -197,7 +202,9 @@ interface ScanState {
   tomlMulti?: '"""' | "'''";
 }
 
-const HEREDOC = /^<<-?([A-Za-z_][A-Za-z0-9_-]*)/;
+// HCL identifiers are Unicode (ID_Start, ID_Continue and `-`). An ASCII-only
+// pattern missed `<<ÉOF`, and the body's braces were counted as code.
+const HEREDOC = /^<<-?([\p{ID_Start}_][\p{ID_Continue}-]*)/u;
 
 /**
  * Classify each column of a line: `code` is true where the character is

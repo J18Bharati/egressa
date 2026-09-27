@@ -365,6 +365,46 @@ describe('limitations: each hides a region, and lifting one is deliberate', () =
   it('hides the rest of the file after an unterminated heredoc', () => {
     expect(tf('provider "aws" {\n  profile = <<EOF\n  region = "eu-west-1"\n}\n')).toEqual([]);
   });
+
+  it('does not read a provider block opened after other code on its line', () => {
+    expect(tf('locals { a = 1 } provider "aws" {\n  region = "us-west-2"\n}\n')).toEqual([]);
+  });
+
+  it('does not read a provider block with an unquoted label', () => {
+    expect(tf('provider aws {\n  region = "us-west-2"\n}\n')).toEqual([]);
+  });
+
+  it('does not read a quoted primary_region key', () => {
+    expect(fly('"primary_region" = "fra"\n')).toEqual([]);
+  });
+});
+
+describe('what field test 4 found still inventing a region', () => {
+  it('reads a heredoc whose identifier is not ASCII as a heredoc', () => {
+    // HCL identifiers are Unicode. Missing the opener let the body's `}`
+    // rebalance the depth, and its provider block read as a real one.
+    const text = [
+      'resource "local_file" "p" {',
+      '  content = <<ÉOF',
+      '}',
+      'provider "aws" {',
+      '  region = "us-west-2"',
+      '}',
+      'resource "x" "y" {',
+      'ÉOF',
+      '}',
+      'provider "aws" {',
+      '  region = "eu-west-1"',
+      '}',
+    ].join('\n');
+    expect(regions(tf(text))).toEqual(['eu-west-1']);
+  });
+
+  it('does not read a key inside a multi-line inline table', () => {
+    // TOML 1.1 lets an inline table span lines, so its keys can start a line.
+    const text = 'app = "x"\nbuild = {\n  primary_region = "syd"\n}\nprimary_region = "fra"\n';
+    expect(regions(fly(text))).toEqual(['fra']);
+  });
 });
 
 describe('what the branch review found still inventing a region', () => {

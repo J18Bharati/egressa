@@ -270,7 +270,7 @@ Not collected at all: files under dot-directories such as `.github/` and `.terra
 walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an
 ordinary constructor argument the call-site analyzer does not yet attribute to a provider.
 
-Two shapes hide a region that is written as a literal, and both are pinned by cases in
+Five shapes hide a region that is written as a literal, and each is pinned by a case in
 `packages/core/src/infrastructure/key-literal.test.ts`:
 
 - **An unterminated heredoc or string in a `.tf` file** hides everything after it. The reader
@@ -279,3 +279,7 @@ Two shapes hide a region that is written as a literal, and both are pinned by ca
 - **In `fly.toml`, a line inside a multi-line array that begins with `[`** is taken for a table
   header, and `primary_region` is read only above the first table. So a top-level `primary_region`
   written after such an array is not read. Fly's generated configuration does not have this layout.
+- **A `provider` block whose header is not the first code on its line**, as in
+  `locals { a = 1 } provider "aws" {`, is not read.
+- **A `provider` block with an unquoted label**, `provider aws {`, which HCL accepts, is not read.
+- **A quoted key in `fly.toml`**, `"primary_region" = "fra"`, which TOML accepts, is not read.
