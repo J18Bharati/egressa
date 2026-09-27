@@ -99,7 +99,9 @@ suppressions:
 ```
 
 `reason` is required by schema. Always set `expires` — an accepted risk should be revisited, and an
-expired suppression reactivates the finding with a `config/expired-suppression` note. Write a real
+expired suppression reactivates the finding with a `config/expired-suppression` note. `expires` is
+an ISO date, valid through the end of that day in UTC, or a time with a zone. Any key the scanner
+does not know, including a YAML merge key, makes the file a usage error rather than being ignored. Write a real
 reason naming what was checked and by whom; "not applicable" helps nobody in six months.
 
 ## Growing the knowledge base

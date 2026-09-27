@@ -261,6 +261,30 @@ describe('cli end to end', () => {
       expect(stderr).toContain('.egressa.yml');
     });
 
+    it('names the file, not the flag, when failOn in it is not a level', () => {
+      const { code, stderr } = runErr(['scan', repo('failOn: loud\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('.egressa.yml: failOn must be one of');
+      expect(stderr).not.toContain('--fail-on');
+    });
+
+    it('refuses an explicit --config that is not a mapping, rather than scanning without it', () => {
+      const dir = repo('version: 1\n');
+      writeFileSync(join(dir, 'hostname'), 'myhost\n');
+      const { code, stderr } = runErr(['scan', dir, '--config', join(dir, 'hostname')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('must be a mapping');
+    });
+
+    it('refuses a misspelled expires, which used to leave the suppression permanent', () => {
+      const { code, stderr } = runErr([
+        'scan',
+        repo('suppressions:\n  - {vendor: stripe, reason: x, expiry: "2020-01-01"}\n'),
+      ]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('did you mean "expires"');
+    });
+
     it('reports a suppressions entry that is not a list as a usage error', () => {
       // It exited 1, the findings code, after the config moved into core.
       const { code, stderr } = runErr(['scan', repo('suppressions: nope\n')]);

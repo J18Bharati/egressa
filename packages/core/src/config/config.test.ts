@@ -232,3 +232,110 @@ describe('a config reached through a symlink', () => {
     expect(() => loadConfig(root)).not.toThrow(/sk_live/);
   });
 });
+
+describe('what field test 4 found loadConfig letting through', () => {
+  // Each left a suppression permanent, or a team's config silently unread.
+  const dirWith = (content: string | Buffer) => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, '.egressa.yml'), content);
+    return dir;
+  };
+  const refuses = (content: string | Buffer, message: RegExp) => {
+    const dir = dirWith(content);
+    expect(() => loadConfig(dir)).toThrow(ConfigError);
+    expect(() => loadConfig(dir)).toThrow(message);
+  };
+  const entry = (extra: string) => `suppressions:\n  - vendor: stripe\n    reason: x\n${extra}`;
+
+  it('refuses an unknown key, with a hint when it is a near miss', () => {
+    refuses(entry('    expiry: "2020-01-01"\n'), /unknown key "expiry".*expires/);
+    refuses(
+      'suppresions:\n  - {vendor: stripe, reason: x}\n',
+      /unknown key "suppresions".*suppressions/,
+    );
+    refuses('excludes: [a/**]\n', /unknown key "excludes"/);
+  });
+
+  it('refuses a YAML merge key rather than dropping what it carries', () => {
+    refuses(
+      'suppressions:\n  - &b {vendor: sentry, reason: y, expires: "2020-01-01"}\n  - vendor: stripe\n    reason: x\n    <<: *b\n',
+      /suppression 2: merge keys are not supported/,
+    );
+    // An anchor kept under its own top-level key is refused as an unknown key.
+    refuses('base: &b {expires: "2020-01-01"}\n', /unknown key "base"/);
+  });
+
+  it('does not echo a key that is not a plain name', () => {
+    const dir = dirWith('"sk_live_123 secret": 1\n');
+    expect(() => loadConfig(dir)).toThrow(/an unrecognised key/);
+    expect(() => loadConfig(dir)).not.toThrow(/sk_live/);
+  });
+
+  it('refuses a version other than 1', () => {
+    refuses('version: 2\n', /version must be 1/);
+  });
+
+  it('refuses a config that is not a mapping', () => {
+    refuses('- a\n- b\n', /must be a mapping/);
+    refuses('hello\n', /must be a mapping/);
+    refuses('false\n', /must be a mapping/);
+  });
+
+  it('reads an empty config as empty, and still names it', () => {
+    expect(loadConfig(dirWith(''))).toEqual({ source: '.egressa.yml' });
+  });
+
+  it('refuses a file that is not UTF-8, and names UTF-16', () => {
+    const utf16 = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('suppressions:\n  - {vendor: stripe, reason: x}\n', 'utf16le'),
+    ]);
+    refuses(utf16, /UTF-16/);
+    refuses(Buffer.from([0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x3a, 0x20, 0xe9, 0x0a]), /UTF-8/);
+  });
+
+  it('refuses a symlink that does not resolve, and a directory', () => {
+    const dangling = mkdtempSync(join(tmpdir(), 'adq-'));
+    symlinkSync(join(dangling, 'missing.yml'), join(dangling, '.egressa.yml'));
+    expect(() => loadConfig(dangling)).toThrow(/symlink that does not resolve/);
+    const loop = mkdtempSync(join(tmpdir(), 'adq-'));
+    symlinkSync(join(loop, '.egressa.yml'), join(loop, '.egressa.yml'));
+    expect(() => loadConfig(loop)).toThrow(/symlink that does not resolve/);
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    mkdirSync(join(dir, '.egressa.yml'));
+    expect(() => loadConfig(dir)).toThrow(/is a directory/);
+  });
+
+  it('refuses an explicit config that is not a mapping', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, 'hostname'), 'myhost\n');
+    expect(() => loadConfig(dir, join(dir, 'hostname'))).toThrow(/must be a mapping/);
+  });
+
+  it('refuses a failOn that the CLI would refuse', () => {
+    refuses('failOn: loud\n', /failOn must be one of none, note, warning, error/);
+  });
+
+  it('refuses an expiry that is not an ISO date, or a time with no zone', () => {
+    for (const expires of ['banana 12', '01/02/2027', '2027-02-30', '2027-01-31T10:00', '1']) {
+      refuses(entry(`    expires: "${expires}"\n`), /expires must be a date/);
+    }
+    expect(
+      loadConfig(dirWith(entry('    expires: "2027-01-31T10:00Z"\n'))).suppressions,
+    ).toHaveLength(1);
+    expect(
+      loadConfig(dirWith(entry('    expires: "2027-01-31T10:00:00+05:30"\n'))).suppressions,
+    ).toHaveLength(1);
+  });
+});
+
+describe('a date-only expiry', () => {
+  it('holds through the whole of that day in UTC', () => {
+    const on = (date: string) =>
+      result({ suppressions: [{ vendor: 'stripe', reason: 'x', expires: date }] });
+    // NOW is 2026-09-06T12:00Z.
+    expect(on('2026-09-06').findings[0]?.suppressed).toBe(true);
+    expect(on('2026-09-05').findings[0]?.suppressed).toBe(false);
+    expect(on('2026-09-06T11:00Z').findings[0]?.suppressed).toBe(false);
+  });
+});

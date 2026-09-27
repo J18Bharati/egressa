@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { excludeProblem } from '../discovery/walk.js';
@@ -49,12 +49,22 @@ export class ConfigError extends Error {
  */
 export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const path = explicitPath ?? join(root, '.egressa.yml');
-  if (!existsSync(path)) {
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
     // Asking for a file by name and scanning without it would be the silent
     // widening the rest of this function exists to prevent.
     if (explicitPath !== undefined) throw new ConfigError(`${path}: no such file`);
     return {};
   }
+  // A config that exists but cannot be read is an error, never "no config":
+  // treating it as absent brings back every finding the team suppressed with
+  // nothing to say why.
+  let target: ReturnType<typeof statSync>;
+  try {
+    target = statSync(path);
+  } catch {
+    throw new ConfigError(`${path}: is a symlink that does not resolve`);
+  }
+  if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
 
   // The repository's own config must be the repository's own file. A link
   // pointing elsewhere would have this read, and quote in an error, a file
@@ -67,41 +77,71 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     }
   }
 
-  let parsed: EgressaConfig | null;
+  let bytes: Buffer;
   try {
-    parsed = parse(readFileSync(path, 'utf8')) as EgressaConfig | null;
+    bytes = readFileSync(path);
   } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
+    throw new ConfigError(`${path}: cannot be read (${code})`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = parse(decode(bytes, path));
+  } catch (error) {
+    if (error instanceof ConfigError) throw error;
     // The parser's message quotes the offending lines after its first line.
     // Only the first line is kept: position and cause, never file content.
     const summary = ((error as Error).message.split('\n')[0] ?? '').replace(/:\s*$/, '');
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  if (!parsed || typeof parsed !== 'object') return {};
+  const source = relative(root, path) || path;
+  if (parsed === null || parsed === undefined) return { source };
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new ConfigError(
+      `${path}: must be a mapping of settings such as exclude and suppressions`,
+    );
+  }
+  const config = parsed as Record<string, unknown>;
+  // An unknown key is refused rather than ignored. `expiry:` for `expires:`
+  // was silently dropped, and so was a YAML merge key, which YAML 1.2 reads
+  // as an ordinary key: either one left a temporary acceptance permanent.
+  refuseUnknownKeys(config, TOP_LEVEL_KEYS, path);
+
+  if (config.version !== undefined && config.version !== null && config.version !== 1) {
+    throw new ConfigError(`${path}: version must be 1`);
+  }
 
   // `exclude: legacy/**` is one glob, not a list of characters to spread.
-  const exclude: unknown = parsed.exclude;
-  if (typeof exclude === 'string') parsed.exclude = [exclude];
+  const exclude = config.exclude;
+  if (typeof exclude === 'string') config.exclude = [exclude];
   else if (exclude !== undefined && exclude !== null && !Array.isArray(exclude)) {
     throw new ConfigError(`${path}: exclude must be a glob or a list of globs`);
   }
   // Checked here rather than left to scan(), which throws a TypeError that a
   // surface cannot tell from a knowledge base that failed to load.
-  const excludeError = excludeProblem(parsed.exclude ?? []);
+  const excludeError = excludeProblem((config.exclude as string[] | null | undefined) ?? []);
   if (excludeError) throw new ConfigError(`${path}: ${excludeError}`);
 
-  const transitive: unknown = parsed.includeTransitive;
+  const transitive = config.includeTransitive;
   if (transitive !== undefined && transitive !== null && typeof transitive !== 'boolean') {
     throw new ConfigError(`${path}: includeTransitive must be true or false`);
   }
-  if (parsed.failOn !== undefined && parsed.failOn !== null && typeof parsed.failOn !== 'string') {
-    throw new ConfigError(`${path}: failOn must be text`);
+  // Checked here, not only where the CLI reads it, so the same file is valid
+  // or invalid on every surface.
+  const failOn = config.failOn;
+  if (
+    failOn !== undefined &&
+    failOn !== null &&
+    !(FAIL_ON_LEVELS as readonly unknown[]).includes(failOn)
+  ) {
+    throw new ConfigError(`${path}: failOn must be one of ${FAIL_ON_LEVELS.join(', ')}`);
   }
 
   // Every field of a suppression reaches the findings document and SARIF as
   // written, so anything that is not the declared type is refused here rather
   // than published. An expiry that is not a date used to compare as NaN and
   // never expire, which made a temporary acceptance permanent.
-  const suppressions: unknown = parsed.suppressions;
+  const suppressions = config.suppressions;
   if (suppressions !== undefined && suppressions !== null && !Array.isArray(suppressions)) {
     throw new ConfigError(`${path}: suppressions must be a list`);
   }
@@ -111,6 +151,7 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
       throw new ConfigError(`${at} must be a mapping`);
     }
     const s = entry as Record<string, unknown>;
+    refuseUnknownKeys(s, SUPPRESSION_KEYS, at);
     if (typeof s.reason !== 'string' && s.reason !== undefined && s.reason !== null) {
       throw new ConfigError(`${at}: reason must be text`);
     }
@@ -125,11 +166,94 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     if (s.vendor === undefined && s.rule === undefined) {
       throw new ConfigError(`${at} names neither a vendor nor a rule, so it would match nothing`);
     }
-    if (typeof s.expires === 'string' && !Number.isFinite(Date.parse(s.expires))) {
-      throw new ConfigError(`${at}: expires must be a date such as 2027-01-31`);
+    if (typeof s.expires === 'string' && expiryInstant(s.expires) === null) {
+      throw new ConfigError(
+        `${at}: expires must be a date such as 2027-01-31, or a time with a zone such as 2027-01-31T17:00Z`,
+      );
     }
   }
-  return { ...parsed, source: relative(root, path) || path };
+  return { ...(config as EgressaConfig), source };
+}
+
+/** The levels `failOn` and `--fail-on` accept. */
+export const FAIL_ON_LEVELS = ['none', 'note', 'warning', 'error'] as const;
+export type FailOnLevel = (typeof FAIL_ON_LEVELS)[number];
+
+const TOP_LEVEL_KEYS = ['version', 'exclude', 'includeTransitive', 'failOn', 'suppressions'];
+const SUPPRESSION_KEYS = ['vendor', 'rule', 'reason', 'acceptedBy', 'expires'];
+
+function refuseUnknownKeys(value: Record<string, unknown>, allowed: string[], at: string): void {
+  for (const key of Object.keys(value)) {
+    if (allowed.includes(key)) continue;
+    if (key === '<<') {
+      throw new ConfigError(`${at}: merge keys are not supported; write each setting out in full`);
+    }
+    // A key is quoted back only when it is a plain name, so an error never
+    // repeats arbitrary file content -- MCP returns this text to an agent.
+    if (!/^[\w.-]{1,40}$/.test(key)) throw new ConfigError(`${at}: an unrecognised key`);
+    const near = allowed.find((name) => editDistance(name.toLowerCase(), key.toLowerCase()) <= 2);
+    throw new ConfigError(`${at}: unknown key "${key}"${near ? ` (did you mean "${near}"?)` : ''}`);
+  }
+}
+
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (current[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] ?? 0;
+}
+
+/**
+ * UTF-8, or a ConfigError. A UTF-16 file -- what Windows PowerShell 5.1's `>`
+ * writes -- parsed as one long string and was treated as no config at all.
+ */
+function decode(bytes: Buffer, path: string): string {
+  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
+    throw new ConfigError(`${path}: is UTF-16; save it as UTF-8`);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new ConfigError(`${path}: is not valid UTF-8`);
+  }
+}
+
+const EXPIRY =
+  /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2})))?$/;
+
+/**
+ * The instant an `expires` value ends, or null when it is not one. Only ISO
+ * 8601 is accepted: `Date.parse` read `01/02/2027` as 2 January and
+ * `banana 12` as 2001. A date on its own holds through the end of that day in
+ * UTC, which is what "expires 2027-01-31" is read to mean; a time must carry
+ * its zone, because the machine running the scan is not the one that wrote it.
+ */
+export function expiryInstant(value: string): number | null {
+  const match = EXPIRY.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second, zoneHour, zoneMinute] = match.map(Number);
+  const date = Date.UTC(year as number, (month as number) - 1, day as number);
+  const check = new Date(date);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== (month as number) - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  if (match[4] === undefined) return date + 86_400_000;
+  if ((hour as number) > 23 || (minute as number) > 59 || (second || 0) > 59) return null;
+  if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
+  return Date.parse(value);
 }
 
 /**
@@ -158,7 +282,11 @@ export function applySuppressions(
     const rule = rules.find((r) => matches(r, finding));
     if (!rule) return [finding];
 
-    const expired = rule.expires !== undefined && Date.parse(rule.expires) < now.getTime();
+    // An expiry that is not a date was refused by loadConfig; one that reaches
+    // here anyway counts as expired, so it is revisited rather than kept.
+    const expired =
+      rule.expires !== undefined &&
+      now.getTime() >= (expiryInstant(rule.expires) ?? Number.NEGATIVE_INFINITY);
     const suppression = {
       reason: rule.reason,
       ...(rule.acceptedBy ? { acceptedBy: rule.acceptedBy } : {}),

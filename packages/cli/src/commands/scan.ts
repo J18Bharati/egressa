@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import {
   ConfigError,
   type EgressaConfig,
+  FAIL_ON_LEVELS,
+  type FailOnLevel,
   type ScanResult,
   excludeProblem,
   loadConfig,
@@ -37,8 +39,7 @@ function isDirectory(path: string): boolean {
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
-const FAIL_ON = ['none', 'note', 'warning', 'error'] as const;
-type FailOn = (typeof FAIL_ON)[number];
+type FailOn = FailOnLevel;
 
 export const scanCommand = defineCommand({
   meta: { name: 'scan', description: 'Scan a repository for third-party data egress' },
@@ -223,8 +224,8 @@ function exitCodeFor(result: ScanResult, failOn: FailOn): number {
 }
 
 function parseFailOn(value: string): FailOn {
-  if ((FAIL_ON as readonly string[]).includes(value)) return value as FailOn;
-  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON.join(', ')}\n`);
+  if ((FAIL_ON_LEVELS as readonly string[]).includes(value)) return value as FailOn;
+  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON_LEVELS.join(', ')}\n`);
   process.exit(EXIT.USAGE);
 }
 
