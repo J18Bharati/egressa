@@ -147,6 +147,22 @@ required when `available: true`. Every vendor in the KB that has one is partial 
 
 **`normaliseHost()` deliberately does not strip `www.`** — the host trie treats it as a real label.
 
+**A compiled `requirements.txt` is tested against real generator output, not hand-written cases.**
+`manifests/python.ts` splits pip-compile and uv output into declared and transitive by its `# via`
+annotations, and it broke in field tests 3 and 4 on shapes nobody had generated: uv's `# from`
+index line read as a parent, and a plan to require an `-e .` line would have dropped every SDK from
+`uv export` of a project that is not a package, which writes only `# via my-app`. The golden set in
+`fixtures/lockfiles/requirements/` is uv's own output, regenerated offline by
+`scripts/gen-compiled-requirements.sh` from stub wheels. Change the reader against those files, and
+add a generator variant rather than a hand-written row when a new shape turns up.
+
+**`.egressa.yml` is read strictly.** An unknown key, a YAML merge key, a non-mapping or non-UTF-8
+file and a symlink that does not resolve are all `ConfigError`s. Each of them used to load as
+something else or as no config, and the result was the same every time: a suppression the team
+meant to be temporary became permanent, or one they wrote never applied, with nothing to say so. A
+suppression that matches nothing is reported as a non-fatal scan error, qualified when the scan was
+narrowed, because suppressions apply after the vendor and confidence filters.
+
 ## The two contracts enforced by tests
 
 **`scripts/claims-contract.test.ts`** asserts the disclaimer from `packages/core/src/claims.ts`
@@ -224,6 +240,11 @@ existed, the only account of a dropped finding was prose that Step 4 discarded.
 **Never emit a score.** `docs/ROADMAP.md` forbids a grade. gstack's `/review`, which this is modelled
 on, ends with `PR Quality Score: X/10`; copying that would ship the exact number the project promised
 not to. Counts only.
+
+The contract is prose a model follows, so no test can run it. `scripts/skill-contract.test.ts` pins
+the text instead: four decidability values, the `_scanner` line and its check, one citation rule in
+every checklist, and no instruction to say something "in your summary" that has nowhere to go.
+Whether specialists follow it is checked by field tests.
 
 **`references/legal-basis.md` is the only place a provision or citation may come from.** It carries a
 table of five widely repeated enforcement claims that failed verification, including a CNIL decision
