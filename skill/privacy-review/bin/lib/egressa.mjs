@@ -14477,7 +14477,7 @@ function expiryInstant(value) {
   if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
     return null;
   }
-  if (match[4] === void 0) return date + 864e5;
+  if (match[4] === void 0) return date;
   if (hour > 23 || minute > 59 || (second || 0) > 59) return null;
   if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
   const instant = Date.parse(value);

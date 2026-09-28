@@ -318,9 +318,10 @@ const EXPIRY =
 /**
  * The instant an `expires` value ends, or null when it is not one. Only ISO
  * 8601 is accepted: `Date.parse` read `01/02/2027` as 2 January and
- * `banana 12` as 2001. A date on its own holds through the end of that day in
- * UTC, which is what "expires 2027-01-31" is read to mean; a time must carry
- * its zone, because the machine running the scan is not the one that wrote it.
+ * `banana 12` as 2001. A date on its own ends at the start of that day in UTC,
+ * as Trivy, OSV-Scanner and OWASP Dependency-Check read theirs, so a team
+ * arriving with their habits gets the day it expects. A time must carry its
+ * zone, because the machine running the scan is not the one that wrote it.
  */
 export function expiryInstant(value: string): number | null {
   const match = EXPIRY.exec(value);
@@ -335,7 +336,7 @@ export function expiryInstant(value: string): number | null {
   ) {
     return null;
   }
-  if (match[4] === undefined) return date + 86_400_000;
+  if (match[4] === undefined) return date;
   if ((hour as number) > 23 || (minute as number) > 59 || (second || 0) > 59) return null;
   if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
   // The checks above are what stand between a typo and a suppression that

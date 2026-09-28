@@ -154,8 +154,9 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   warning's path in a code span and escapes its message, `@` included, so a PR comment cannot
   mention a team; human output replaces control and bidi-override characters. At most twenty
   suppression problems, and twenty markdown warnings, are listed.
-- **A date-only `expires` holds through the end of that day in UTC.** It used to expire at the start
-  of it. `expires` must be ISO 8601, and a time must carry its zone.
+- **`expires` must be ISO 8601, and a time must carry its zone.** A date on its own still ends the
+  suppression at the start of that day in UTC, as Trivy, OSV-Scanner and OWASP Dependency-Check read
+  theirs.
 - **The privacy-review contract has a fourth decidability, `context`,** used only by the transfers
   specialist for EU and adequate-country transfers, and a `_scanner` line in which that specialist
   accounts for every scanner finding. Step 4 checks the counts and names any specialist that returned

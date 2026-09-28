@@ -71,8 +71,9 @@ The file is read strictly. An unknown key, a YAML merge key (`<<:`), a file that
 a mapping, a symlink that does not resolve and anything that is not a regular file are all usage
 errors (CLI exit 2, MCP tool error),
 never "no config": a misspelled `expiry:` used to leave a temporary suppression in place for good.
-`expires` is an ISO date such as `2027-01-31`, which holds through the end of that day in UTC, or a
-time with its zone, such as `2027-01-31T17:00Z`.
+`expires` is an ISO date such as `2027-01-31`, which ends the suppression at the start of that day in
+UTC, as Trivy, OSV-Scanner and OWASP Dependency-Check do, or a time with its zone, such as
+`2027-01-31T17:00Z`.
 
 ```bash
 egressa scan . --exclude 'legacy/**' --exclude '**/*.generated.ts'

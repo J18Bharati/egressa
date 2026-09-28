@@ -331,12 +331,12 @@ describe('what field test 4 found loadConfig letting through', () => {
 });
 
 describe('a date-only expiry', () => {
-  it('holds through the whole of that day in UTC', () => {
+  it('ends at the start of that day in UTC, as Trivy, OSV-Scanner and Dependency-Check do', () => {
     const on = (date: string) =>
       result({ suppressions: [{ vendor: 'stripe', reason: 'x', expires: date }] });
     // NOW is 2026-09-06T12:00Z.
-    expect(on('2026-09-06').findings[0]?.suppressed).toBe(true);
-    expect(on('2026-09-05').findings[0]?.suppressed).toBe(false);
+    expect(on('2026-09-07').findings[0]?.suppressed).toBe(true);
+    expect(on('2026-09-06').findings[0]?.suppressed).toBe(false);
     expect(on('2026-09-06T11:00Z').findings[0]?.suppressed).toBe(false);
   });
 });
