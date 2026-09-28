@@ -211,3 +211,25 @@ describe('deployment config reaches the region reader in the right language', ()
     expect(regionsIn({ 'fly.toml': fly })).toEqual(['fra']);
   });
 });
+
+describe('the document says which config it applied', () => {
+  // Field test 4, E21. Only the MCP summary named the file, so the CLI's JSON
+  // and MCP's full document never said a repository had scoped its own scan.
+  const root = 'fixtures/repos/express-stripe-sendgrid';
+
+  it('names the config file, and still validates', () => {
+    const result = scan({
+      ...base,
+      root,
+      config: { source: '.egressa.yml', suppressions: [{ vendor: 'stripe', reason: 'x' }] },
+    });
+    expect(result.scan.config).toBe('.egressa.yml');
+    expect(validateFindings(result)).toBe(true);
+  });
+
+  it('says null when there is none', () => {
+    const result = scan({ ...base, root });
+    expect(result.scan.config).toBeNull();
+    expect(validateFindings(result)).toBe(true);
+  });
+});

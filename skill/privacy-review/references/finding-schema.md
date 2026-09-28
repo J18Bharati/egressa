@@ -1,14 +1,17 @@
 # Finding schema
 
 Every specialist emits one JSON object per line and nothing else. No preamble, no summary,
-no commentary. If a specialist finds nothing it emits `NO FINDINGS` and stops.
+no commentary. If a specialist finds nothing it emits `NO FINDINGS`. The transfers
+specialist also emits one `_scanner` line, described at the end of this file: anything it has to
+say about what the scanner did goes there, never into prose.
 
 ```json
 {"severity":"high","confidence":8,"decidability":"code","category":"consent","path":"app/layout.tsx","line":31,"provision":"ePrivacy Directive 2002/58/EC Art 5(3)","citation":"https://...","summary":"...","evidence":"...","fix":"...","fingerprint":"app/layout.tsx:31:consent","specialist":"consent-gating"}
 ```
 
 Required: `severity`, `confidence`, `decidability`, `category`, `path`, `provision`, `summary`,
-`specialist`. Then `fix` **or** `question`, per the rule below. Optional: `line`, `citation`,
+`specialist`. Then `fix` **or** `question`, per the rule below, except that a `context` line
+carries neither. Optional: `line`, `citation`,
 `evidence`, `fingerprint`, `test_stub`.
 
 ## severity — legal weight, never legality
@@ -51,6 +54,12 @@ The field with no equivalent in an ordinary code review, and the reason this sch
 | `code` | The source alone settles it. The pattern is present and its consequence follows from the code | `fix` required |
 | `config` | The code is consistent with more than one deployment reality, and only some of them engage the provision. Which one is true lives in a dashboard, an env var, or a signed agreement | `question` required, `fix` omitted |
 | `undecidable` | No amount of source reading settles it. It depends on a retention schedule, a legal basis, or what a human was shown | `question` required, `fix` omitted |
+| `context` | Not a problem to act on: a fact the reader needs beside the findings. Only the transfers specialist may use it, and only for `transfer/eu-processing` and `transfer/adequate-country-egress` | neither `fix` nor `question` |
+
+`context` exists because the alternative was a `code` line with a `fix` saying there was nothing
+to fix, rendered under "settled by the code" as though it were a problem. A transfer to an adequate
+country is still a third-country transfer, so it is reported, but as context rather than as a
+finding.
 
 **Never emit a `fix` for a `config` or `undecidable` finding.** A remediation instruction on a
 question you cannot answer is how a privacy tool produces a false accusation, and a false
@@ -74,6 +83,12 @@ One sentence, answerable by the developer without a lawyer, naming the specific 
 decision. Never a blog post, never a compliance vendor's summary page. Omit the field rather
 than cite something weak.
 
+Both come from `references/legal-basis.md` and nowhere else. A vendor's own documents are not a
+citation, even when the scanner supplies them: a DPA page, a sub-processor list or an EU-region
+page (`dpaUrl`, `subprocessorsUrl`, `euRegion.docUrl`) may appear in `evidence` or in a `question`,
+never in `citation`. A URL the scanner output does not carry, such as a Data Privacy Framework
+participant listing recalled from memory, is not used at all.
+
 Do not name a provision the finding does not actually engage. Attaching `Art 5(1)(e)` to a
 missing `SameSite` flag is the kind of overreach that discredits every other finding in the run.
 
@@ -87,3 +102,28 @@ groups by fingerprint to merge duplicates across specialists.
 Include only when a test could genuinely catch the pattern in CI — a consent gate, an opt-out
 header, a cookie flag, a masking config. Use the detected framework. Omit it for anything
 `undecidable`: a test cannot assert a retention schedule exists.
+
+## `_scanner` — the transfers specialist's accounting line
+
+The transfers specialist maps scanner findings into this schema, and some do not map one to one:
+two unresolved call sites become one line, a finding is folded into another's summary, a
+suppressed finding is left out. Each such choice is recorded here, so a reader can see that every
+scanner finding was accounted for. Emit exactly one, after the findings, even with `NO FINDINGS`:
+
+```json
+{"_scanner":{"findings":9,"emitted":5,"context":1,"merged":[{"into":"src/mail.ts:10:transfer","count":2}],"dropped":[{"ruleId":"transfer/third-country-egress","vendor":"stripe","reason":"suppressed"}],"engine":"oxc","unmatched":{"hosts":2,"packages":26},"errors":["requirements.txt: compiled without `# via` annotations …"],"notChecked":["server-side proxying"]}}
+```
+
+- `findings` is the length of the scanner's `findings` array, suppressed findings and
+  `config/expired-suppression` notes included.
+- `emitted` counts the finding lines that each stand for one scanner finding, and `context` the
+  context lines, which also stand for one each.
+- `merged` lists each finding line that stands for more than one scanner finding, by the line's
+  fingerprint, with `count` the scanner findings it stands for. Such a line is not in `emitted`.
+- `dropped` lists each scanner finding with no line of its own, and why. A suppressed finding is
+  dropped with the reason `suppressed`.
+- `engine` is `scan.engine.callsite`. `unmatched` counts the scanner's `unmatched` hosts and
+  packages. `errors` carries the scanner's own `errors` messages. `notChecked` names blind spots.
+
+The counts must add up: `emitted + context + merged + dropped == findings`, where `merged` is the
+sum of the `count`s and `dropped` the number of entries.

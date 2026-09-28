@@ -299,6 +299,13 @@ export interface ScanMeta {
    * was excluded.
    */
   exclude?: string[];
+  /**
+   * The repository's own configuration file, relative to the root, or null
+   * when none was applied. It can exclude files and suppress findings, so a
+   * reader of someone else's scan needs to know it was there. Optional only so
+   * documents written before it existed still validate.
+   */
+  config?: string | null;
 }
 
 export interface KbMeta {

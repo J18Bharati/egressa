@@ -1,7 +1,7 @@
 # Consent gating specialist
 
 Dispatch when `SCOPE_TRACKERS`, `SCOPE_TRACKER_CODE` or `SCOPE_CLIENT_STORAGE` is true.
-Emit findings per `references/finding-schema.md`. Cite only provisions in `references/legal-basis.md`.
+Emit findings per `references/finding-schema.md`. Take every `provision` and every `citation` from `references/legal-basis.md`.
 
 This is the strongest ground of any check in this review. It is also the one with the largest
 false-positive trap, described in full below. Read that section before you emit anything.

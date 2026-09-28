@@ -72,6 +72,22 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     lines.push('', 'No entry exists for these, so no jurisdiction can be reported.', '');
   }
 
+  // Parse and config warnings: a suppression that matched nothing, a compiled
+  // requirements file with nothing to attribute. The human format prints
+  // these too; leaving them out here hid them from every PR comment.
+  // At most twenty, as in the MCP summary: a PR comment has a length limit,
+  // and a monorepo can produce one warning per manifest.
+  if (result.errors.length > 0) {
+    lines.push('### Warnings', '');
+    for (const e of result.errors.slice(0, MAX_WARNINGS)) {
+      lines.push(`- ${codeSpan(e.file)}: ${inert(e.message)}`);
+    }
+    if (result.errors.length > MAX_WARNINGS) {
+      lines.push(`- and ${result.errors.length - MAX_WARNINGS} more`);
+    }
+    lines.push('');
+  }
+
   lines.push('---', '', DISCLAIMER);
   return lines.join('\n');
 }
@@ -99,3 +115,30 @@ function euRegionCell(finding: Finding): string {
   if (!eu.available) return 'not documented';
   return `available (${eu.scope ?? 'scope not recorded'})`;
 }
+
+/**
+ * A warning's path and message can come from the scanned repository, and this
+ * output is posted as a PR comment. Control characters and line breaks are
+ * removed and markdown punctuation escaped, so the text cannot open a heading,
+ * load an image or leave its list item.
+ */
+function inert(text: string): string {
+  return plain(text).replace(/[\\`*_{}[\]()#+!<>|@]/g, '\\$&');
+}
+
+/** A path as a code span: no markup, no autolink, no mention inside it. */
+function codeSpan(text: string): string {
+  return `\`${plain(text).replace(/`/g, "'")}\``;
+}
+
+/** Control and bidi-override characters become spaces, so a line stays one line, read in order. */
+function plain(text: string): string {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control = code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+    return control || bidi ? ' ' : ch;
+  }).join('');
+}
+
+const MAX_WARNINGS = 20;

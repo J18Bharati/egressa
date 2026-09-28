@@ -164,3 +164,64 @@ describe('toSarif marks a reference-only finding', () => {
     expect(texts.some((t) => t.includes('Named, not called.'))).toBe(false);
   });
 });
+
+describe('toSarif: errors from the scan', () => {
+  // Field test 4 review. Every other surface shows a config warning or a
+  // parse error; SARIF, the one GitHub reads, dropped them all.
+  const base = load('findings-third-country.json');
+  const withErrors: ScanResult = {
+    ...base,
+    errors: [
+      {
+        file: '.egressa.yml',
+        message: 'suppression 1 (vendor Stripe) matched no finding',
+        fatal: false,
+      },
+      { file: '/abs/root', message: 'not a readable directory; nothing was scanned', fatal: true },
+    ],
+  };
+  const sarif = toSarif(withErrors, { toolVersion: '0.1.0' }) as AnySarif;
+
+  it('validates against the official schema', () => {
+    expect(validateSarif(sarif)).toBe(true);
+  });
+
+  it('reports each error as a tool execution notification at its level', () => {
+    const [invocation] = sarif.runs[0].invocations;
+    expect(invocation.executionSuccessful).toBe(false);
+    expect(
+      invocation.toolExecutionNotifications.map((n: AnySarif) => [n.level, n.message.text]),
+    ).toEqual([
+      ['warning', 'suppression 1 (vendor Stripe) matched no finding'],
+      ['error', 'not a readable directory; nothing was scanned'],
+    ]);
+    // A repository-relative file is located; an absolute one is not.
+    expect(
+      invocation.toolExecutionNotifications[0].locations[0].physicalLocation.artifactLocation.uri,
+    ).toBe('.egressa.yml');
+    expect(invocation.toolExecutionNotifications[1].locations).toBeUndefined();
+  });
+
+  it('calls a run with only warnings successful', () => {
+    const warned = toSarif(
+      { ...base, errors: [{ file: 'requirements.txt', message: 'w', fatal: false }] },
+      { toolVersion: '0.1.0' },
+    ) as AnySarif;
+    expect(warned.runs[0].invocations[0].executionSuccessful).toBe(true);
+  });
+
+  it('locates a notification against the source root, and never outside it', () => {
+    const [first] = sarif.runs[0].invocations[0].toolExecutionNotifications;
+    expect(first.locations[0].physicalLocation.artifactLocation.uriBaseId).toBe('%SRCROOT%');
+    const outside = toSarif(
+      { ...base, errors: [{ file: '../../shared/team.yml', message: 'w', fatal: false }] },
+      { toolVersion: '0.1.0' },
+    ) as AnySarif;
+    expect(outside.runs[0].invocations[0].toolExecutionNotifications[0].locations).toBeUndefined();
+  });
+
+  it('adds no invocation when the scan had no errors', () => {
+    const clean = toSarif({ ...base, errors: [] }, { toolVersion: '0.1.0' }) as AnySarif;
+    expect(clean.runs[0].invocations).toBeUndefined();
+  });
+});

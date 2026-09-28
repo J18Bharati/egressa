@@ -18,6 +18,26 @@ const result = () =>
   });
 
 describe('human output', () => {
+  it('prints no control character from a warning the scanned repository wrote', () => {
+    // Security: raw escapes cleared the screen and planted an OSC 8 link.
+    const text = formatHuman(
+      {
+        ...result(),
+        errors: [
+          { file: 'a\u001b]8;;https://evil\u0007.yml', message: 'm\u001b[2J\nx', fatal: false },
+        ],
+      },
+      { color: false },
+    );
+    const warning = text.split('\n').filter((line) => line.startsWith('warning:'));
+    expect(warning).toHaveLength(1);
+    const control = Array.from(warning[0] ?? '').filter((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    });
+    expect(control).toEqual([]);
+  });
+
   it('states what a clean scan does not prove', () => {
     const clean = scan({
       root: 'fixtures/repos/clean-eu-only',
@@ -97,6 +117,54 @@ describe('markdown output', () => {
     expect(md).toContain('does not assess or certify GDPR compliance');
     expect(md).toContain('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
     expect(md).toContain('Stripe, LLC');
+  });
+
+  it("lists the scan's warnings, which it used to leave out", () => {
+    const md = formatMarkdown({
+      ...result(),
+      errors: [{ file: '.egressa.yml', message: 'suppression 1 matched no finding', fatal: false }],
+    });
+    expect(md).toContain('### Warnings');
+    expect(md).toContain('- `.egressa.yml`: suppression 1 matched no finding');
+    expect(md.indexOf('### Warnings')).toBeLessThan(md.indexOf('does not assess or certify'));
+  });
+
+  it('cannot be restructured or styled by a warning from the scanned repository', () => {
+    // Security: a path or message is repository content, and markdown output
+    // is posted as a PR comment.
+    const md = formatMarkdown({
+      ...result(),
+      errors: [
+        {
+          file: 'a`b\n## x.txt',
+          message: 'm\n\n## Injected\n![p](https://attacker.example/px.png)\u001b[2J',
+          fatal: false,
+        },
+      ],
+    });
+    const warning = md.split('### Warnings')[1]?.split('---')[0] ?? '';
+    expect(warning).not.toMatch(/\n##|!\[/);
+    expect(warning).not.toContain(String.fromCharCode(27));
+    expect(warning.trim().split('\n')).toHaveLength(1);
+  });
+
+  it('lists at most twenty warnings, and never mentions or links from one', () => {
+    const errors = Array.from({ length: 25 }, (_, i) => ({
+      file: `packages/@org/team/www.example.com/${i}.txt`,
+      message: 'ping @org/team',
+      fatal: false,
+    }));
+    const md = formatMarkdown({ ...result(), errors });
+    const warning = md.split('### Warnings')[1]?.split('---')[0] ?? '';
+    expect(
+      warning
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('- `')),
+    ).toHaveLength(20);
+    expect(warning).toContain('and 5 more');
+    // A code span renders literally; outside one, an @ must be escaped.
+    expect(warning.replace(/`[^`]*`/g, '')).not.toMatch(/(^|[^\\])@org/);
   });
 
   it('says how many findings it withheld when truncating', () => {
@@ -261,6 +329,30 @@ describe('cli end to end', () => {
       expect(stderr).toContain('.egressa.yml');
     });
 
+    it('names the file, not the flag, when failOn in it is not a level', () => {
+      const { code, stderr } = runErr(['scan', repo('failOn: loud\n')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('.egressa.yml: failOn must be one of');
+      expect(stderr).not.toContain('--fail-on');
+    });
+
+    it('refuses an explicit --config that is not a mapping, rather than scanning without it', () => {
+      const dir = repo('version: 1\n');
+      writeFileSync(join(dir, 'hostname'), 'myhost\n');
+      const { code, stderr } = runErr(['scan', dir, '--config', join(dir, 'hostname')]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('must be a mapping');
+    });
+
+    it('refuses a misspelled expires, which used to leave the suppression permanent', () => {
+      const { code, stderr } = runErr([
+        'scan',
+        repo('suppressions:\n  - {vendor: stripe, reason: x, expiry: "2020-01-01"}\n'),
+      ]);
+      expect(code).toBe(EXIT.USAGE);
+      expect(stderr).toContain('did you mean "expires"');
+    });
+
     it('reports a suppressions entry that is not a list as a usage error', () => {
       // It exited 1, the findings code, after the config moved into core.
       const { code, stderr } = runErr(['scan', repo('suppressions: nope\n')]);
@@ -289,6 +381,16 @@ describe('cli end to end', () => {
         ).findings.map((f: { vendor: { id: string } | null }) => f.vendor?.id);
       expect(vendors([])).toEqual(['supabase']);
       expect(vendors(['--no-include-transitive'])).toEqual([]);
+    });
+
+    it('warns in human output about a suppression that matched nothing, without changing the exit code', () => {
+      const dir = repo('suppressions:\n  - {vendor: Stripe, reason: accepted}\n');
+      writeFileSync(join(dir, 'pay.ts'), "fetch('https://api.stripe.com/v1/charges');\n");
+      const { code, stdout } = run(['scan', dir, '--kb', 'kb']);
+      expect(code).toBe(EXIT.CLEAN);
+      expect(stdout).toContain(
+        'warning: .egressa.yml: suppression 1 names vendor "Stripe", which is not in the knowledge base (did you mean "stripe"?)',
+      );
     });
 
     it('reports a suppression with no reason as a usage error', () => {

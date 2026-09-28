@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import {
   ConfigError,
   type EgressaConfig,
+  FAIL_ON_LEVELS,
+  type FailOnLevel,
   type ScanResult,
   excludeProblem,
   loadConfig,
@@ -37,8 +39,6 @@ function isDirectory(path: string): boolean {
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
-const FAIL_ON = ['none', 'note', 'warning', 'error'] as const;
-type FailOn = (typeof FAIL_ON)[number];
 
 export const scanCommand = defineCommand({
   meta: { name: 'scan', description: 'Scan a repository for third-party data egress' },
@@ -143,9 +143,9 @@ export const scanCommand = defineCommand({
     // The flag wins over the file, but only when it was actually typed --
     // `--fail-on` carries a default, so its value alone cannot say which.
     const failOnGiven = rawArgs.some((a) => a === '--fail-on' || a.startsWith('--fail-on='));
-    const failOn = parseFailOn(
-      failOnGiven ? String(args['fail-on']) : (config.failOn ?? String(args['fail-on'])),
-    );
+    // loadConfig has already checked the config's value.
+    const failOn =
+      !failOnGiven && config.failOn ? config.failOn : parseFailOn(String(args['fail-on']));
 
     let result: ScanResult;
     try {
@@ -213,7 +213,7 @@ function render(result: ScanResult, format: string, color: boolean): string {
  * or when a knowledge base update lands through a floating npx version, gets
  * removed that afternoon. The shipped GitHub Action template opts in explicitly.
  */
-function exitCodeFor(result: ScanResult, failOn: FailOn): number {
+function exitCodeFor(result: ScanResult, failOn: FailOnLevel): number {
   if (failOn === 'none') return EXIT.CLEAN;
   const threshold = SEVERITY_RANK[failOn];
   const triggered = result.findings.some(
@@ -222,9 +222,9 @@ function exitCodeFor(result: ScanResult, failOn: FailOn): number {
   return triggered ? EXIT.FINDINGS : EXIT.CLEAN;
 }
 
-function parseFailOn(value: string): FailOn {
-  if ((FAIL_ON as readonly string[]).includes(value)) return value as FailOn;
-  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON.join(', ')}\n`);
+function parseFailOn(value: string): FailOnLevel {
+  if ((FAIL_ON_LEVELS as readonly string[]).includes(value)) return value as FailOnLevel;
+  process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON_LEVELS.join(', ')}\n`);
   process.exit(EXIT.USAGE);
 }
 

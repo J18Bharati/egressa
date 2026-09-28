@@ -9,7 +9,8 @@ omission, and so contributors know what is already planned.
 `requirements*.txt` and `pyproject.toml` (PEP 621, PEP 735 groups, Poetry) — with `pypi` aliases for
 the vendors whose Python SDK has been checked. What remains is `requests` and `httpx` call sites,
 which need a Python parser and a sink table, and `poetry.lock` / `uv.lock` for
-`--include-transitive`. Neither is a redesign: the knowledge base is keyed by vendor identity with
+`--include-transitive`. A `requirements.txt` compiled by pip-compile or uv is already read as the
+lockfile it is. Neither remaining item is a redesign: the knowledge base is keyed by vendor identity with
 per-ecosystem aliases.
 
 **Cross-module constant resolution.** Today `import { API_BASE } from './config'` is unresolved.

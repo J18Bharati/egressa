@@ -204,7 +204,16 @@ detected. `poetry.lock` and `uv.lock` are not read. A `requirements.txt` compile
 or `uv pip compile` is read as a lockfile, split by its `# via` annotations. But output without
 annotations looks exactly like a hand-written file, and every package in it is read as declared:
 `poetry export`, `pipenv requirements`, and pip-compile or uv run with `--no-header --no-annotate`.
-A pip-compile header with no annotations is recognised, and nothing in that file is attributed. And a
+A pip-compile or uv header with no annotations is recognised, and nothing in that file is attributed.
+A `# via` parent that is not itself a line in the file is read as the project, because `uv export`
+writes no line for a project that is not a package; so a package dropped from the output some other
+way than `--no-emit-package` would make its children read as declared. A package that names a parent
+the generator lists as excluded, or whose only entries are in no recognised shape, is read as
+declared too, with a warning naming it: an excluded name may be a real package or the project
+itself, left out to cache a Docker layer, and the file does not say which. So with
+`--no-emit-package boto3`, `botocore` is reported as declared, and the warning says why.
+The committed real output in `fixtures/lockfiles/requirements/` is uv's; pip-compile's has not been
+captured, so its shapes are covered by hand-written cases only. And a
 vendor is matched only if its knowledge base entry carries a `pypi` alias — today Twilio and AWS
 (`boto3`, `botocore`). Any other vendor's Python SDK lands in `unmatched`, which is the signal to
 add one.
@@ -265,7 +274,7 @@ Not collected at all: files under dot-directories such as `.github/` and `.terra
 walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an
 ordinary constructor argument the call-site analyzer does not yet attribute to a provider.
 
-Two shapes hide a region that is written as a literal, and both are pinned by cases in
+Five shapes hide a region that is written as a literal, and each is pinned by a case in
 `packages/core/src/infrastructure/key-literal.test.ts`:
 
 - **An unterminated heredoc or string in a `.tf` file** hides everything after it. The reader
@@ -274,3 +283,7 @@ Two shapes hide a region that is written as a literal, and both are pinned by ca
 - **In `fly.toml`, a line inside a multi-line array that begins with `[`** is taken for a table
   header, and `primary_region` is read only above the first table. So a top-level `primary_region`
   written after such an array is not read. Fly's generated configuration does not have this layout.
+- **A `provider` block whose header is not the first code on its line**, as in
+  `locals { a = 1 } provider "aws" {`, is not read.
+- **A `provider` block with an unquoted label**, `provider aws {`, which HCL accepts, is not read.
+- **A quoted key in `fly.toml`**, `"primary_region" = "fra"`, which TOML accepts, is not read.

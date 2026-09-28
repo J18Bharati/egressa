@@ -27,8 +27,11 @@ fail — do not fall back to it by hand.
 No configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the Data Privacy
 Framework being struck down.
 
-If the script exits 3 no binary resolved and **the scan did not run**. Say that plainly rather than
-reporting that nothing was found.
+The scan ran only if the script exits 0 or 1 and prints the findings document; 1 means the
+repository's own `failOn` tripped. Any other status means **the scan did not run**: 2 is a usage
+error, often an `.egressa.yml` the scanner refuses, 3 is no binary or an internal error, and 4 is a
+knowledge base that failed to load. Say that plainly, with the stderr line, rather than reporting
+that nothing was found.
 
 Check `scan.engine` before summarising. `callsite: "unavailable"` with `degraded: true` means the
 native parser could not load and only dependency manifests were read, so a vendor called by URL with
@@ -36,7 +39,7 @@ no SDK installed is invisible. The bundled copy normally runs in that mode.
 
 If the user has the MCP server configured, `scan_repository` returns the same data pre-summarised;
 either source is fine. Both honour the repository's `.egressa.yml`: suppressed findings are flagged,
-not removed, and the MCP summary names the file in `scan.config`.
+not removed, and both the findings document and the MCP summary name the file in `scan.config`.
 
 ## Then do the part the scanner cannot
 
@@ -99,7 +102,10 @@ suppressions:
 ```
 
 `reason` is required by schema. Always set `expires` — an accepted risk should be revisited, and an
-expired suppression reactivates the finding with a `config/expired-suppression` note. Write a real
+expired suppression reactivates the finding with a `config/expired-suppression` note. `expires` is
+an ISO date, which ends the suppression at the start of that day in UTC (on 2027-01-31 itself it
+has already expired), or a time with a zone. Any key the scanner
+does not know, including a YAML merge key, makes the file a usage error rather than being ignored. Write a real
 reason naming what was checked and by whom; "not applicable" helps nobody in six months.
 
 ## Growing the knowledge base

@@ -99,12 +99,7 @@ server.tool(
     });
 
     if (args.full === true) return json(result);
-    return json(
-      summarise(result, {
-        config: config.source ?? null,
-        ...(args.maxFindings ? { maxFindings: args.maxFindings } : {}),
-      }),
-    );
+    return json(summarise(result, args.maxFindings ? { maxFindings: args.maxFindings } : {}));
   },
 );
 
