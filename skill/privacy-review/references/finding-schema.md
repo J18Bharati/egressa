@@ -1,7 +1,7 @@
 # Finding schema
 
 Every specialist emits one JSON object per line and nothing else. No preamble, no summary,
-no commentary. If a specialist finds nothing it emits `NO FINDINGS` and stops. The transfers
+no commentary. If a specialist finds nothing it emits `NO FINDINGS`. The transfers
 specialist also emits one `_scanner` line, described at the end of this file: anything it has to
 say about what the scanner did goes there, never into prose.
 

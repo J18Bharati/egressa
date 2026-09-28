@@ -367,18 +367,17 @@ by the engineering review of the 2026-09-25 fixes (R8).
 
 ### Let an MCP caller see and control the scanned repository's config
 
-**What:** Three follow-ups from the review of `field-test-3-fixes`, which made MCP apply a
+**What:** Two follow-ups from the review of `field-test-3-fixes`, which made MCP apply a
 repository's `.egressa.yml`:
 - A `scan_repository` argument to ignore the repository's own config, for an agent reviewing a
   repository it does not trust.
-- `full: true` returns the findings document, which does not name the config file. Only the
-  summary carries `scan.config`. Recording it in `scan()` means a findings-schema field, which is
-  free only until the first release.
 - A suppression's `reason` is free text from the scanned repository, and it now reaches the
   agent's context. Consider marking it as repository-supplied in the tool description.
 
+(`scan.config` in the full findings document, the third, landed on `field-test-4-fixes`.)
+
 **Why:** After G3 a repository can exclude its own files and accept its own findings in what an
-agent receives. The summary says so, and the full document and the caller's controls do not yet.
+agent receives. Both the summary and the full document say so; the caller cannot yet decline it.
 
 **Effort:** S
 **Priority:** P2
@@ -431,7 +430,6 @@ Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) add
 - A wheel filename (`twilio-9.0.0-py3-none-any.whl`) and a name split by `\` continuation both reach
   `unmatched` mangled. pip joins continuation lines before parsing, and so should the reader. It
   should also refuse a token ending in an archive suffix.
-- A full-line comment ending in `\` is continued by the reader, but pip does not continue it.
 - Lockfile output without `# via` annotations is read as declared, so every transitive package in
   it is attributed as direct: `poetry export`, `pipenv requirements`, and pip-compile/uv with
   `--no-header --no-annotate`. Hashes on every line are a possible signal, but not a proof.

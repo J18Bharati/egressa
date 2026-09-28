@@ -63,12 +63,13 @@ they combine rather than compete:
   just this once," not "stop honouring what the team committed."
 
 `.egressa.yml` is applied by the engine, so the MCP server honours it exactly as the CLI does: its
-excludes, and its suppressions, which mark a finding suppressed rather than remove it. The MCP
-summary names the file in `scan.config`, because an agent scanning someone else's repository should
+excludes, and its suppressions, which mark a finding suppressed rather than remove it. The findings
+document and the MCP summary both name the file in `scan.config`, because an agent scanning someone else's repository should
 be able to say that the repository scoped its own scan.
 
 The file is read strictly. An unknown key, a YAML merge key (`<<:`), a file that is not UTF-8 or not
-a mapping, and a symlink that does not resolve are all usage errors (CLI exit 2, MCP tool error),
+a mapping, a symlink that does not resolve and anything that is not a regular file are all usage
+errors (CLI exit 2, MCP tool error),
 never "no config": a misspelled `expiry:` used to leave a temporary suppression in place for good.
 `expires` is an ISO date such as `2027-01-31`, which holds through the end of that day in UTC, or a
 time with its zone, such as `2027-01-31T17:00Z`.

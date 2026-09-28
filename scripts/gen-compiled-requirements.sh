@@ -107,6 +107,9 @@ compile extras extras.in --no-strip-extras
 compile editable-project editable.in
 compile from-pyproject app/pyproject.toml
 compile no-emit-boto3 requirements.in --no-emit-package boto3
+# The local project left out, as a Docker build does to cache its dependency
+# layer: twilio's only parent is then a name the trailer lists as excluded.
+compile no-emit-project editable.in --no-emit-package sub-app
 
 # uv export of a virtual project ([tool.uv] package = false): no `-e .` line,
 # yet every declared package is annotated `# via my-app`.

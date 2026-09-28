@@ -9533,7 +9533,7 @@ var require_scan = __commonJS({
 var require_parse = __commonJS({
   "../../node_modules/.pnpm/picomatch@4.0.7/node_modules/picomatch/lib/parse.js"(exports, module) {
     "use strict";
-    var constants = require_constants();
+    var constants2 = require_constants();
     var utils = require_utils();
     var {
       MAX_LENGTH,
@@ -9541,7 +9541,7 @@ var require_parse = __commonJS({
       REGEX_NON_SPECIAL_CHARS,
       REGEX_SPECIAL_CHARS_BACKREF,
       REPLACEMENTS
-    } = constants;
+    } = constants2;
     var expandRange = (args, options) => {
       if (typeof options.expandRange === "function") {
         return options.expandRange(...args, options);
@@ -9750,7 +9750,7 @@ var require_parse = __commonJS({
       if (options.maxExtglobRecursion === false) {
         return { risky: false };
       }
-      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants.DEFAULT_MAX_EXTGLOB_RECURSION;
+      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants2.DEFAULT_MAX_EXTGLOB_RECURSION;
       const branches = splitTopLevel(body).map((branch) => branch.trim());
       if (branches.length > 1) {
         if (branches.some((branch) => branch === "") || branches.some((branch) => /^[*?]+$/.test(branch)) || hasRepeatedCharPrefixOverlap(branches)) {
@@ -9796,8 +9796,8 @@ var require_parse = __commonJS({
       const bos = { type: "bos", value: "", output: opts.prepend || "" };
       const tokens = [bos];
       const capture = opts.capture ? "" : "?:";
-      const PLATFORM_CHARS = constants.globChars(opts.windows);
-      const EXTGLOB_CHARS = constants.extglobChars(PLATFORM_CHARS);
+      const PLATFORM_CHARS = constants2.globChars(opts.windows);
+      const EXTGLOB_CHARS = constants2.extglobChars(PLATFORM_CHARS);
       const {
         DOT_LITERAL,
         PLUS_LITERAL,
@@ -10493,7 +10493,7 @@ var require_parse = __commonJS({
         NO_DOTS_SLASH,
         STAR,
         START_ANCHOR
-      } = constants.globChars(opts.windows);
+      } = constants2.globChars(opts.windows);
       const nodot = opts.dot ? NO_DOTS : NO_DOT;
       const slashDot = opts.dot ? NO_DOTS_SLASH : NO_DOT;
       const capture = opts.capture ? "" : "?:";
@@ -10551,7 +10551,7 @@ var require_picomatch = __commonJS({
     var scan2 = require_scan();
     var parse3 = require_parse();
     var utils = require_utils();
-    var constants = require_constants();
+    var constants2 = require_constants();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch2 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
@@ -10679,7 +10679,7 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch2.constants = constants;
+    picomatch2.constants = constants2;
     module.exports = picomatch2;
   }
 });
@@ -12259,8 +12259,17 @@ async function runMain(cmd, opts = {}) {
 // ../core/dist/index.js
 var import_yaml = __toESM(require_dist(), 1);
 var import_ignore = __toESM(require_ignore(), 1);
-import { lstatSync, readFileSync as readFileSync2, realpathSync as realpathSync2, statSync as statSync2 } from "fs";
-import { isAbsolute as isAbsolute2, join as join2, relative as relative2 } from "path";
+import {
+  constants,
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync as readFileSync2,
+  realpathSync as realpathSync2,
+  statSync as statSync2
+} from "fs";
+import { isAbsolute as isAbsolute2, join as join2, relative as relative2, sep as sep22 } from "path";
 import { readFileSync as readFileSync3 } from "fs";
 import { relative as relative3, sep as sep3 } from "path";
 
@@ -14288,7 +14297,16 @@ var ConfigError = class extends Error {
 };
 function loadConfig(root, explicitPath) {
   const path = explicitPath ?? join2(root, ".egressa.yml");
-  if (!lstatSync(path, { throwIfNoEntry: false })) {
+  let link;
+  try {
+    link = lstatSync(path, { throwIfNoEntry: false });
+  } catch (error) {
+    if (error.code !== "ENOTDIR" || explicitPath !== void 0) {
+      const code = error.code ?? "unknown error";
+      throw new ConfigError(`${path}: cannot be read (${code})`);
+    }
+  }
+  if (!link) {
     if (explicitPath !== void 0) throw new ConfigError(`${path}: no such file`);
     return {};
   }
@@ -14299,6 +14317,7 @@ function loadConfig(root, explicitPath) {
     throw new ConfigError(`${path}: is a symlink that does not resolve`);
   }
   if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
+  if (!target.isFile()) throw new ConfigError(`${path}: is not a regular file`);
   if (explicitPath === void 0) {
     const inside = relative2(realpathSync2(root), realpathSync2(path));
     if (inside.startsWith("..") || isAbsolute2(inside)) {
@@ -14306,11 +14325,21 @@ function loadConfig(root, explicitPath) {
     }
   }
   let bytes;
+  let fd;
   try {
-    bytes = readFileSync2(path);
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
+    if (opened.size > MAX_CONFIG_BYTES) {
+      throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1048576} MB; not read`);
+    }
+    bytes = readFileSync2(fd);
   } catch (error) {
+    if (error instanceof ConfigError) throw error;
     const code = error.code ?? "unknown error";
     throw new ConfigError(`${path}: cannot be read (${code})`);
+  } finally {
+    if (fd !== void 0) closeSync(fd);
   }
   let parsed;
   try {
@@ -14320,7 +14349,7 @@ function loadConfig(root, explicitPath) {
     const summary = (error.message.split("\n")[0] ?? "").replace(/:\s*$/, "");
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  const source = relative2(root, path) || path;
+  const source = relative2(root, path).split(sep22).join("/") || path;
   if (parsed === null || parsed === void 0) return { source };
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new ConfigError(
@@ -14329,7 +14358,7 @@ function loadConfig(root, explicitPath) {
   }
   const config = parsed;
   refuseUnknownKeys(config, TOP_LEVEL_KEYS, path);
-  if (config.version !== void 0 && config.version !== null && config.version !== 1) {
+  if (config.version !== void 0 && config.version !== null && config.version !== 1 && config.version !== "1") {
     throw new ConfigError(`${path}: version must be 1`);
   }
   const exclude = config.exclude;
@@ -14369,6 +14398,11 @@ function loadConfig(root, explicitPath) {
         throw new ConfigError(`${at}: ${field} must be text`);
       }
     }
+    for (const field of ["vendor", "rule", "expires"]) {
+      if (typeof s2[field] === "string" && s2[field].trim() === "") {
+        throw new ConfigError(`${at}: ${field} is empty`);
+      }
+    }
     if (s2.vendor === void 0 && s2.rule === void 0) {
       throw new ConfigError(`${at} names neither a vendor nor a rule, so it would match nothing`);
     }
@@ -14380,9 +14414,23 @@ function loadConfig(root, explicitPath) {
   }
   return { ...config, source };
 }
+var MAX_CONFIG_BYTES = 8 * 1048576;
 var FAIL_ON_LEVELS = ["none", "note", "warning", "error"];
-var TOP_LEVEL_KEYS = ["version", "exclude", "includeTransitive", "failOn", "suppressions"];
-var SUPPRESSION_KEYS = ["vendor", "rule", "reason", "acceptedBy", "expires"];
+var TOP_LEVEL_KEYS = [
+  "version",
+  "exclude",
+  "includeTransitive",
+  "failOn",
+  "suppressions"
+];
+var SUPPRESSION_KEYS = [
+  "vendor",
+  "rule",
+  "reason",
+  "acceptedBy",
+  "expires"
+];
+var PLAIN = /^[\w.@/*-]{1,64}$/;
 function refuseUnknownKeys(value, allowed, at) {
   for (const key of Object.keys(value)) {
     if (allowed.includes(key)) continue;
@@ -14432,7 +14480,8 @@ function expiryInstant(value) {
   if (match[4] === void 0) return date + 864e5;
   if (hour > 23 || minute > 59 || (second || 0) > 59) return null;
   if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
-  return Date.parse(value);
+  const instant = Date.parse(value);
+  return Number.isFinite(instant) ? instant : null;
 }
 function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
   const rules = config.suppressions ?? [];
@@ -14455,10 +14504,31 @@ function applySuppressions(findings, config, now = /* @__PURE__ */ new Date()) {
 function suppressionProblems(findings, config, vendorIds, narrowedBy) {
   const rules = config.suppressions ?? [];
   const problems = [];
-  const takenBy = findings.map((finding) => rules.findIndex((rule) => matches(rule, finding)));
+  const byVendor = /* @__PURE__ */ new Map();
+  const byRule = /* @__PURE__ */ new Map();
+  const add = (index, key, i2) => {
+    const list = index.get(key);
+    if (list) list.push(i2);
+    else index.set(key, [i2]);
+  };
+  for (const [i2, finding] of findings.entries()) {
+    if (finding.vendor?.id) add(byVendor, finding.vendor.id, i2);
+    add(byRule, finding.ruleId, i2);
+  }
+  const matchedBy = (rule) => (rule.vendor ? byVendor.get(rule.vendor) : rule.rule ? byRule.get(rule.rule) : [])?.filter(
+    (i2) => matches(rule, findings[i2])
+  ) ?? [];
+  const takenBy = /* @__PURE__ */ new Map();
+  for (const [index, rule] of rules.entries()) {
+    for (const i2 of matchedBy(rule)) if (!takenBy.has(i2)) takenBy.set(i2, index);
+  }
   for (const [index, rule] of rules.entries()) {
     const at = `suppression ${index + 1}`;
     if (rule.vendor !== void 0 && !vendorIds.has(rule.vendor)) {
+      if (!PLAIN.test(rule.vendor)) {
+        problems.push(`${at} names a vendor that is not in the knowledge base`);
+        continue;
+      }
       const near = [...vendorIds].find((id) => id.toLowerCase() === rule.vendor?.toLowerCase());
       problems.push(
         `${at} names vendor "${rule.vendor}", which is not in the knowledge base${near ? ` (did you mean "${near}"?)` : ""}`
@@ -14466,36 +14536,46 @@ function suppressionProblems(findings, config, vendorIds, narrowedBy) {
       continue;
     }
     if (rule.rule !== void 0 && !RULE_IDS.includes(rule.rule)) {
-      problems.push(`${at} names rule "${rule.rule}", which is not a rule`);
+      problems.push(
+        PLAIN.test(rule.rule) ? `${at} names rule "${rule.rule}", which is not a rule` : `${at} names a rule that does not exist`
+      );
       continue;
     }
     const label = [
       ...rule.vendor ? [`vendor ${rule.vendor}`] : [],
       ...rule.rule ? [`rule ${rule.rule}`] : []
     ].join(", ");
-    const matched = findings.flatMap((finding, i2) => matches(rule, finding) ? [i2] : []);
+    const matched = matchedBy(rule);
     if (matched.length === 0) {
       problems.push(
         narrowedBy.length > 0 ? `${at} (${label}) matched no finding in this scan, which was narrowed (${narrowedBy.join("; ")}), so it may match in a full scan` : `${at} (${label}) matched no finding in this scan`
       );
-    } else if (matched.every((i2) => (takenBy[i2] ?? -1) < index)) {
-      const earlier = Math.min(...matched.map((i2) => takenBy[i2] ?? 0)) + 1;
+    } else if (matched.every((i2) => (takenBy.get(i2) ?? index) < index)) {
+      const earlier = matched.reduce((first, i2) => Math.min(first, takenBy.get(i2) ?? index), index) + 1;
       problems.push(
         `${at} (${label}) matches nothing that suppression ${earlier} does not already take`
       );
     }
   }
+  if (problems.length > MAX_PROBLEMS) {
+    const more = problems.length - MAX_PROBLEMS;
+    return [...problems.slice(0, MAX_PROBLEMS), `and ${more} more suppressions with a problem`];
+  }
   return problems;
 }
+var MAX_PROBLEMS = 20;
 function matches(rule, finding) {
-  if (rule.vendor && finding.vendor?.id !== rule.vendor) return false;
-  if (rule.rule && finding.ruleId !== rule.rule) return false;
-  return Boolean(rule.vendor || rule.rule);
+  if (rule.vendor !== void 0 && finding.vendor?.id !== rule.vendor) return false;
+  if (rule.rule !== void 0 && finding.ruleId !== rule.rule) return false;
+  return rule.vendor !== void 0 || rule.rule !== void 0;
+}
+function expiredNoteId(finding) {
+  return `${finding.id}-expired`;
 }
 function expiredNote(finding, rule) {
   return {
     ...finding,
-    id: `${finding.id}-expired`,
+    id: expiredNoteId(finding),
     ruleId: "config/expired-suppression",
     severity: "note",
     suppressed: false,
@@ -14826,7 +14906,7 @@ function isDevRequirementsFile(path) {
   return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
 }
 var COMPILED_HEADER = /autogenerated by (?:pip-compile|uv via)/i;
-var SOURCE_ENTRY = /^-r\s+\S|\((?:[^()]*\/)?(?:pyproject\.toml|setup\.py|setup\.cfg)(?::[^()]*)?\)\s*$/;
+var SOURCE_ENTRY = /^-r\s+\S|\((?:[^()]*[/\\])?(?:pyproject\.toml|setup\.py|setup\.cfg)(?::[^()]*)?\)\s*$/;
 var PACKAGE_ENTRY = /^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?:\[[^\]]*\])?$/;
 var OMITTED_TRAILER = /^The following packages (?:were excluded from the output|are considered to be unsafe)/i;
 function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
@@ -14849,7 +14929,7 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
     offset += physical.length + 1;
     const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
     const continued = continuation;
-    continuation = raw.trimEnd().endsWith("\\");
+    continuation = raw.trimEnd().endsWith("\\") && !/^\s*#/.test(raw);
     if (continued) {
       const via = /^via\b\s*(.*)$/.exec(/\s#\s*(.*)$/.exec(raw)?.[1]?.trim() ?? "");
       if (via && current) annotate(current, via[1] ?? "");
@@ -14921,11 +15001,27 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
       fatal: false
     });
   }
+  const unsure = [];
   const dependencies = found.map((f3) => {
-    const direct = !unannotated && (!compiled || f3.via === null || f3.via.some(isSource));
-    const parents = direct ? [] : (f3.via ?? []).map(packageEntry).filter((name) => name !== null);
-    return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, parents);
+    const parents = (f3.via ?? []).map(packageEntry).filter((name) => name !== null && inFile.has(name));
+    const via = f3.via ?? [];
+    const excludedParent = via.some((entry) => omitted.has(packageEntry(entry) ?? ""));
+    const unrecognised = parents.length === 0 && via.some((entry) => !wellFormed(entry));
+    const doubtful = compiled && !unannotated && !via.some(isSource) && (excludedParent || unrecognised);
+    if (doubtful) unsure.push(f3.name);
+    const direct = !unannotated && (!compiled || f3.via === null || via.some(isSource) || doubtful);
+    const transitiveVia = direct ? [] : (f3.via ?? []).map(packageEntry).filter((name) => name !== null);
+    return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, transitiveVia);
   });
+  if (unsure.length > 0) {
+    const shown = unsure.slice(0, 5).join(", ");
+    const more = unsure.length > 5 ? ` and ${unsure.length - 5} more` : "";
+    errors.push({
+      file: path,
+      message: `read as declared because their \`# via\` names a parent left out of this file, or no recognisable one: ${shown}${more}. If they are only pulled in by other packages, suppress them.`,
+      fatal: false
+    });
+  }
   return { dependencies, errors };
 }
 function viaEntries(text) {
@@ -15473,8 +15569,14 @@ function toInvocation(result) {
     toolExecutionNotifications: result.errors.map((e2) => ({
       level: e2.fatal ? "error" : "warning",
       message: { text: e2.message },
-      // An absolute path is the machine's, not the repository's.
-      ...isAbsolute22(e2.file) ? {} : { locations: [{ physicalLocation: { artifactLocation: { uri: e2.file } } }] }
+      // Located against the source root, like every result. A path that is the
+      // machine's, or that climbs out of the root (an explicit --config), has
+      // no location in the checkout to point at.
+      ...isAbsolute22(e2.file) || e2.file.startsWith("..") ? {} : {
+        locations: [
+          { physicalLocation: { artifactLocation: { uri: e2.file, uriBaseId: "%SRCROOT%" } } }
+        ]
+      }
     }))
   };
 }
@@ -16729,6 +16831,13 @@ function scan(options) {
     ...minConfidence !== "low" ? [`findings below ${minConfidence} confidence were dropped`] : [],
     ...includeDev ? [] : ["dev dependencies were skipped"],
     ...includeManifests ? [] : ["manifests were not read"],
+    // The caller's excludes only: the config's own are part of what the team
+    // committed, and a suppression that relies on an excluded tree is stale.
+    ...options.exclude?.length ? ["the caller excluded paths"] : [],
+    // A what-if run rewrites rule ids, so a rule suppression can stop matching.
+    ...options.assumeAdequacyLapsed?.length ? ["adequacy decisions were assumed withdrawn"] : [],
+    // The config asked for transitive dependencies and the caller turned them off.
+    ...!includeTransitive && config.includeTransitive === true ? ["transitive dependencies were left out"] : [],
     ...!includeCallsites ? ["call sites were not analysed"] : degraded ? ["call sites could not be analysed"] : []
   ];
   for (const message of suppressionProblems(merged, config, new Set(kb.byId.keys()), narrowedBy)) {
@@ -16900,7 +17009,7 @@ function formatHuman(result, options) {
     lines.push("");
   }
   for (const error of result.errors) {
-    lines.push(c3("yellow", `warning: ${error.file}: ${error.message}`));
+    lines.push(c3("yellow", `warning: ${printable(error.file)}: ${printable(error.message)}`));
   }
   lines.push(summaryLine(result, c3));
   lines.push(c3("dim", kbLine(result)));
@@ -16982,6 +17091,15 @@ function kbLine(result) {
   const stale = result.kb.staleEntryCount > 0 ? `, ${result.kb.staleEntryCount} entr${result.kb.staleEntryCount === 1 ? "y" : "ies"} not recently verified` : "";
   return `knowledge base ${result.kb.version} (${result.kb.entryCount} vendors, adequacy status as of ${result.kb.adequacyStatusAsOf})${stale}`;
 }
+function printable(text) {
+  return Array.from(text, (ch) => isControl(ch) ? "?" : ch).join("");
+}
+function isControl(ch) {
+  const code = ch.codePointAt(0) ?? 0;
+  const control = code < 32 || code >= 127 && code <= 159;
+  const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
+  return control || bidi;
+}
 
 // src/format/markdown.ts
 function formatMarkdown(result, options = {}) {
@@ -17041,7 +17159,12 @@ function formatMarkdown(result, options = {}) {
   }
   if (result.errors.length > 0) {
     lines.push("### Warnings", "");
-    for (const e2 of result.errors) lines.push(`- \`${e2.file}\`: ${e2.message}`);
+    for (const e2 of result.errors.slice(0, MAX_WARNINGS)) {
+      lines.push(`- ${codeSpan(e2.file)}: ${inert(e2.message)}`);
+    }
+    if (result.errors.length > MAX_WARNINGS) {
+      lines.push(`- and ${result.errors.length - MAX_WARNINGS} more`);
+    }
     lines.push("");
   }
   lines.push("---", "", DISCLAIMER);
@@ -17058,6 +17181,21 @@ function euRegionCell(finding) {
   if (!eu.available) return "not documented";
   return `available (${eu.scope ?? "scope not recorded"})`;
 }
+function inert(text) {
+  return plain(text).replace(/[\\`*_{}[\]()#+!<>|@]/g, "\\$&");
+}
+function codeSpan(text) {
+  return `\`${plain(text).replace(/`/g, "'")}\``;
+}
+function plain(text) {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control = code < 32 || code >= 127 && code <= 159;
+    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
+    return control || bidi ? " " : ch;
+  }).join("");
+}
+var MAX_WARNINGS = 20;
 
 // src/version.ts
 var TOOL_VERSION = "0.2.0";
@@ -17159,9 +17297,7 @@ var scanCommand = defineCommand({
       process.exit(EXIT.USAGE);
     }
     const failOnGiven = rawArgs2.some((a2) => a2 === "--fail-on" || a2.startsWith("--fail-on="));
-    const failOn = parseFailOn(
-      failOnGiven ? String(args["fail-on"]) : config.failOn ?? String(args["fail-on"])
-    );
+    const failOn = !failOnGiven && config.failOn ? config.failOn : parseFailOn(String(args["fail-on"]));
     let result;
     try {
       result = scan({

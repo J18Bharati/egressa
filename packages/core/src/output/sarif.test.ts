@@ -202,6 +202,24 @@ describe('toSarif: errors from the scan', () => {
     expect(invocation.toolExecutionNotifications[1].locations).toBeUndefined();
   });
 
+  it('calls a run with only warnings successful', () => {
+    const warned = toSarif(
+      { ...base, errors: [{ file: 'requirements.txt', message: 'w', fatal: false }] },
+      { toolVersion: '0.1.0' },
+    ) as AnySarif;
+    expect(warned.runs[0].invocations[0].executionSuccessful).toBe(true);
+  });
+
+  it('locates a notification against the source root, and never outside it', () => {
+    const [first] = sarif.runs[0].invocations[0].toolExecutionNotifications;
+    expect(first.locations[0].physicalLocation.artifactLocation.uriBaseId).toBe('%SRCROOT%');
+    const outside = toSarif(
+      { ...base, errors: [{ file: '../../shared/team.yml', message: 'w', fatal: false }] },
+      { toolVersion: '0.1.0' },
+    ) as AnySarif;
+    expect(outside.runs[0].invocations[0].toolExecutionNotifications[0].locations).toBeUndefined();
+  });
+
   it('adds no invocation when the scan had no errors', () => {
     const clean = toSarif({ ...base, errors: [] }, { toolVersion: '0.1.0' }) as AnySarif;
     expect(clean.runs[0].invocations).toBeUndefined();

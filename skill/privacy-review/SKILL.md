@@ -158,7 +158,9 @@ neither, and report its lane as not reviewed in `NOT CHECKED`. A missing block i
 finding and not a skipped line. Check that `emitted + context + merged + dropped` equals `findings`,
 and that the finding and context lines it returned match `emitted`, `context` and `merged`. If the
 line is missing or the counts disagree, say so in `NOT CHECKED`, with the numbers: a scanner
-finding that no line accounts for was dropped without a reason. Carry its `engine` (when not `oxc`),
+finding that no line accounts for was dropped without a reason. A `_scanner` line with
+`"engine":"none"` means the scanner did not run: report the transfers lane as not reviewed, with its
+`errors`, never as a lane that came back clean. Carry its `engine` (when not `oxc`),
 `unmatched` counts, `errors` and `notChecked` into `NOT CHECKED`, and list what it `dropped`.
 
 **`context` lines are fenced.** Only `specialist: "transfers"` may emit one, and only for

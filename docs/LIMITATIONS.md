@@ -207,7 +207,11 @@ annotations looks exactly like a hand-written file, and every package in it is r
 A pip-compile or uv header with no annotations is recognised, and nothing in that file is attributed.
 A `# via` parent that is not itself a line in the file is read as the project, because `uv export`
 writes no line for a project that is not a package; so a package dropped from the output some other
-way than `--no-emit-package`, which uv lists in a trailer, would make its children read as declared.
+way than `--no-emit-package` would make its children read as declared. A package that names a parent
+the generator lists as excluded, or whose only entries are in no recognised shape, is read as
+declared too, with a warning naming it: an excluded name may be a real package or the project
+itself, left out to cache a Docker layer, and the file does not say which. So with
+`--no-emit-package boto3`, `botocore` is reported as declared, and the warning says why.
 The committed real output in `fixtures/lockfiles/requirements/` is uv's; pip-compile's has not been
 captured, so its shapes are covered by hand-written cases only. And a
 vendor is matched only if its knowledge base entry carries a `pypi` alias — today Twilio and AWS

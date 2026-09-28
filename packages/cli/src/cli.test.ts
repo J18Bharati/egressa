@@ -18,6 +18,26 @@ const result = () =>
   });
 
 describe('human output', () => {
+  it('prints no control character from a warning the scanned repository wrote', () => {
+    // Security: raw escapes cleared the screen and planted an OSC 8 link.
+    const text = formatHuman(
+      {
+        ...result(),
+        errors: [
+          { file: 'a\u001b]8;;https://evil\u0007.yml', message: 'm\u001b[2J\nx', fatal: false },
+        ],
+      },
+      { color: false },
+    );
+    const warning = text.split('\n').filter((line) => line.startsWith('warning:'));
+    expect(warning).toHaveLength(1);
+    const control = Array.from(warning[0] ?? '').filter((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    });
+    expect(control).toEqual([]);
+  });
+
   it('states what a clean scan does not prove', () => {
     const clean = scan({
       root: 'fixtures/repos/clean-eu-only',
@@ -105,8 +125,46 @@ describe('markdown output', () => {
       errors: [{ file: '.egressa.yml', message: 'suppression 1 matched no finding', fatal: false }],
     });
     expect(md).toContain('### Warnings');
-    expect(md).toContain('`.egressa.yml`: suppression 1 matched no finding');
+    expect(md).toContain('- `.egressa.yml`: suppression 1 matched no finding');
     expect(md.indexOf('### Warnings')).toBeLessThan(md.indexOf('does not assess or certify'));
+  });
+
+  it('cannot be restructured or styled by a warning from the scanned repository', () => {
+    // Security: a path or message is repository content, and markdown output
+    // is posted as a PR comment.
+    const md = formatMarkdown({
+      ...result(),
+      errors: [
+        {
+          file: 'a`b\n## x.txt',
+          message: 'm\n\n## Injected\n![p](https://attacker.example/px.png)\u001b[2J',
+          fatal: false,
+        },
+      ],
+    });
+    const warning = md.split('### Warnings')[1]?.split('---')[0] ?? '';
+    expect(warning).not.toMatch(/\n##|!\[/);
+    expect(warning).not.toContain(String.fromCharCode(27));
+    expect(warning.trim().split('\n')).toHaveLength(1);
+  });
+
+  it('lists at most twenty warnings, and never mentions or links from one', () => {
+    const errors = Array.from({ length: 25 }, (_, i) => ({
+      file: `packages/@org/team/www.example.com/${i}.txt`,
+      message: 'ping @org/team',
+      fatal: false,
+    }));
+    const md = formatMarkdown({ ...result(), errors });
+    const warning = md.split('### Warnings')[1]?.split('---')[0] ?? '';
+    expect(
+      warning
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('- `')),
+    ).toHaveLength(20);
+    expect(warning).toContain('and 5 more');
+    // A code span renders literally; outside one, an @ must be escaped.
+    expect(warning.replace(/`[^`]*`/g, '')).not.toMatch(/(^|[^\\])@org/);
   });
 
   it('says how many findings it withheld when truncating', () => {

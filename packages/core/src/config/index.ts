@@ -1,5 +1,14 @@
-import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { isAbsolute, join, relative } from 'node:path';
+import {
+  constants,
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from 'node:fs';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import { excludeProblem } from '../discovery/walk.js';
 import { RULE_IDS } from '../rules.js';
@@ -14,10 +23,11 @@ export interface SuppressionRule {
 }
 
 export interface EgressaConfig {
-  version?: number;
+  /** `1`, or `"1"` as YAML habit often quotes it. */
+  version?: number | string;
   exclude?: string[];
   includeTransitive?: boolean;
-  failOn?: string;
+  failOn?: FailOnLevel;
   suppressions?: SuppressionRule[];
   /**
    * Where this configuration was read from, relative to the scan root. Set by
@@ -50,7 +60,18 @@ export class ConfigError extends Error {
  */
 export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const path = explicitPath ?? join(root, '.egressa.yml');
-  if (!lstatSync(path, { throwIfNoEntry: false })) {
+  let link: ReturnType<typeof lstatSync> | undefined;
+  try {
+    link = lstatSync(path, { throwIfNoEntry: false });
+  } catch (error) {
+    // A root that is not a directory has no config in it; scan() reports the
+    // root itself as a fatal error, which is the message that helps.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOTDIR' || explicitPath !== undefined) {
+      const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
+      throw new ConfigError(`${path}: cannot be read (${code})`);
+    }
+  }
+  if (!link) {
     // Asking for a file by name and scanning without it would be the silent
     // widening the rest of this function exists to prevent.
     if (explicitPath !== undefined) throw new ConfigError(`${path}: no such file`);
@@ -66,6 +87,9 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     throw new ConfigError(`${path}: is a symlink that does not resolve`);
   }
   if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
+  // A FIFO or a device would block the synchronous read below, and on the MCP
+  // server that stalls every later tool call too.
+  if (!target.isFile()) throw new ConfigError(`${path}: is not a regular file`);
 
   // The repository's own config must be the repository's own file. A link
   // pointing elsewhere would have this read, and quote in an error, a file
@@ -78,12 +102,26 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     }
   }
 
+  // Read through the descriptor that was checked, so the file cannot be
+  // swapped for a FIFO between the check and the read; non-blocking, so
+  // opening one does not wait for a writer. The size cap keeps a scanned
+  // repository from handing the MCP server gigabytes to parse.
   let bytes: Buffer;
+  let fd: number | undefined;
   try {
-    bytes = readFileSync(path);
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
+    if (opened.size > MAX_CONFIG_BYTES) {
+      throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1_048_576} MB; not read`);
+    }
+    bytes = readFileSync(fd);
   } catch (error) {
+    if (error instanceof ConfigError) throw error;
     const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
     throw new ConfigError(`${path}: cannot be read (${code})`);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
   let parsed: unknown;
   try {
@@ -95,7 +133,8 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
     const summary = ((error as Error).message.split('\n')[0] ?? '').replace(/:\s*$/, '');
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  const source = relative(root, path) || path;
+  // Forward slashes on every platform: it is written into JSON and SARIF.
+  const source = relative(root, path).split(sep).join('/') || path;
   if (parsed === null || parsed === undefined) return { source };
   if (typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new ConfigError(
@@ -108,7 +147,12 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   // as an ordinary key: either one left a temporary acceptance permanent.
   refuseUnknownKeys(config, TOP_LEVEL_KEYS, path);
 
-  if (config.version !== undefined && config.version !== null && config.version !== 1) {
+  if (
+    config.version !== undefined &&
+    config.version !== null &&
+    config.version !== 1 &&
+    config.version !== '1'
+  ) {
     throw new ConfigError(`${path}: version must be 1`);
   }
 
@@ -164,6 +208,12 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
         throw new ConfigError(`${at}: ${field} must be text`);
       }
     }
+    // An empty vendor used to match every vendor for its rule.
+    for (const field of ['vendor', 'rule', 'expires'] as const) {
+      if (typeof s[field] === 'string' && (s[field] as string).trim() === '') {
+        throw new ConfigError(`${at}: ${field} is empty`);
+      }
+    }
     if (s.vendor === undefined && s.rule === undefined) {
       throw new ConfigError(`${at} names neither a vendor nor a rule, so it would match nothing`);
     }
@@ -176,14 +226,48 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   return { ...(config as EgressaConfig), source };
 }
 
+/** Larger than any config a team writes by hand; field test 4's 60,001 suppressions were 4.2 MB. */
+const MAX_CONFIG_BYTES = 8 * 1_048_576;
+
 /** The levels `failOn` and `--fail-on` accept. */
 export const FAIL_ON_LEVELS = ['none', 'note', 'warning', 'error'] as const;
 export type FailOnLevel = (typeof FAIL_ON_LEVELS)[number];
 
-const TOP_LEVEL_KEYS = ['version', 'exclude', 'includeTransitive', 'failOn', 'suppressions'];
-const SUPPRESSION_KEYS = ['vendor', 'rule', 'reason', 'acceptedBy', 'expires'];
+// Checked against the interfaces, so a field added there and not here fails
+// to compile rather than making every config that uses it a usage error.
+const TOP_LEVEL_KEYS = [
+  'version',
+  'exclude',
+  'includeTransitive',
+  'failOn',
+  'suppressions',
+] as const satisfies readonly (keyof Omit<EgressaConfig, 'source'>)[];
+const SUPPRESSION_KEYS = [
+  'vendor',
+  'rule',
+  'reason',
+  'acceptedBy',
+  'expires',
+] as const satisfies readonly (keyof SuppressionRule)[];
+type Exhaustive<T extends readonly string[], K extends string> = [Exclude<K, T[number]>] extends [
+  never,
+]
+  ? true
+  : never;
+const _allTopLevelKeys: Exhaustive<typeof TOP_LEVEL_KEYS, keyof Omit<EgressaConfig, 'source'>> =
+  true;
+const _allSuppressionKeys: Exhaustive<typeof SUPPRESSION_KEYS, keyof SuppressionRule> = true;
+void _allTopLevelKeys;
+void _allSuppressionKeys;
 
-function refuseUnknownKeys(value: Record<string, unknown>, allowed: string[], at: string): void {
+/** A value from the scanned repository that is safe to quote back: a plain name. */
+const PLAIN = /^[\w.@/*-]{1,64}$/;
+
+function refuseUnknownKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  at: string,
+): void {
   for (const key of Object.keys(value)) {
     if (allowed.includes(key)) continue;
     if (key === '<<') {
@@ -254,7 +338,10 @@ export function expiryInstant(value: string): number | null {
   if (match[4] === undefined) return date + 86_400_000;
   if ((hour as number) > 23 || (minute as number) > 59 || (second || 0) > 59) return null;
   if ((zoneHour || 0) > 23 || (zoneMinute || 0) > 59) return null;
-  return Date.parse(value);
+  // The checks above are what stand between a typo and a suppression that
+  // never expires (NaN compares false). A value they miss fails closed.
+  const instant = Date.parse(value);
+  return Number.isFinite(instant) ? instant : null;
 }
 
 /**
@@ -312,6 +399,11 @@ export function applySuppressions(
  * confidence floor, call sites not analysed -- because a suppression that
  * matches nothing in a narrowed scan may still match in a full one, and saying
  * it is stale would be a wrong fact.
+ *
+ * A vendor or rule the knowledge base does not know is quoted back only when
+ * it is a plain name: these messages reach PR comments, terminals and MCP, and
+ * the file is the scanned repository's. At most twenty are listed, since a
+ * config can hold tens of thousands of suppressions.
  */
 export function suppressionProblems(
   findings: Finding[],
@@ -321,12 +413,36 @@ export function suppressionProblems(
 ): string[] {
   const rules = config.suppressions ?? [];
   const problems: string[] = [];
+  // Findings indexed by vendor and by rule, so each suppression looks up its
+  // candidates rather than scanning every finding.
+  const byVendor = new Map<string, number[]>();
+  const byRule = new Map<string, number[]>();
+  const add = (index: Map<string, number[]>, key: string, i: number) => {
+    const list = index.get(key);
+    if (list) list.push(i);
+    else index.set(key, [i]);
+  };
+  for (const [i, finding] of findings.entries()) {
+    if (finding.vendor?.id) add(byVendor, finding.vendor.id, i);
+    add(byRule, finding.ruleId, i);
+  }
+  const matchedBy = (rule: SuppressionRule) =>
+    (rule.vendor ? byVendor.get(rule.vendor) : rule.rule ? byRule.get(rule.rule) : [])?.filter(
+      (i) => matches(rule, findings[i] as Finding),
+    ) ?? [];
   // The suppression each finding is taken by: the first that matches it.
-  const takenBy = findings.map((finding) => rules.findIndex((rule) => matches(rule, finding)));
+  const takenBy = new Map<number, number>();
+  for (const [index, rule] of rules.entries()) {
+    for (const i of matchedBy(rule)) if (!takenBy.has(i)) takenBy.set(i, index);
+  }
 
   for (const [index, rule] of rules.entries()) {
     const at = `suppression ${index + 1}`;
     if (rule.vendor !== undefined && !vendorIds.has(rule.vendor)) {
+      if (!PLAIN.test(rule.vendor)) {
+        problems.push(`${at} names a vendor that is not in the knowledge base`);
+        continue;
+      }
       const near = [...vendorIds].find((id) => id.toLowerCase() === rule.vendor?.toLowerCase());
       problems.push(
         `${at} names vendor "${rule.vendor}", which is not in the knowledge base${near ? ` (did you mean "${near}"?)` : ''}`,
@@ -334,40 +450,62 @@ export function suppressionProblems(
       continue;
     }
     if (rule.rule !== undefined && !(RULE_IDS as readonly string[]).includes(rule.rule)) {
-      problems.push(`${at} names rule "${rule.rule}", which is not a rule`);
+      problems.push(
+        PLAIN.test(rule.rule)
+          ? `${at} names rule "${rule.rule}", which is not a rule`
+          : `${at} names a rule that does not exist`,
+      );
       continue;
     }
+    // Both values are now a known vendor id and a known rule id.
     const label = [
       ...(rule.vendor ? [`vendor ${rule.vendor}`] : []),
       ...(rule.rule ? [`rule ${rule.rule}`] : []),
     ].join(', ');
-    const matched = findings.flatMap((finding, i) => (matches(rule, finding) ? [i] : []));
+    const matched = matchedBy(rule);
     if (matched.length === 0) {
       problems.push(
         narrowedBy.length > 0
           ? `${at} (${label}) matched no finding in this scan, which was narrowed (${narrowedBy.join('; ')}), so it may match in a full scan`
           : `${at} (${label}) matched no finding in this scan`,
       );
-    } else if (matched.every((i) => (takenBy[i] ?? -1) < index)) {
-      const earlier = Math.min(...matched.map((i) => takenBy[i] ?? 0)) + 1;
+    } else if (matched.every((i) => (takenBy.get(i) ?? index) < index)) {
+      const earlier =
+        matched.reduce((first, i) => Math.min(first, takenBy.get(i) ?? index), index) + 1;
       problems.push(
         `${at} (${label}) matches nothing that suppression ${earlier} does not already take`,
       );
     }
   }
+  if (problems.length > MAX_PROBLEMS) {
+    const more = problems.length - MAX_PROBLEMS;
+    return [...problems.slice(0, MAX_PROBLEMS), `and ${more} more suppressions with a problem`];
+  }
   return problems;
 }
 
+const MAX_PROBLEMS = 20;
+
 function matches(rule: SuppressionRule, finding: Finding): boolean {
-  if (rule.vendor && finding.vendor?.id !== rule.vendor) return false;
-  if (rule.rule && finding.ruleId !== rule.rule) return false;
-  return Boolean(rule.vendor || rule.rule);
+  // Present, not truthy: an empty vendor must match no vendor, never every one.
+  if (rule.vendor !== undefined && finding.vendor?.id !== rule.vendor) return false;
+  if (rule.rule !== undefined && finding.ruleId !== rule.rule) return false;
+  return rule.vendor !== undefined || rule.rule !== undefined;
+}
+
+/** Whether `note` is the expired-suppression note `applySuppressions` wrote for `finding`. */
+export function isExpiredNoteFor(note: Finding, finding: Finding): boolean {
+  return note.ruleId === 'config/expired-suppression' && note.id === expiredNoteId(finding);
+}
+
+function expiredNoteId(finding: Finding): string {
+  return `${finding.id}-expired`;
 }
 
 function expiredNote(finding: Finding, rule: SuppressionRule): Finding {
   return {
     ...finding,
-    id: `${finding.id}-expired`,
+    id: expiredNoteId(finding),
     ruleId: 'config/expired-suppression',
     severity: 'note',
     suppressed: false,

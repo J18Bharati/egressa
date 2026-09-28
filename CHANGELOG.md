@@ -90,7 +90,13 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   See the Python entry under Added: pip-compile and uv output is now read as a lockfile. A source
   in a subdirectory or a dependency group counts as a source, and a `# via` parent that is not in
   the file is taken as the project itself, so no declared SDK is dropped. Only a bare package name
-  counts as that parent, and not one the generator's trailer lists as excluded from the output.
+  counts as that parent, and not one the generator's trailer lists as excluded from the output. A
+  package whose only parents are such excluded names, or entries in no recognised shape, is read as
+  declared with a warning naming it, since the file cannot say whether it was asked for: this kept
+  Twilio when `uv pip compile --no-emit-package` leaves out the local project. A package naming any
+  excluded parent is treated the same way, even beside a parent in the file. A full-line comment
+  ending in `\` no longer swallows the next requirement. A Windows source
+  path, `(backend\pyproject.toml)`, counts as a source.
 - **uv's `--emit-index-annotation` brought the transitive-package problem back.** Its
   `# from <index>` line after a multi-parent `# via` block was read as a parent named `from`, absent
   from the file and so the project: `botocore` became AWS at high confidence. A via block now ends
@@ -137,9 +143,17 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
 ### Changed
 
 - **`.egressa.yml` is read strictly.** An unknown key, a YAML merge key, a file that is not UTF-8 or
-  not a mapping, and a symlink that does not resolve are usage errors, where each used to load as
-  something else or as no config. A config that loaded before may now exit 2; the message names the
-  key and suggests the likely one.
+  not a mapping, a symlink that does not resolve, and anything that is not a regular file (a FIFO
+  used to hang the scan) are usage errors, where each used to load as something else or as no
+  config. `version` must be `1`, quoted or not. An empty `vendor`, `rule` or `expires` is refused:
+  an empty vendor used to suppress its rule for every vendor. A config over 8 MB is not read, and
+  the file is checked and read through one descriptor, so it cannot be swapped between the two. A config that loaded before may now exit 2; the
+  message names the key and suggests the likely one.
+- **A warning never repeats the scanned repository's text as markup.** A suppression naming a
+  vendor or rule that is not a plain name is described, not quoted. Markdown output puts a
+  warning's path in a code span and escapes its message, `@` included, so a PR comment cannot
+  mention a team; human output replaces control and bidi-override characters. At most twenty
+  suppression problems, and twenty markdown warnings, are listed.
 - **A date-only `expires` holds through the end of that day in UTC.** It used to expire at the start
   of it. `expires` must be ISO 8601, and a time must carry its zone.
 - **The privacy-review contract has a fourth decidability, `context`,** used only by the transfers

@@ -30,6 +30,16 @@ describe('privacy-review contract', () => {
     expect(transfers).toContain('_scanner');
   });
 
+  it('treats every exit status but 0 and 1 as a scan that did not run', () => {
+    // Red team: a strict config exits 2 with no JSON, and the lane read as
+    // clean because only exit 3 was named.
+    for (const text of [transfers, readFileSync('skill/egressa/SKILL.md', 'utf8')]) {
+      expect(text).toMatch(/exits 0 or 1/);
+      expect(text).toMatch(/any other status/i);
+    }
+    expect(skill).toMatch(/`"engine":"none"`[\s\S]*not reviewed/);
+  });
+
   it('never asks the transfers specialist for a summary it has no way to write', () => {
     expect(transfers).not.toMatch(/in your summary|say (?:so|that) plainly|in your output/i);
   });

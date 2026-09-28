@@ -1,3 +1,4 @@
+import { isExpiredNoteFor } from './config/index.js';
 import { isReferenceOnly } from './output/display.js';
 import type { Finding, ScanResult } from './types.js';
 
@@ -75,8 +76,9 @@ export interface SummarisedScan {
   omittedFindings: number;
   unmatched: ScanResult['unmatched'];
   /**
-   * Every error the scan reported, fatal ones first seen as the reason a
-   * summary is empty. Without them a mistyped path read as a clean scan.
+   * The scan's errors, fatal ones first, at most twenty; `omittedErrors`
+   * counts the rest. A fatal error is why a summary is empty, and without it a
+   * mistyped path read as a clean scan.
    */
   errors: ScanResult['errors'];
   omittedErrors: number;
@@ -91,7 +93,7 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
   // the note comes along even past the limit.
   const last = result.findings[maxFindings - 1];
   const next = result.findings[maxFindings];
-  const keep = last && next?.id === `${last.id}-expired` ? maxFindings + 1 : maxFindings;
+  const keep = last && next && isExpiredNoteFor(next, last) ? maxFindings + 1 : maxFindings;
   const shown = result.findings.slice(0, keep);
 
   return {
@@ -110,7 +112,9 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
     truncated: result.findings.length > shown.length,
     omittedFindings: result.findings.length - shown.length,
     unmatched: result.unmatched,
-    errors: result.errors.slice(0, MAX_ERRORS),
+    errors: [...result.errors]
+      .sort((a, b) => Number(b.fatal) - Number(a.fatal))
+      .slice(0, MAX_ERRORS),
     omittedErrors: Math.max(0, result.errors.length - MAX_ERRORS),
     ...(result.scan.assumedAdequacyLapsed
       ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }

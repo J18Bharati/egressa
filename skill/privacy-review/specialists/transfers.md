@@ -30,9 +30,13 @@ The bundled copy usually runs in the `unavailable` mode, because the native pars
 with it. That is a real capability gap, not a formality: report it rather than presenting a
 manifest-only scan as a complete one.
 
-If the script exits 3, no binary resolved and **transfer detection did not run at all**. Emit
-`NO FINDINGS`, then a `_scanner` line with `"findings":0`, `"engine":"none"` and a `notChecked`
-entry saying transfer detection did not run, so the orchestrator puts it in `NOT CHECKED`. Do not substitute
+The scan ran only if the script exits 0 or 1 and prints the findings document; 1 means a
+`failOn` in the repository's config tripped, and the output is as usual. Any other status means
+**transfer detection did not run at all**: 2 is a usage error, most often an `.egressa.yml` the
+scanner refuses; 3 is no binary found, or an internal error; 4 is a knowledge base that failed to
+load. Emit `NO FINDINGS`, then a `_scanner` line with `"findings":0`, `"engine":"none"`, the
+script's stderr in `errors` and a `notChecked` entry saying transfer detection did not run, so the
+orchestrator reports the lane as not reviewed. Do not substitute
 your own vendor list — the scanner's answers come from a knowledge base of sourced facts with
 verification dates, and a guess from memory about where a vendor processes data is exactly the kind
 of confident error this review is built to avoid.
@@ -85,7 +89,8 @@ eight months ago is a weaker claim than one verified last week, and the scanner 
 **The `unmatched` block.** Hosts and packages there matched no knowledge base entry. Record the
 counts in `_scanner.unmatched` so the orchestrator can put them in `NOT CHECKED` — they are the only
 recall signal available, since the tool has no telemetry. Copy the scanner's own `errors` messages
-into `_scanner.errors` too: a suppression that matched nothing, or a requirements file with nothing
+into `_scanner.errors` too, at most twenty with a count of the rest, since the list can grow with
+the repository: a suppression that matched nothing, or a requirements file with nothing
 to attribute, changes what the findings mean.
 
 ## The blind spot that matters most

@@ -47,8 +47,11 @@ export function formatHuman(result: ScanResult, options: HumanOptions): string {
     lines.push('');
   }
 
+  // A warning's path and message can come from the scanned repository, so no
+  // control character reaches the terminal: an escape sequence in a file name
+  // would otherwise clear the screen or plant a hyperlink.
   for (const error of result.errors) {
-    lines.push(c('yellow', `warning: ${error.file}: ${error.message}`));
+    lines.push(c('yellow', `warning: ${printable(error.file)}: ${printable(error.message)}`));
   }
 
   lines.push(summaryLine(result, c));
@@ -177,4 +180,17 @@ function kbLine(result: ScanResult): string {
     `knowledge base ${result.kb.version} (${result.kb.entryCount} vendors, ` +
     `adequacy status as of ${result.kb.adequacyStatusAsOf})${stale}`
   );
+}
+
+/** Control characters, C0 and C1, replaced so a line stays one line of text. */
+function printable(text: string): string {
+  return Array.from(text, (ch) => (isControl(ch) ? '?' : ch)).join('');
+}
+
+/** C0 and C1 controls, and the bidi overrides that reorder a line as displayed. */
+function isControl(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  const control = code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+  return control || bidi;
 }

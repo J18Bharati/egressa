@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { scan } from '../scan.js';
 import { summarise } from '../summarize.js';
-import { ConfigError, applySuppressions, loadConfig } from './index.js';
+import { ConfigError, applySuppressions, loadConfig, suppressionProblems } from './index.js';
 
 const NOW = new Date('2026-09-06T12:00:00.000Z');
 const result = (config = {}) =>
@@ -423,5 +424,215 @@ describe('a summary cut right after an expired finding', () => {
     ]);
     expect(shown.truncated).toBe(false);
     expect(shown.omittedFindings).toBe(0);
+  });
+});
+
+describe('what the branch review found', () => {
+  const dirWith = (content: string | Buffer) => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, '.egressa.yml'), content);
+    return dir;
+  };
+  const entry = (extra: string) => `suppressions:\n  - vendor: stripe\n    reason: x\n${extra}`;
+  const problems = (
+    suppressions: object[],
+    findings = result().findings,
+    narrowed: string[] = [],
+  ) =>
+    suppressionProblems(
+      findings,
+      { suppressions: suppressions as never },
+      new Set(['stripe', 'sentry']),
+      narrowed,
+    );
+
+  it('does not echo a vendor or rule that is not a plain name', () => {
+    // Security: the value reached markdown PR comments and the terminal as written.
+    const hostile = 'zz"\n\n## Injected\n\u001b[2J';
+    const out = problems([
+      { vendor: hostile, reason: 'x' },
+      { rule: hostile, reason: 'x' },
+    ]);
+    expect(out).toEqual([
+      'suppression 1 names a vendor that is not in the knowledge base',
+      'suppression 2 names a rule that does not exist',
+    ]);
+  });
+
+  it('lists at most twenty suppression problems, and counts the rest', () => {
+    // Performance: 60,001 suppressions produced 59,985 errors on every surface.
+    const out = problems(Array.from({ length: 30 }, () => ({ vendor: 'sentry', reason: 'x' })));
+    expect(out).toHaveLength(21);
+    expect(out.at(-1)).toBe('and 10 more suppressions with a problem');
+  });
+
+  it('names the first suppression that already takes a finding', () => {
+    const [finding] = result().findings;
+    const out = problems([
+      { rule: finding?.ruleId, reason: 'a' },
+      { vendor: 'stripe', reason: 'b' },
+      { vendor: 'stripe', rule: finding?.ruleId, reason: 'c' },
+    ]);
+    expect(out).toEqual([
+      `suppression 2 (vendor stripe) matches nothing that suppression 1 does not already take`,
+      `suppression 3 (vendor stripe, rule ${finding?.ruleId}) matches nothing that suppression 1 does not already take`,
+    ]);
+  });
+
+  it('refuses a config that is not a regular file, which would block the read', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    execFileSync('mkfifo', [join(dir, '.egressa.yml')]);
+    expect(() => loadConfig(dir)).toThrow(/is not a regular file/);
+  });
+
+  it('leaves a root that is not a directory to scan(), which reports it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, 'afile'), 'x');
+    expect(loadConfig(join(dir, 'afile'))).toEqual({});
+  });
+
+  it.skipIf(process.getuid?.() === 0)('refuses a config it cannot read', () => {
+    const dir = dirWith('version: 1\n');
+    chmodSync(join(dir, '.egressa.yml'), 0o000);
+    expect(() => loadConfig(dir)).toThrow(/cannot be read \(EACCES\)/);
+  });
+
+  it('names a big-endian UTF-16 file too', () => {
+    const be = Buffer.concat([
+      Buffer.from([0xfe, 0xff]),
+      Buffer.from('version: 1\n', 'utf16le').swap16(),
+    ]);
+    expect(() => loadConfig(dirWith(be))).toThrow(/UTF-16/);
+  });
+
+  it('accepts version "1" quoted, which YAML habit often writes', () => {
+    expect(loadConfig(dirWith('version: "1"\n')).version).toBe('1');
+  });
+
+  it('refuses a time or zone out of range, which Date.parse would turn into a permanent suppression', () => {
+    for (const expires of [
+      '2027-01-31T25:00Z',
+      '2027-01-31T24:00Z',
+      '2027-01-31T10:60Z',
+      '2027-01-31T10:00:60Z',
+      '2027-01-31T10:00+24:00',
+      '2027-01-31T10:00+05:60',
+    ]) {
+      expect(() => loadConfig(dirWith(entry(`    expires: "${expires}"\n`))), expires).toThrow(
+        /expires must be a date/,
+      );
+    }
+  });
+
+  it('expires at the instant given, not after it', () => {
+    const at = (expires: string) =>
+      result({ suppressions: [{ vendor: 'stripe', reason: 'x', expires }] }).findings[0]
+        ?.suppressed;
+    expect(at('2026-09-06T12:00Z')).toBe(false);
+    expect(at('2026-09-06T12:01Z')).toBe(true);
+  });
+
+  it('treats an expiry it cannot read as expired, so nothing is suppressed for good', () => {
+    const out = applySuppressions(
+      result().findings,
+      {
+        suppressions: [{ vendor: 'stripe', reason: 'x', expires: '2027-01-31T25:00Z' }],
+      },
+      NOW,
+    );
+    expect(out[0]?.suppressed).toBe(false);
+  });
+});
+
+describe('every way a scan can be narrowed is named', () => {
+  // Red team and testing: a missing reason calls a valid suppression stale.
+  const narrowed = (options: object) =>
+    scan({
+      root: 'fixtures/repos/express-stripe-sendgrid',
+      toolVersion: '0.1.0',
+      kbPath: 'kb',
+      now: NOW,
+      includeCallsites: true,
+      config: { source: '.egressa.yml', suppressions: [{ vendor: 'sentry', reason: 'x' }] },
+      ...options,
+    }).errors.map((e) => e.message);
+  it.each([
+    [{ minConfidence: 'high' }, 'findings below high confidence were dropped'],
+    [{ includeDev: false }, 'dev dependencies were skipped'],
+    [{ includeManifests: false }, 'manifests were not read'],
+    [{ exclude: ['legacy/**'] }, 'the caller excluded paths'],
+    [{ assumeAdequacyLapsed: ['US:DPF'] }, 'adequacy decisions were assumed withdrawn'],
+    [
+      {
+        includeTransitive: false,
+        config: {
+          source: '.egressa.yml',
+          includeTransitive: true,
+          suppressions: [{ vendor: 'sentry', reason: 'x' }],
+        },
+      },
+      'transitive dependencies were left out',
+    ],
+  ])('%o', (options, reason) => {
+    expect(narrowed(options)).toEqual([expect.stringContaining(reason)]);
+  });
+});
+
+describe("the summary's errors", () => {
+  it('lists twenty and counts the rest', () => {
+    const errors = Array.from({ length: 21 }, (_, i) => ({
+      file: 'f',
+      message: `e${i}`,
+      fatal: false,
+    }));
+    const shown = summarise({ ...result(), errors });
+    expect(shown.errors).toHaveLength(20);
+    expect(shown.omittedErrors).toBe(1);
+  });
+
+  it('lists a fatal error first, so the cut cannot hide why a summary is empty', () => {
+    const errors = [
+      ...Array.from({ length: 25 }, (_, i) => ({ file: 'f', message: `e${i}`, fatal: false })),
+      { file: 'root', message: 'not a readable directory', fatal: true },
+    ];
+    expect(summarise({ ...result(), errors }).errors[0]?.fatal).toBe(true);
+  });
+});
+
+describe('what the adversarial review found', () => {
+  const dirWith = (content: string | Buffer) => {
+    const dir = mkdtempSync(join(tmpdir(), 'adq-'));
+    writeFileSync(join(dir, '.egressa.yml'), content);
+    return dir;
+  };
+
+  it('refuses an empty vendor, rule or expires, which matched every vendor', () => {
+    for (const field of [
+      'vendor: ""\n    rule: transfer/third-country-egress',
+      'vendor: stripe\n    rule: " "',
+      'vendor: stripe\n    expires: ""',
+    ]) {
+      expect(
+        () => loadConfig(dirWith(`suppressions:\n  - ${field}\n    reason: x\n`)),
+        field,
+      ).toThrow(/is empty/);
+    }
+  });
+
+  it('never matches every vendor on an empty vendor that reaches applySuppressions', () => {
+    const out = applySuppressions(
+      result().findings,
+      {
+        suppressions: [{ vendor: '', rule: result().findings[0]?.ruleId, reason: 'x' }],
+      },
+      NOW,
+    );
+    expect(out.every((f) => !f.suppressed)).toBe(true);
+  });
+
+  it('refuses a config larger than 8 MB', () => {
+    expect(() => loadConfig(dirWith(Buffer.alloc(9 * 1_048_576, 0x20)))).toThrow(
+      /larger than 8 MB/,
+    );
   });
 });

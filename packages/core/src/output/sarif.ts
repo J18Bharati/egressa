@@ -73,10 +73,16 @@ function toInvocation(result: ScanResult) {
     toolExecutionNotifications: result.errors.map((e) => ({
       level: e.fatal ? 'error' : 'warning',
       message: { text: e.message },
-      // An absolute path is the machine's, not the repository's.
-      ...(isAbsolute(e.file)
+      // Located against the source root, like every result. A path that is the
+      // machine's, or that climbs out of the root (an explicit --config), has
+      // no location in the checkout to point at.
+      ...(isAbsolute(e.file) || e.file.startsWith('..')
         ? {}
-        : { locations: [{ physicalLocation: { artifactLocation: { uri: e.file } } }] }),
+        : {
+            locations: [
+              { physicalLocation: { artifactLocation: { uri: e.file, uriBaseId: '%SRCROOT%' } } },
+            ],
+          }),
     })),
   };
 }

@@ -27,8 +27,11 @@ fail — do not fall back to it by hand.
 No configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the Data Privacy
 Framework being struck down.
 
-If the script exits 3 no binary resolved and **the scan did not run**. Say that plainly rather than
-reporting that nothing was found.
+The scan ran only if the script exits 0 or 1 and prints the findings document; 1 means the
+repository's own `failOn` tripped. Any other status means **the scan did not run**: 2 is a usage
+error, often an `.egressa.yml` the scanner refuses, 3 is no binary or an internal error, and 4 is a
+knowledge base that failed to load. Say that plainly, with the stderr line, rather than reporting
+that nothing was found.
 
 Check `scan.engine` before summarising. `callsite: "unavailable"` with `degraded: true` means the
 native parser could not load and only dependency manifests were read, so a vendor called by URL with
@@ -36,7 +39,7 @@ no SDK installed is invisible. The bundled copy normally runs in that mode.
 
 If the user has the MCP server configured, `scan_repository` returns the same data pre-summarised;
 either source is fine. Both honour the repository's `.egressa.yml`: suppressed findings are flagged,
-not removed, and the MCP summary names the file in `scan.config`.
+not removed, and both the findings document and the MCP summary name the file in `scan.config`.
 
 ## Then do the part the scanner cannot
 

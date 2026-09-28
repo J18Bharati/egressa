@@ -272,6 +272,15 @@ export function scan(options: ScanOptions): ScanResult {
     ...(minConfidence !== 'low' ? [`findings below ${minConfidence} confidence were dropped`] : []),
     ...(includeDev ? [] : ['dev dependencies were skipped']),
     ...(includeManifests ? [] : ['manifests were not read']),
+    // The caller's excludes only: the config's own are part of what the team
+    // committed, and a suppression that relies on an excluded tree is stale.
+    ...(options.exclude?.length ? ['the caller excluded paths'] : []),
+    // A what-if run rewrites rule ids, so a rule suppression can stop matching.
+    ...(options.assumeAdequacyLapsed?.length ? ['adequacy decisions were assumed withdrawn'] : []),
+    // The config asked for transitive dependencies and the caller turned them off.
+    ...(!includeTransitive && config.includeTransitive === true
+      ? ['transitive dependencies were left out']
+      : []),
     ...(!includeCallsites
       ? ['call sites were not analysed']
       : degraded

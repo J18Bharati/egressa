@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { HostTrie, loadKnowledgeBase, normaliseHost } from './index.js';
 import type { HostAlias, VendorEntry } from './types.js';
 
@@ -221,6 +221,7 @@ describe('what field test 4 found findVendor answering', () => {
   // A copy of the knowledge base with one alias added to `vendor`.
   const withAlias = (vendor: string, ecosystem: string, name: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
     cpSync('kb', join(dir, 'kb'), { recursive: true });
     const file = join(dir, 'kb', 'vendors', `${vendor}.json`);
     const entry = JSON.parse(readFileSync(file, 'utf8'));
@@ -240,13 +241,11 @@ describe('what field test 4 found findVendor answering', () => {
   it('answers nothing when an id and a package name different vendors', () => {
     const dir = withAlias('resend', 'npm', 'sentry');
     expect(loadKnowledgeBase({ kbPath: join(dir, 'kb') }).findVendor('sentry')).toBeNull();
-    rmSync(dir, { recursive: true, force: true });
   });
 
   it('answers nothing when a package and a host name different vendors', () => {
     const dir = withAlias('resend', 'npm', 'sentry.io');
     expect(loadKnowledgeBase({ kbPath: join(dir, 'kb') }).findVendor('sentry.io')).toBeNull();
-    rmSync(dir, { recursive: true, force: true });
   });
 
   describe('and kb:validate refuses the data that would make it ambiguous', () => {
@@ -270,7 +269,6 @@ describe('what field test 4 found findVendor answering', () => {
     it("an alias equal to another vendor's id", () => {
       const dir = withAlias('resend', 'npm', 'sentry');
       expect(validate(dir)).toContain('package alias "npm:sentry" is the id of vendor "sentry"');
-      rmSync(dir, { recursive: true, force: true });
     });
 
     it('one name used by different vendors on npm and on PyPI', () => {
@@ -278,13 +276,11 @@ describe('what field test 4 found findVendor answering', () => {
       expect(validate(dir)).toContain(
         '"boto3" is an npm alias of "stripe" and a pypi alias of "aws"',
       );
-      rmSync(dir, { recursive: true, force: true });
     });
 
     it("a package alias equal to another vendor's host", () => {
       const dir = withAlias('resend', 'npm', 'sentry.io');
       expect(validate(dir)).toContain('package alias "npm:sentry.io" is a host of vendor "sentry"');
-      rmSync(dir, { recursive: true, force: true });
     });
   });
 });
