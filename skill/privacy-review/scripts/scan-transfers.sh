@@ -24,9 +24,22 @@
 set -uo pipefail
 
 target="${1:-.}"
+requested="$target"
 shift || true
 
 SELF="$(cd "$(dirname "$0")/.." && pwd -P)"
+
+# Leave the target before anything runs. The working directory is usually the
+# repository under review, and npm reads a project `.npmrc` from it -- a
+# `registry=` line there would point the npx branch at an attacker's registry.
+# A relative PATH entry (`.`, `node_modules/.bin`) resolves against it too, and
+# could shadow `egressa` or the `node` every branch below runs.
+if ! target="$(cd "$target" 2>/dev/null && pwd -P)"; then
+  echo "scan-transfers: scan target is not a readable directory: $requested" >&2
+  exit 2
+fi
+cd "$SELF" || exit 3
+PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep '^/' | paste -sd: -)"
 
 # The checkout this skill lives in, if it lives in one -- never the target.
 if [ -f "$SELF/../../packages/cli/dist/cli.js" ]; then

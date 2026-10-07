@@ -36,7 +36,7 @@ answered by a read, it does not get answered.
 ## The procedure
 
 ```bash
-EGRESSA_ALLOW_AWS=1 bash "$SKILL_DIR/scripts/reconcile-aws.sh"   # SKILL_DIR: see SKILL.md
+EGRESSA_ALLOW_AWS=1 bash "${SKILL_DIR:?set SKILL_DIR to the skill base directory}/scripts/reconcile-aws.sh"   # SKILL_DIR: see SKILL.md
 ```
 
 **1. Check that it ran at all.** Exit 3 means no CLI, 4 means not opted in, 5

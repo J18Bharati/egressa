@@ -279,8 +279,10 @@ location, never from the scan target, and both `SKILL.md` files run scripts and 
 directory. The scripts used to walk up from the target and run the first `packages/cli/dist/cli.js`
 they found, and the skills ran `bash skill/...` relative to the working directory, which is usually
 the repository under review: either way a repository could commit code that a "read-only" review
-then ran with the reviewer's credentials. `scripts/untrusted-target.test.ts` plants both and asserts
-neither runs.
+then ran with the reviewer's credentials. The scripts also `cd` out of the target and drop
+relative `PATH` entries before any `exec`, because npm reads a project `.npmrc` from the working
+directory — a `registry=` line there would point the opt-in npx branch at an attacker's registry.
+`scripts/untrusted-target.test.ts` plants all of these and asserts none of them runs.
 
 ## Plugin packaging
 
