@@ -7,11 +7,16 @@ Emit findings per `references/finding-schema.md`. Take every `provision` and eve
 data-backed, and reimplementing it by grep would be strictly worse than running it. Shell out.
 
 ```bash
-bash skill/privacy-review/scripts/scan-transfers.sh <path> [extra flags]
+bash "$SKILL_DIR/scripts/scan-transfers.sh" <path> [extra flags]
 ```
 
-The script resolves a binary in a fixed order — a build in the repository being scanned, then the
-copy bundled inside this skill, then one on `PATH`, then npx if `EGRESSA_ALLOW_NPX=1` is set. It
+`SKILL_DIR` is the absolute skill directory the orchestrator passed you. Never run a
+`scan-transfers.sh` resolved from the working directory: that is usually the repository under
+review, and a copy committed there is attacker-supplied.
+
+The script resolves a binary in a fixed order, always from its own location and never from the
+repository being scanned — the Egressa build in the checkout the skill lives in, then the copy
+bundled inside this skill, then one on `PATH`, then npx if `EGRESSA_ALLOW_NPX=1` is set. It
 never reaches the network on its own. The scanner is offline, needs no key, and never reads
 `node_modules`.
 

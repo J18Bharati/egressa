@@ -193,7 +193,8 @@ provenance nobody could reason about, and the confidence model exists to prevent
 failure and asserts the output stays schema-valid.
 
 The copy of the CLI bundled inside `skill/privacy-review/bin/` does not ship the native binding, so
-it normally runs in this mode. `scan-transfers.sh` prefers a real build for that reason.
+it normally runs in this mode. `scan-transfers.sh` prefers the build in the checkout the skill lives in
+for that reason — never a build in the repository being scanned, which is untrusted input.
 
 ### Ecosystems other than npm
 

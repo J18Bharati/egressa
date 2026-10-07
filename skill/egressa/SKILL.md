@@ -16,11 +16,16 @@ code and their cross-border transfer exposure. It does not assess or certify GDP
 ## Run the scan
 
 ```bash
-bash skill/egressa/scripts/scan.sh <path> [extra flags]
+bash "$SKILL_DIR/scripts/scan.sh" <path> [extra flags]
 ```
 
-The script finds a binary rather than assuming one: a build in the repository being scanned, then
-the prebuilt copy shipped with the privacy-review skill, then `egressa` on `PATH`, then `npx` only
+**`SKILL_DIR` is the absolute "Base directory for this skill" path the harness printed when this
+skill loaded.** Never run a script resolved from the working directory: that is usually the
+repository being scanned, which is untrusted input, and a `skill/egressa/scripts/scan.sh` committed
+there would run with the reviewer's credentials.
+
+The script finds a binary rather than assuming one, always from its own location and never from the
+repository being scanned: the Egressa build in the checkout the skill lives in, then the prebuilt copy shipped with the privacy-review skill, then `egressa` on `PATH`, then `npx` only
 if `EGRESSA_ALLOW_NPX=1`. **Nothing is published to npm yet**, so an `npx egressa` invocation will
 fail — do not fall back to it by hand.
 

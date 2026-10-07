@@ -269,8 +269,18 @@ It is a committed build artifact, so `scripts/skill-bundle.test.ts` fails loudly
 the skill would keep reporting against an old knowledge base while looking current.
 
 The bundle runs without the native parser and therefore usually reports `engine.degraded: true`
-(manifest signals only). `scan-transfers.sh` prefers a real repo build for that reason, and the
-specialist checklist requires the degraded state to be reported rather than glossed.
+(manifest signals only). `scan-transfers.sh` prefers the build in the checkout the skill lives in
+for that reason, and the specialist checklist requires the degraded state to be reported rather than
+glossed.
+
+**The reviewed repository is never executed.** Both scan scripts resolve every binary from their own
+location, never from the scan target, and both `SKILL.md` files run scripts and read checklists from
+`$SKILL_DIR` — the base directory the harness prints when a skill loads — never from the working
+directory. The scripts used to walk up from the target and run the first `packages/cli/dist/cli.js`
+they found, and the skills ran `bash skill/...` relative to the working directory, which is usually
+the repository under review: either way a repository could commit code that a "read-only" review
+then ran with the reviewer's credentials. `scripts/untrusted-target.test.ts` plants both and asserts
+neither runs.
 
 ## Plugin packaging
 
