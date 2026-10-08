@@ -307,6 +307,18 @@ const RESOLVES: Case[] = [
     code: "const B = 'https://api.stripe.com';\nfetch(B + `/v1/${id}`);",
     host: 'api.stripe.com',
   },
+  {
+    // WHATWG URL parsing treats a backslash as a path delimiter in a special
+    // scheme, so what follows it is path, not userinfo: the host is Stripe's.
+    name: 'backslash ends the authority before an apparent userinfo, concatenated',
+    code: "const U = 'https://api.stripe.com';\nfetch(U + '\\\\@evil.example/x');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'backslash ends the authority before an apparent userinfo, literal',
+    code: "fetch('https://api.stripe.com\\\\@evil.example/x');",
+    host: 'api.stripe.com',
+  },
   // The wrong-host regressions. Each of these used to resolve to the vendor
   // named by the left operand alone -- api.stripe.com at high confidence --
   // although the authority continues past it. The folded text is fully
@@ -364,6 +376,81 @@ const DOES_NOT_RESOLVE: Case[] = [
     code: 'fetch(`${base}/v1/charges`);',
     host: null,
     reason: 'value of base is not known statically',
+  },
+  // Binding forms the unstable-name walk must count. Each binds the name a
+  // second time, so the module-scope constant is not what the call reads; the
+  // fold used to reach through every one of them to a confident wrong host.
+  {
+    name: 'destructured parameter shadowing a module constant',
+    code: "const apiUrl = 'https://api.stripe.com';\nexport function client({ apiUrl }) { return fetch(`${apiUrl}/v1/charges`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'plain parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(B) { return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'arrow parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nconst f = (B) => fetch(B + '/v1');",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'defaulted parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(B = 'https://evil.example') { return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'rest parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(...B) { return fetch(B); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'catch parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\ntry { x(); } catch (B) { fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'destructuring declaration shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(o) { const { B } = o; return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'for-of target reassigning a module binding',
+    code: "let B = 'https://api.stripe.com';\nfor (B of ['https://evil.example']) fetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'array pattern assignment reassigning a module binding',
+    code: "let B = 'https://api.stripe.com';\n[B] = ['https://evil.example'];\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'update expression on a module binding',
+    code: "let B = 'https://api.stripe.com';\nB++;\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'class method parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nclass C { m(B) { return fetch(`${B}/v1`); } }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'function name shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction g() { function B() {} return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
   },
   {
     // Nothing proves `path` starts with a delimiter, so the authority is not
@@ -480,6 +567,26 @@ const DOES_NOT_RESOLVE: Case[] = [
 ];
 
 const NO_CALL_SITE: Case[] = [
+  {
+    // The scheme belongs to the query, not the request: the destination is
+    // the app's own origin. Applies to the literal as much as to the fold.
+    name: 'relative proxy URL with an absolute URL in its query, literal',
+    code: "fetch('/proxy?u=https://api.stripe.com/v1');",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'relative proxy URL with a constant in its query, concatenated',
+    code: "const B = 'https://api.stripe.com/v1';\nfetch('/proxy?u=' + B);",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'relative proxy URL with a constant in its query, template',
+    code: "const B = 'https://api.stripe.com/v1';\nfetch(`/proxy?u=${B}`);",
+    host: null,
+    noHit: true,
+  },
   {
     name: 'relative fetch to own backend',
     code: `fetch('/api/charges');`,
@@ -768,5 +875,19 @@ describe('analyzeFile: locations and robustness', () => {
     const { hits } = analyzeFile('fetch(process.env.X);', 'a.ts');
     expect(hits[0]?.confidence).toBe('low');
     expect(hits[0]?.host).toBeNull();
+  });
+});
+
+describe('golden table: a discarded resolution consumes nothing', () => {
+  // A reference read while resolving the head of a fold is consumed only if
+  // that resolution is the one returned. When the head is followed by more
+  // text the result is discarded as unresolved, and the construction must
+  // still be reported as the reference it is.
+  it.each([
+    "const u = new URL('https://api.stripe.com/v1');\nfetch(`${u}`);",
+    "const u = new URL('https://api.stripe.com/v1');\nfetch(u + 'v1');",
+  ])('keeps the reference in %s', (code) => {
+    const { hits } = analyzeFile(code, 'input.ts');
+    expect(hits.some((h) => h.kind === 'reference' && h.host === 'api.stripe.com')).toBe(true);
   });
 });

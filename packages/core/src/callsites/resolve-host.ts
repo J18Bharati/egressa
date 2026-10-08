@@ -37,11 +37,18 @@ export function hostFromUrl(value: string): string | null {
  * authority, and resolving it would be a guess.
  */
 export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolution {
-  const schemeEnd = prefix.indexOf('://');
-  if (schemeEnd <= 0) return { kind: 'not-a-url' };
+  // The scheme must start the string. `'/proxy?u=https://api.stripe.com'` is a
+  // relative URL whose destination is the app's own origin; a `://` found in
+  // its query is not where the request goes.
+  const scheme = SCHEME.exec(prefix);
+  if (!scheme) return { kind: 'not-a-url' };
 
-  const rest = prefix.slice(schemeEnd + 3);
-  const delimiter = rest.search(/[/?#]/);
+  const rest = prefix.slice(scheme[0].length);
+  // WHATWG URL parsing ends the authority at a backslash for the special
+  // schemes, so `https://api.stripe.com\@evil.example/` is Stripe's host with
+  // a path, not evil.example with userinfo.
+  const special = SPECIAL_SCHEMES.has(scheme[1]?.toLowerCase() ?? '');
+  const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
 
   if (delimiter === -1) {
     if (hasMore) {
@@ -58,6 +65,11 @@ export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolut
     ? { kind: 'not-a-url' }
     : { kind: 'resolved', host: normalise(authority) };
 }
+
+const SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
+
+/** Schemes WHATWG URL parses with special rules, including `\\` as a delimiter. */
+const SPECIAL_SCHEMES = new Set(['http', 'https', 'ws', 'wss', 'ftp']);
 
 function normalise(authority: string): string {
   let value = authority;

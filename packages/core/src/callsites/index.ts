@@ -450,7 +450,10 @@ function resolveArgument(
         // `${base}/v1/charges` -- the destination is built at runtime. Name
         // the variable when it can be named; never resolve through a client
         // or reference binding with something appended to it.
+        const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        // The head's result is discarded, so nothing it read was consumed.
+        if (context.referencesRead) context.referencesRead.length = mark;
         return head.kind === 'unresolved'
           ? head
           : { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
@@ -530,10 +533,13 @@ function resolveArgument(
         // `getBase() + path` stays as silent as `getBase()` alone; an
         // unresolved head keeps its reason; a head that resolves only through
         // a client or reference binding is not followed past what is appended.
+        const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
-        return head.kind === 'resolved'
-          ? { kind: 'unresolved', reason: 'URL is built from an interpolated value' }
-          : head;
+        if (head.kind !== 'resolved') return head;
+        // A resolved head is not followed past what is appended, so the
+        // reference it read stays a reference rather than being consumed.
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
       }
       return hostFromUrlPrefix(lead.text, !lead.complete);
     }
@@ -857,24 +863,94 @@ function collectUnstableNames(program: Node): Map<string, string> {
   const seen = new Set<string>();
   const unstable = new Map<string, string>();
 
-  walk(program, (node) => {
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id as Node | undefined;
-      if (!id || id.type !== 'Identifier') return;
-      const name = String(id.name);
+  // Every form that binds a name counts as a declaration, not just `const`:
+  // a parameter, a catch clause or a destructured field named like a
+  // module-scope constant is a second binding of it, and the walk has no
+  // scope chain to say which one a call reads. Counting only declarators let
+  // `function f(B) { fetch(`${B}/v1`) }` resolve the module's `B`.
+  const declare = (pattern: Node | undefined | null) => {
+    for (const name of patternNames(pattern)) {
       if (seen.has(name)) unstable.set(name, `${name} is declared more than once in this file`);
       seen.add(name);
-      return;
     }
-    if (node.type === 'AssignmentExpression') {
-      const left = node.left as Node | undefined;
-      if (left?.type !== 'Identifier') return;
-      const name = String(left.name);
+  };
+  const reassign = (pattern: Node | undefined | null) => {
+    for (const name of patternNames(pattern)) {
       unstable.set(name, `${name} is reassigned after it is declared`);
+    }
+  };
+
+  walk(program, (node) => {
+    switch (node.type) {
+      case 'VariableDeclarator':
+        declare(node.id as Node | undefined);
+        return;
+      case 'FunctionDeclaration':
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression':
+        declare(node.id as Node | undefined);
+        for (const param of (node.params as Node[] | undefined) ?? []) declare(param);
+        return;
+      case 'ClassDeclaration':
+      case 'ClassExpression':
+        declare(node.id as Node | undefined);
+        return;
+      case 'CatchClause':
+        declare(node.param as Node | undefined);
+        return;
+      case 'ImportSpecifier':
+      case 'ImportDefaultSpecifier':
+      case 'ImportNamespaceSpecifier':
+        declare(node.local as Node | undefined);
+        return;
+      case 'AssignmentExpression':
+        reassign(node.left as Node | undefined);
+        return;
+      case 'UpdateExpression':
+        reassign(node.argument as Node | undefined);
+        return;
+      case 'ForInStatement':
+      case 'ForOfStatement': {
+        // `for (const B of xs)` is a declarator and is counted there.
+        const left = node.left as Node | undefined;
+        if (left && left.type !== 'VariableDeclaration') reassign(left);
+        return;
+      }
+      default:
+        return;
     }
   });
 
   return unstable;
+}
+
+/** The names a binding pattern introduces: `B`, `{ a, b: c }`, `[d, ...e]`, `f = 1`. */
+function patternNames(pattern: Node | undefined | null): string[] {
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case 'Identifier':
+      return [String(pattern.name)];
+    case 'ObjectPattern':
+      return ((pattern.properties as Node[] | undefined) ?? []).flatMap((property) =>
+        patternNames(
+          property.type === 'RestElement'
+            ? (property.argument as Node | undefined)
+            : (property.value as Node | undefined),
+        ),
+      );
+    case 'ArrayPattern':
+      return ((pattern.elements as (Node | null)[] | undefined) ?? []).flatMap((element) =>
+        patternNames(element),
+      );
+    case 'AssignmentPattern':
+      return patternNames(pattern.left as Node | undefined);
+    case 'RestElement':
+      return patternNames(pattern.argument as Node | undefined);
+    case 'TSParameterProperty':
+      return patternNames(pattern.parameter as Node | undefined);
+    default:
+      return [];
+  }
 }
 
 /**

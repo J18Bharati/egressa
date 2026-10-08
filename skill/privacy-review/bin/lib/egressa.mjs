@@ -15714,10 +15714,11 @@ function strongest(values) {
 }
 var MAX_DEPTH = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
-  const schemeEnd = prefix.indexOf("://");
-  if (schemeEnd <= 0) return { kind: "not-a-url" };
-  const rest = prefix.slice(schemeEnd + 3);
-  const delimiter = rest.search(/[/?#]/);
+  const scheme = SCHEME.exec(prefix);
+  if (!scheme) return { kind: "not-a-url" };
+  const rest = prefix.slice(scheme[0].length);
+  const special = SPECIAL_SCHEMES.has(scheme[1]?.toLowerCase() ?? "");
+  const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
   if (delimiter === -1) {
     if (hasMore) {
       return {
@@ -15730,6 +15731,8 @@ function hostFromUrlPrefix(prefix, hasMore) {
   const authority = rest.slice(0, delimiter);
   return authority === "" ? { kind: "not-a-url" } : { kind: "resolved", host: normalise(authority) };
 }
+var SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
+var SPECIAL_SCHEMES = /* @__PURE__ */ new Set(["http", "https", "ws", "wss", "ftp"]);
 function normalise(authority) {
   let value = authority;
   const at = value.lastIndexOf("@");
@@ -16044,7 +16047,9 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     case "TemplateLiteral": {
       const lead = leadingStatic(node, bindings, context);
       if (lead.text === "" && lead.head) {
+        const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        if (context.referencesRead) context.referencesRead.length = mark;
         return head.kind === "unresolved" ? head : { kind: "unresolved", reason: "URL is built from an interpolated value" };
       }
       return hostFromUrlPrefix(lead.text, !lead.complete);
@@ -16105,8 +16110,11 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
       if (node.operator !== "+") return { kind: "not-a-url" };
       const lead = leadingStatic(node, bindings, context);
       if (lead.text === "" && lead.head) {
+        const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
-        return head.kind === "resolved" ? { kind: "unresolved", reason: "URL is built from an interpolated value" } : head;
+        if (head.kind !== "resolved") return head;
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return { kind: "unresolved", reason: "URL is built from an interpolated value" };
       }
       return hostFromUrlPrefix(lead.text, !lead.complete);
     }
@@ -16292,23 +16300,82 @@ function calleeShape(callee) {
 function collectUnstableNames(program) {
   const seen = /* @__PURE__ */ new Set();
   const unstable = /* @__PURE__ */ new Map();
-  walk2(program, (node) => {
-    if (node.type === "VariableDeclarator") {
-      const id = node.id;
-      if (!id || id.type !== "Identifier") return;
-      const name = String(id.name);
+  const declare = (pattern) => {
+    for (const name of patternNames(pattern)) {
       if (seen.has(name)) unstable.set(name, `${name} is declared more than once in this file`);
       seen.add(name);
-      return;
     }
-    if (node.type === "AssignmentExpression") {
-      const left = node.left;
-      if (left?.type !== "Identifier") return;
-      const name = String(left.name);
+  };
+  const reassign = (pattern) => {
+    for (const name of patternNames(pattern)) {
       unstable.set(name, `${name} is reassigned after it is declared`);
+    }
+  };
+  walk2(program, (node) => {
+    switch (node.type) {
+      case "VariableDeclarator":
+        declare(node.id);
+        return;
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+        declare(node.id);
+        for (const param of node.params ?? []) declare(param);
+        return;
+      case "ClassDeclaration":
+      case "ClassExpression":
+        declare(node.id);
+        return;
+      case "CatchClause":
+        declare(node.param);
+        return;
+      case "ImportSpecifier":
+      case "ImportDefaultSpecifier":
+      case "ImportNamespaceSpecifier":
+        declare(node.local);
+        return;
+      case "AssignmentExpression":
+        reassign(node.left);
+        return;
+      case "UpdateExpression":
+        reassign(node.argument);
+        return;
+      case "ForInStatement":
+      case "ForOfStatement": {
+        const left = node.left;
+        if (left && left.type !== "VariableDeclaration") reassign(left);
+        return;
+      }
+      default:
+        return;
     }
   });
   return unstable;
+}
+function patternNames(pattern) {
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case "Identifier":
+      return [String(pattern.name)];
+    case "ObjectPattern":
+      return (pattern.properties ?? []).flatMap(
+        (property) => patternNames(
+          property.type === "RestElement" ? property.argument : property.value
+        )
+      );
+    case "ArrayPattern":
+      return (pattern.elements ?? []).flatMap(
+        (element) => patternNames(element)
+      );
+    case "AssignmentPattern":
+      return patternNames(pattern.left);
+    case "RestElement":
+      return patternNames(pattern.argument);
+    case "TSParameterProperty":
+      return patternNames(pattern.parameter);
+    default:
+      return [];
+  }
 }
 function moduleScopeDeclarators(program) {
   const out = [];

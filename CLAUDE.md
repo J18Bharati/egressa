@@ -93,6 +93,10 @@ confidence. The cost is that `BASE + path` with no delimiter in `BASE` is unreso
 The same rule governs *which binding* a name refers to. Binding collection has no scope chain, so
 `callsites/index.ts` collects module-scope declarations only and refuses a name that is declared
 twice or reassigned — a shadowed `const` otherwise resolved to the wrong host at `high` confidence.
+"Declared" means every binding form, not just `const`: parameters (destructured, defaulted, rest),
+`catch`, destructuring declarations, function, class and import names. "Reassigned" includes pattern
+assignment, `for…in/of` targets and `++`/`--`. When only declarators were counted,
+`function f(B) { fetch(`${B}/v1`) }` resolved the module's `B`.
 Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
 
 **Client constructors come from the knowledge base, not a hardcoded table.**

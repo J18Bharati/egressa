@@ -46,6 +46,18 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   from the folded text, so that call reports `api.stripe.com.attacker.example`. `BASE + path` with
   an unknown `path` and no delimiter in `BASE` is now unresolved rather than a guess; across a
   real backend codebase and every fixture repository, no resolution was lost to it.
+- **Three more ways to resolve a host that was not the destination**, found reviewing the fold above,
+  each a confident wrong host. Binding collection counted only `const`/`let` declarators, so a
+  parameter, `catch` clause or destructured name shadowing a module constant resolved to the
+  module's value -- `function client({ apiUrl }) { fetch(`${apiUrl}/v1`) }` reported the vendor in
+  the module's `apiUrl`; every binding form now counts. A `://` anywhere in the string was taken as
+  the scheme, so `fetch('/proxy?u=https://api.stripe.com/v1')` reported Stripe; the scheme must now
+  start the string. And a backslash did not end the authority, so
+  `https://api.stripe.com\@evil.example/x` reported `evil.example`; for the special schemes it now
+  does, as WHATWG URL parsing does. A `new URL()` read while resolving a discarded head is no longer
+  silently consumed.
+- **`'https://' + process.env.HOST + '/v1'` now reports `unresolved-egress`.** It produced no
+  finding before, because the left operand alone had no authority and was read as not a URL.
 - **A template led by a constant did not resolve.** `` fetch(`${GMAIL_API_BASE}/watch`) `` reported
   `unresolved-egress` although the constant was a plain module-scope string. The same fold resolves
   it, and lifts the documented false negative for `` new URL(`${API_BASE}/messages`) ``. An
