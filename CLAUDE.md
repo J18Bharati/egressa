@@ -85,9 +85,24 @@ constant folding; it must not require a resolved `Program` or installed packages
 closes the authority inside a static chunk. Everything else emits `transfer/unresolved-egress`
 naming the variable. Never add a heuristic that guesses.
 
+The static chunk is the *folded* one: `leadingStatic()` in `callsites/index.ts` joins literals,
+template chunks, `+` and stable module-scope strings before the authority is read, once. Reading it
+from one operand alone is how `B + '.attacker.example/x'` resolved to the vendor `B` named, at high
+confidence. The cost is that `BASE + path` with no delimiter in `BASE` is unresolved, deliberately.
+
 The same rule governs *which binding* a name refers to. Binding collection has no scope chain, so
 `callsites/index.ts` collects module-scope declarations only and refuses a name that is declared
 twice or reassigned — a shadowed `const` otherwise resolved to the wrong host at `high` confidence.
+"Declared" covers the binding forms `collectUnstableNames` lists, not just `const`: parameters
+(destructured, defaulted, rest), `catch`, destructuring declarations, function, class and import
+names, and TypeScript `enum`, `namespace` and `import X =`. "Reassigned" includes pattern
+assignment, `for…in/of` targets, `++`/`--` and a `globalThis.X =` write, and a `with` statement or
+direct `eval` anywhere makes every declared name unresolvable; type assertions and parentheses on a
+target or on `eval` are seen through. A binding form missing from that list is a wrong-host bug, not
+a recall gap: three successive reviews each found forms missing after the list was called complete.
+Rebinding a classic script's global `var` through indirect `eval`, `new Function` or an aliased
+`globalThis` is a documented boundary in `docs/LIMITATIONS.md`, not an oversight. When only declarators were counted,
+`function f(B) { fetch(`${B}/v1`) }` resolved the module's `B`.
 Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
 
 **Client constructors come from the knowledge base, not a hardcoded table.**

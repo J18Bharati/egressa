@@ -15714,10 +15714,13 @@ function strongest(values) {
 }
 var MAX_DEPTH = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
-  const schemeEnd = prefix.indexOf("://");
-  if (schemeEnd <= 0) return { kind: "not-a-url" };
-  const rest = prefix.slice(schemeEnd + 3);
-  const delimiter = rest.search(/[/?#]/);
+  const input = trimControls(prefix.replace(/[\t\n\r]/g, ""), !hasMore);
+  const scheme = SCHEME.exec(input);
+  if (!scheme) return { kind: "not-a-url" };
+  const rest = input.slice(scheme[0].length);
+  const schemeName = scheme[1]?.toLowerCase() ?? "";
+  const special = SPECIAL_SCHEMES.has(schemeName);
+  const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
   if (delimiter === -1) {
     if (hasMore) {
       return {
@@ -15725,15 +15728,38 @@ function hostFromUrlPrefix(prefix, hasMore) {
         reason: "host is completed by an interpolated value and cannot be resolved statically"
       };
     }
-    return rest === "" ? { kind: "not-a-url" } : { kind: "resolved", host: normalise(rest) };
+    return hostOf(schemeName, special, rest);
   }
-  const authority = rest.slice(0, delimiter);
-  return authority === "" ? { kind: "not-a-url" } : { kind: "resolved", host: normalise(authority) };
+  return hostOf(schemeName, special, rest.slice(0, delimiter));
 }
+function hostOf(scheme, special, authority) {
+  if (authority === "") return { kind: "not-a-url" };
+  if (!special) return { kind: "resolved", host: normalise(authority) };
+  try {
+    const host = new URL(`${scheme}://${authority}/`).hostname;
+    return host === "" ? { kind: "not-a-url" } : { kind: "resolved", host };
+  } catch {
+    return { kind: "not-a-url" };
+  }
+}
+var isControlOrSpace = (code) => code <= 32;
+function trimControls(value, trailing) {
+  let start = 0;
+  while (start < value.length && isControlOrSpace(value.charCodeAt(start))) start++;
+  let end = value.length;
+  if (trailing) while (end > start && isControlOrSpace(value.charCodeAt(end - 1))) end--;
+  return value.slice(start, end);
+}
+var SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
+var SPECIAL_SCHEMES = /* @__PURE__ */ new Set(["http", "https", "ws", "wss", "ftp"]);
 function normalise(authority) {
   let value = authority;
   const at = value.lastIndexOf("@");
   if (at >= 0) value = value.slice(at + 1);
+  if (value.startsWith("[")) {
+    const close = value.indexOf("]");
+    return (close >= 0 ? value.slice(0, close + 1) : value).toLowerCase();
+  }
   const colon = value.indexOf(":");
   if (colon >= 0) value = value.slice(0, colon);
   return value.toLowerCase();
@@ -16036,15 +16062,20 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
       const value = node.value;
       return typeof value === "string" ? hostFromUrlPrefix(value, false) : { kind: "not-a-url" };
     }
+    // Both fold their leading static text -- literals, template chunks and
+    // stable module-scope strings -- and read the authority from the folded
+    // text once. Reading it from one piece alone is how `B + '.evil.example'`
+    // used to resolve to whatever vendor `B` named: the piece looked complete
+    // only because what followed it was never looked at.
     case "TemplateLiteral": {
-      const quasis = node.quasis ?? [];
-      const first = quasis[0];
-      const cooked = first?.value ?? {};
-      const prefix = cooked.cooked ?? cooked.raw ?? "";
-      if (prefix === "" && quasis.length > 1) {
-        return { kind: "unresolved", reason: "URL is built from an interpolated value" };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === "" && lead.head) {
+        const mark = context.referencesRead?.length ?? 0;
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return head.kind === "unresolved" ? head : { kind: "unresolved", reason: "URL is built from an interpolated value" };
       }
-      return hostFromUrlPrefix(prefix, quasis.length > 1);
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
     case "Identifier": {
       const name = String(node.name);
@@ -16100,8 +16131,14 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     }
     case "BinaryExpression": {
       if (node.operator !== "+") return { kind: "not-a-url" };
-      const left = node.left;
-      return left ? resolveArgument(left, configKeys, bindings, depth + 1, context) : { kind: "not-a-url" };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === "" && lead.head) {
+        const mark = context.referencesRead?.length ?? 0;
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return head.kind === "resolved" ? { kind: "unresolved", reason: "URL is built from an interpolated value" } : head;
+      }
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
     case "ObjectExpression": {
       for (const property of node.properties ?? []) {
@@ -16116,6 +16153,52 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     }
     default:
       return { kind: "not-a-url" };
+  }
+}
+var MAX_FOLD_DEPTH = 64;
+function leadingStatic(node, bindings, context, depth = 0) {
+  const dynamic = { text: "", complete: false, head: node };
+  if (depth > MAX_FOLD_DEPTH) return dynamic;
+  switch (node.type) {
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "ParenthesizedExpression": {
+      const inner = node.expression;
+      return inner ? leadingStatic(inner, bindings, context, depth + 1) : dynamic;
+    }
+    case "Literal":
+      return typeof node.value === "string" ? { text: node.value, complete: true, head: null } : dynamic;
+    case "Identifier": {
+      const binding = readable(bindings, String(node.name), context.unstable, context.callStart);
+      return binding?.kind === "string" ? { text: binding.value, complete: true, head: null } : dynamic;
+    }
+    case "TemplateLiteral": {
+      const quasis = node.quasis ?? [];
+      const expressions = node.expressions ?? [];
+      let text = "";
+      for (let i2 = 0; i2 < quasis.length; i2++) {
+        const cooked = quasis[i2]?.value ?? {};
+        text += cooked.cooked ?? cooked.raw ?? "";
+        const expression = expressions[i2];
+        if (!expression) break;
+        const part = leadingStatic(expression, bindings, context, depth + 1);
+        text += part.text;
+        if (!part.complete) return { text, complete: false, head: part.head };
+      }
+      return { text, complete: true, head: null };
+    }
+    case "BinaryExpression": {
+      const left = node.left;
+      const right = node.right;
+      if (node.operator !== "+" || !left || !right) return dynamic;
+      const head = leadingStatic(left, bindings, context, depth + 1);
+      if (!head.complete) return head;
+      const tail = leadingStatic(right, bindings, context, depth + 1);
+      return { text: head.text + tail.text, complete: tail.complete, head: tail.head };
+    }
+    default:
+      return dynamic;
   }
 }
 var REFERENCE_VALUE_PROPERTY = "href";
@@ -16239,23 +16322,124 @@ function calleeShape(callee) {
 function collectUnstableNames(program) {
   const seen = /* @__PURE__ */ new Set();
   const unstable = /* @__PURE__ */ new Map();
-  walk2(program, (node) => {
-    if (node.type === "VariableDeclarator") {
-      const id = node.id;
-      if (!id || id.type !== "Identifier") return;
-      const name = String(id.name);
+  const declare = (pattern) => {
+    for (const name of patternNames(pattern)) {
       if (seen.has(name)) unstable.set(name, `${name} is declared more than once in this file`);
       seen.add(name);
-      return;
     }
-    if (node.type === "AssignmentExpression") {
-      const left = node.left;
-      if (left?.type !== "Identifier") return;
-      const name = String(left.name);
+  };
+  const reassign = (pattern) => {
+    for (const name of patternNames(pattern)) {
       unstable.set(name, `${name} is reassigned after it is declared`);
     }
+  };
+  let dynamicScope = null;
+  walk2(program, (node) => {
+    switch (node.type) {
+      case "VariableDeclarator":
+        declare(node.id);
+        return;
+      case "TSEnumDeclaration":
+      case "TSImportEqualsDeclaration":
+        declare(node.id);
+        return;
+      case "TSModuleDeclaration": {
+        let id = node.id;
+        while (id?.type === "TSQualifiedName") id = id.left;
+        declare(id);
+        return;
+      }
+      case "WithStatement":
+        dynamicScope ??= "a with statement";
+        return;
+      case "CallExpression": {
+        const callee = node.callee;
+        if (callee?.type === "Identifier" && callee.name === "eval") dynamicScope ??= "direct eval";
+        return;
+      }
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+        declare(node.id);
+        for (const param of node.params ?? []) declare(param);
+        return;
+      case "ClassDeclaration":
+      case "ClassExpression":
+        declare(node.id);
+        return;
+      case "CatchClause":
+        declare(node.param);
+        return;
+      case "ImportSpecifier":
+      case "ImportDefaultSpecifier":
+      case "ImportNamespaceSpecifier":
+        declare(node.local);
+        return;
+      case "AssignmentExpression": {
+        const left = node.left;
+        reassign(left);
+        const name = globalPropertyName(left);
+        if (name) unstable.set(name, `${name} is reassigned through the global object`);
+        return;
+      }
+      case "UpdateExpression":
+        reassign(node.argument);
+        return;
+      case "ForInStatement":
+      case "ForOfStatement": {
+        const left = node.left;
+        if (left && left.type !== "VariableDeclaration") reassign(left);
+        return;
+      }
+      default:
+        return;
+    }
   });
+  if (dynamicScope) {
+    for (const name of seen) {
+      if (!unstable.has(name))
+        unstable.set(name, `${name} may be rebound by ${dynamicScope} in this file`);
+    }
+  }
   return unstable;
+}
+var GLOBAL_OBJECTS = /* @__PURE__ */ new Set(["globalThis", "window", "self", "global"]);
+function globalPropertyName(node) {
+  if (node?.type !== "MemberExpression") return null;
+  const object = node.object;
+  if (object?.type !== "Identifier" || !GLOBAL_OBJECTS.has(String(object.name))) return null;
+  const property = node.property;
+  if (!property) return null;
+  if (!node.computed && property.type === "Identifier") return String(property.name);
+  if (node.computed && property.type === "Literal" && typeof property.value === "string") {
+    return property.value;
+  }
+  return null;
+}
+function patternNames(pattern) {
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case "Identifier":
+      return [String(pattern.name)];
+    case "ObjectPattern":
+      return (pattern.properties ?? []).flatMap(
+        (property) => patternNames(
+          property.type === "RestElement" ? property.argument : property.value
+        )
+      );
+    case "ArrayPattern":
+      return (pattern.elements ?? []).flatMap(
+        (element) => patternNames(element)
+      );
+    case "AssignmentPattern":
+      return patternNames(pattern.left);
+    case "RestElement":
+      return patternNames(pattern.argument);
+    case "TSParameterProperty":
+      return patternNames(pattern.parameter);
+    default:
+      return [];
+  }
 }
 function moduleScopeDeclarators(program) {
   const out = [];

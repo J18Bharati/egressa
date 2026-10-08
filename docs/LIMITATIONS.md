@@ -36,6 +36,23 @@ fetch(`https://${region}.example.com`);  // transfer/unresolved-egress, authorit
 Egressa names the variable and the location. It never guesses the host. That applies to call
 sinks; a `reference` sink stays silent instead, for the reason below.
 
+A stable module-scope string constant is folded into the text around it first, across template
+literals and `+`, and the authority is read once from the folded text. So `` `${BASE}/watch` `` and
+`BASE + '/v1'` resolve, and `BASE + '.example.net/x'` resolves to the host it actually names rather
+than to the vendor `BASE` alone would suggest. What does **not** resolve is a base whose authority
+is left open, followed by something unknown:
+
+```js
+const BASE = 'https://api.stripe.com';
+fetch(BASE + path);        // transfer/unresolved-egress: nothing proves `path` starts with '/'
+fetch(BASE + '/' + path);  // api.stripe.com
+```
+
+This is a deliberate false negative. Until the fold existed the first line resolved to
+`api.stripe.com` at high confidence, which was right only as long as `path` began with a delimiter;
+`BASE + '.attacker.example/x'` resolved to the same vendor. A base written with its trailing path,
+or a path added as a literal, resolves.
+
 ### Vendors absent from the knowledge base
 
 Reported as `transfer/unknown-vendor-egress`. The knowledge base is a curated seed set, not a
@@ -79,13 +96,37 @@ function a() { const D = 'https://inner.example.com/x'; }
 fetch(D);          // "value of D is not known statically"
 ```
 
-Only module-scope declarations are collected, and only those above the call. The cost is recall on
-files that reuse a name; the benefit is that no shadowed or stale binding can produce a confident
-wrong host. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
+Only module-scope declarations are collected, and only those above the call. These forms count as a
+declaration -- a parameter (destructured, defaulted or rest), a `catch` clause, a destructuring
+declaration, a function, class or import name, and TypeScript `enum`, `namespace` and `import X =`
+-- and these as a reassignment: pattern assignment, a `for...in`/`for...of` target, `++`, `--`, and
+a write through `globalThis`, `window`, `self` or `global`. A `with` statement or a direct `eval`
+anywhere in a file -- parenthesised or type-asserted -- makes every name declared in it
+unresolvable, since either can rebind any of them. Type assertions and parentheses on an
+assignment target are seen through: `(B as any) += x` reassigns `B`.
+
+One boundary is deliberate. A top-level `var` in a classic, non-module browser script is also a
+property of the global object, and can be rebound in ways this does not follow: indirect `eval`,
+`new Function`, a write through an alias of `globalThis`, `Object.defineProperty` or
+`Object.assign` on it. None of these reach an ES module's or a CommonJS module's scope, which is
+where nearly all the code this tool reads declares its constants. So
+`function client({ apiUrl }) { fetch(`${apiUrl}/v1`) }` beside a module-scope `apiUrl` is refused
+rather than resolved to the module's value. The cost is recall on files that reuse a name; the
+benefit is that no shadowed or stale binding can produce a confident wrong host.
+
+Two more rules keep a resolved host the true one. A URL resolves only when its scheme starts the
+string: `fetch('/proxy?u=https://api.stripe.com/v1')` goes to the app's own origin, so it is not a
+transfer to Stripe. And for `http`, `https`, `ws`, `wss` and `ftp` the authority is read by
+the WHATWG URL parser itself once the folded text has closed it: a backslash ends it, so
+`https://api.stripe.com\@evil.example/x` is Stripe's host; percent-escapes, full-width dots, IPv6
+literals, embedded tabs and leading whitespace are handled as `fetch` handles them; and an authority
+the parser rejects reports nothing, because `fetch` would throw before sending. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
 also untracked and unresolved.
 
 There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
-answer rather than declining.
+answer rather than declining. That sentence was written before concatenation was folded, and was not
+true then: `B + '.attacker.example/x'` resolved to the vendor `B` named, and no row covered it. The
+golden table now pins the true host for that case and for its template and literal forms.
 
 ### A constructed URL is a reference, not a call
 
@@ -148,8 +189,8 @@ Two consequences are deliberate false negatives:
   reported at all. A call sink in the same position emits `transfer/unresolved-egress` naming the
   variable; a reference sink stays silent, because "a variable was passed to `new URL()`" is not
   evidence that anything left. So `new URL(request.url)` and `new URL(connectionString)` above
-  produce no finding, and neither does `` new URL(`${API_BASE}/messages`) `` whose base is
-  interpolated.
+  produce no finding, and neither does `` new URL(`${base}/messages`) `` when `base` is not a
+  module-scope string constant. One whose base is such a constant is folded, and resolves.
 - **An in-process dispatcher is indistinguishable from a transfer.** Nothing in the source says
   whether `app.handle(new Request(host))` crosses a network. The analyzer reports the weaker claim
   rather than guessing either way, so a genuinely local dispatch still appears as a reference to

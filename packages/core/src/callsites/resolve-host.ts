@@ -37,11 +37,25 @@ export function hostFromUrl(value: string): string | null {
  * authority, and resolving it would be a guess.
  */
 export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolution {
-  const schemeEnd = prefix.indexOf('://');
-  if (schemeEnd <= 0) return { kind: 'not-a-url' };
+  // The scheme must start the string. `'/proxy?u=https://api.stripe.com'` is a
+  // relative URL whose destination is the app's own origin; a `://` found in
+  // its query is not where the request goes.
+  //
+  // The input is first cleaned the way WHATWG URL parsing cleans it: leading
+  // C0 controls and spaces stripped, tabs and newlines removed anywhere, and
+  // trailing controls stripped -- the last only when nothing follows, since a
+  // prefix's end is not the string's end.
+  const input = trimControls(prefix.replace(/[\t\n\r]/g, ''), !hasMore);
+  const scheme = SCHEME.exec(input);
+  if (!scheme) return { kind: 'not-a-url' };
 
-  const rest = prefix.slice(schemeEnd + 3);
-  const delimiter = rest.search(/[/?#]/);
+  const rest = input.slice(scheme[0].length);
+  // WHATWG URL parsing ends the authority at a backslash for the special
+  // schemes, so `https://api.stripe.com\@evil.example/` is Stripe's host with
+  // a path, not evil.example with userinfo.
+  const schemeName = scheme[1]?.toLowerCase() ?? '';
+  const special = SPECIAL_SCHEMES.has(schemeName);
+  const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
 
   if (delimiter === -1) {
     if (hasMore) {
@@ -50,19 +64,55 @@ export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolut
         reason: 'host is completed by an interpolated value and cannot be resolved statically',
       };
     }
-    return rest === '' ? { kind: 'not-a-url' } : { kind: 'resolved', host: normalise(rest) };
+    return hostOf(schemeName, special, rest);
   }
 
-  const authority = rest.slice(0, delimiter);
-  return authority === ''
-    ? { kind: 'not-a-url' }
-    : { kind: 'resolved', host: normalise(authority) };
+  return hostOf(schemeName, special, rest.slice(0, delimiter));
 }
+
+/**
+ * The host of a complete authority. For the special schemes it is read by the
+ * WHATWG URL parser itself, which decodes percent-escapes, maps full-width
+ * dots, handles IPv6 literals and userinfo, and rejects what `fetch` would
+ * reject -- an authority that does not parse has no destination, so nothing
+ * is reported for it. Hand-written rules are kept for the other schemes, whose
+ * hosts the parser treats as opaque.
+ */
+function hostOf(scheme: string, special: boolean, authority: string): HostResolution {
+  if (authority === '') return { kind: 'not-a-url' };
+  if (!special) return { kind: 'resolved', host: normalise(authority) };
+  try {
+    const host = new URL(`${scheme}://${authority}/`).hostname;
+    return host === '' ? { kind: 'not-a-url' } : { kind: 'resolved', host };
+  } catch {
+    return { kind: 'not-a-url' };
+  }
+}
+
+/** C0 controls and space, which WHATWG URL parsing strips from the ends of its input. */
+const isControlOrSpace = (code: number) => code <= 0x20;
+
+function trimControls(value: string, trailing: boolean): string {
+  let start = 0;
+  while (start < value.length && isControlOrSpace(value.charCodeAt(start))) start++;
+  let end = value.length;
+  if (trailing) while (end > start && isControlOrSpace(value.charCodeAt(end - 1))) end--;
+  return value.slice(start, end);
+}
+
+const SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
+
+/** Schemes WHATWG URL parses with special rules, including `\\` as a delimiter. */
+const SPECIAL_SCHEMES = new Set(['http', 'https', 'ws', 'wss', 'ftp']);
 
 function normalise(authority: string): string {
   let value = authority;
   const at = value.lastIndexOf('@');
   if (at >= 0) value = value.slice(at + 1);
+  if (value.startsWith('[')) {
+    const close = value.indexOf(']');
+    return (close >= 0 ? value.slice(0, close + 1) : value).toLowerCase();
+  }
   const colon = value.indexOf(':');
   if (colon >= 0) value = value.slice(0, colon);
   return value.toLowerCase();

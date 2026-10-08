@@ -150,6 +150,15 @@ const RESOLVES: Case[] = [
     kind: 'reference',
   },
   {
+    // Lifted from docs/LIMITATIONS.md: this was a deliberate false negative
+    // while a template led by a constant could not be folded.
+    name: 'new URL over a template led by a module-scope base constant',
+    code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
+    host: 'gmail.googleapis.com',
+    kind: 'reference',
+    confidence: 'medium',
+  },
+  {
     // The case that stops this row being deleted outright: the vendor
     // attribution is correct and worth keeping, only the claim is narrower.
     name: 'new URL over a module-scope base constant',
@@ -268,6 +277,93 @@ const RESOLVES: Case[] = [
     code: `const C = () => { fetch('https://api.stripe.com/v1'); return <div />; };`,
     host: 'api.stripe.com',
   },
+  // Folding. A stable module-scope string is as static as a literal, so it is
+  // folded into the text around it before the authority is read, and the
+  // delimiter rule is applied once to the folded text. Field test: Gmail
+  // clients written `${GMAIL_API_BASE}/watch` used to report unresolved.
+  {
+    name: 'template led by a module-scope base constant',
+    code: "const B = 'https://www.googleapis.com/gmail/v1/users/me';\nfetch(`${B}/watch`);",
+    host: 'www.googleapis.com',
+    confidence: 'high',
+  },
+  {
+    name: 'template led by a base with no path, closed by the next chunk',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}/v1/charges/${id}`);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'constant folded into the authority itself',
+    code: "const host = 'api.stripe.com';\nfetch(`https://${host}/v1`);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'concatenation of a base constant and a static path',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + '/v1/' + id);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'concatenation of a base constant and a template path',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + `/v1/${id}`);",
+    host: 'api.stripe.com',
+  },
+  {
+    // WHATWG URL parsing treats a backslash as a path delimiter in a special
+    // scheme, so what follows it is path, not userinfo: the host is Stripe's.
+    name: 'backslash ends the authority before an apparent userinfo, concatenated',
+    code: "const U = 'https://api.stripe.com';\nfetch(U + '\\\\@evil.example/x');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'backslash ends the authority before an apparent userinfo, literal',
+    code: "fetch('https://api.stripe.com\\\\@evil.example/x');",
+    host: 'api.stripe.com',
+  },
+  // The host is read as WHATWG URL parsing reads it.
+  {
+    name: 'leading whitespace before the scheme',
+    code: "fetch(' https://api.stripe.com/v1');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'multi-line template with leading whitespace',
+    code: 'fetch(`\n  https://api.stripe.com/v1`);',
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a tab inside the authority is removed, not kept',
+    code: "fetch('https://api.stripe.com\\t.evil.example/');",
+    host: 'api.stripe.com.evil.example',
+  },
+  {
+    name: 'percent-encoded dot in the host',
+    code: "fetch('https://api%2Estripe.com/v1');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'IPv6 literal with a port',
+    code: "fetch('http://[::1]:8080/x');",
+    host: '[::1]',
+  },
+  // The wrong-host regressions. Each of these used to resolve to the vendor
+  // named by the left operand alone -- api.stripe.com at high confidence --
+  // although the authority continues past it. The folded text is fully
+  // static, so the true host is known and is what must be reported.
+  {
+    name: 'concatenation that continues the authority past a base constant',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + '.attacker.example/x');",
+    host: 'api.stripe.com.attacker.example',
+  },
+  {
+    name: 'literal concatenation that continues the authority',
+    code: "fetch('https://api.stripe.com' + '.x.example/y');",
+    host: 'api.stripe.com.x.example',
+  },
+  {
+    name: 'template that continues the authority past a base constant',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}.eu/v1`);",
+    host: 'api.stripe.com.eu',
+  },
 ];
 
 const DOES_NOT_RESOLVE: Case[] = [
@@ -305,6 +401,216 @@ const DOES_NOT_RESOLVE: Case[] = [
     name: 'whole URL interpolated',
     code: 'fetch(`${base}/v1/charges`);',
     host: null,
+    reason: 'value of base is not known statically',
+  },
+  // Binding forms the unstable-name walk must count. Each binds the name a
+  // second time, so the module-scope constant is not what the call reads; the
+  // fold used to reach through every one of them to a confident wrong host.
+  {
+    name: 'destructured parameter shadowing a module constant',
+    code: "const apiUrl = 'https://api.stripe.com';\nexport function client({ apiUrl }) { return fetch(`${apiUrl}/v1/charges`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'plain parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(B) { return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'arrow parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nconst f = (B) => fetch(B + '/v1');",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'defaulted parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(B = 'https://evil.example') { return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'rest parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(...B) { return fetch(B); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'catch parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\ntry { x(); } catch (B) { fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'destructuring declaration shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f(o) { const { B } = o; return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'for-of target reassigning a module binding',
+    code: "let B = 'https://api.stripe.com';\nfor (B of ['https://evil.example']) fetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'array pattern assignment reassigning a module binding',
+    code: "let B = 'https://api.stripe.com';\n[B] = ['https://evil.example'];\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'update expression on a module binding',
+    code: "let B = 'https://api.stripe.com';\nB++;\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'class method parameter shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nclass C { m(B) { return fetch(`${B}/v1`); } }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'function name shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction g() { function B() {} return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  // TypeScript and dynamic-scope forms that bind or rebind a name.
+  {
+    name: 'local enum shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f() { enum B { X = 1 } return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'namespace shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nnamespace N { namespace B {} fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'import-equals shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nnamespace N { import B = Foo.bar; fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'with statement can rebind any name',
+    code: "var B = 'https://api.stripe.com';\nwith (o) { fetch(B + '/v1'); }",
+    host: null,
+    reason: 'with',
+  },
+  {
+    name: 'direct eval can rebind any name',
+    code: "let B = 'https://api.stripe.com';\neval(s);\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'global object write to a module name',
+    code: "var B = 'https://api.stripe.com';\nglobalThis.B = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  // Wrappers on a binding target or callee are transparent at runtime.
+  {
+    name: 'compound assignment through an as-cast',
+    code: "let B = 'https://api.stripe.com';\n(B as any) += '.evil.example';\nfetch(B + '/v1');",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'assignment through a non-null assertion',
+    code: "let B = 'https://api.stripe.com';\nB! = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'array pattern assignment through an as-cast',
+    code: "let B = 'https://api.stripe.com';\n[(B as any)] = ['https://evil.example'];\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'parenthesised direct eval',
+    code: "let B = 'https://api.stripe.com';\n(eval)(s);\nfetch(B + '/v1');",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'as-cast direct eval',
+    code: "let B = 'https://api.stripe.com';\n(eval as any)(s);\nfetch(B + '/v1');",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'global object write through an as-cast',
+    code: "var B = 'https://api.stripe.com';\n(globalThis as any).B = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'global object write with a template key',
+    code: "var B = 'https://api.stripe.com';\nglobalThis[`B`] = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'enum member shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nenum E { B = 1, X = (fetch(B as any), 2) }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    // Nothing proves `path` starts with a delimiter, so the authority is not
+    // closed. This used to resolve to api.stripe.com at high confidence.
+    name: 'base with no path followed by an unknown value',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + path);",
+    host: null,
+    reason: 'interpolated',
+  },
+  {
+    name: 'template base with no path followed by an interpolation',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}${rest}`);",
+    host: null,
+    reason: 'interpolated',
+  },
+  {
+    name: 'template base from an environment variable',
+    code: 'const B = process.env.API_BASE;\nfetch(`${B}/v1`);',
+    host: null,
+    reason: 'environment variable API_BASE',
+  },
+  {
+    name: 'template base declared twice',
+    code:
+      "const B = 'https://one.example.com/x';\nfetch(`${B}/y`);\n" +
+      "function z() { const B = 'https://two.example.com/x'; return B; }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'template base reassigned',
+    code: "let B = 'https://api.stripe.com';\nB = pick();\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'template base used before it is declared',
+    code: "fetch(`${B}/v1`);\nconst B = 'https://later.example.com';",
+    host: null,
+    reason: 'used before it is declared',
+  },
+  {
+    name: 'concatenated base declared twice',
+    code:
+      "const B = 'https://one.example.com';\nfetch(B + '/y');\n" +
+      "function z() { const B = 'https://two.example.com'; return B; }",
+    host: null,
+    reason: 'declared more than once',
   },
   {
     name: 'host from an object property read at runtime',
@@ -374,6 +680,39 @@ const DOES_NOT_RESOLVE: Case[] = [
 
 const NO_CALL_SITE: Case[] = [
   {
+    // `new URL` rejects both, so fetch throws before any request is made.
+    name: 'invalid authority with an encoded at-sign',
+    code: "fetch('https://evil.example%40api.stripe.com/');",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'invalid authority containing a space',
+    code: "fetch('https://api.stripe.com .evil.example/');",
+    host: null,
+    noHit: true,
+  },
+  {
+    // The scheme belongs to the query, not the request: the destination is
+    // the app's own origin. Applies to the literal as much as to the fold.
+    name: 'relative proxy URL with an absolute URL in its query, literal',
+    code: "fetch('/proxy?u=https://api.stripe.com/v1');",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'relative proxy URL with a constant in its query, concatenated',
+    code: "const B = 'https://api.stripe.com/v1';\nfetch('/proxy?u=' + B);",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'relative proxy URL with a constant in its query, template',
+    code: "const B = 'https://api.stripe.com/v1';\nfetch(`/proxy?u=${B}`);",
+    host: null,
+    noHit: true,
+  },
+  {
     name: 'relative fetch to own backend',
     code: `fetch('/api/charges');`,
     host: null,
@@ -418,16 +757,6 @@ const NO_CALL_SITE: Case[] = [
     // rather than a prompt to look.
     name: 'new URL over an unknown connection string',
     code: `const url = new URL(connectionString);\nurl.searchParams.set('sslmode', 'verify-full');`,
-    host: null,
-    noHit: true,
-  },
-  {
-    // Deliberate false negative, new with the reference kind: a call sink
-    // would report transfer/unresolved-egress here. A reference sink stays
-    // silent, because "a variable was passed to new URL()" is not evidence
-    // that anything left. Recorded in docs/LIMITATIONS.md.
-    name: 'new URL built from a fully interpolated base',
-    code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
     host: null,
     noHit: true,
   },
@@ -671,5 +1000,19 @@ describe('analyzeFile: locations and robustness', () => {
     const { hits } = analyzeFile('fetch(process.env.X);', 'a.ts');
     expect(hits[0]?.confidence).toBe('low');
     expect(hits[0]?.host).toBeNull();
+  });
+});
+
+describe('golden table: a discarded resolution consumes nothing', () => {
+  // A reference read while resolving the head of a fold is consumed only if
+  // that resolution is the one returned. When the head is followed by more
+  // text the result is discarded as unresolved, and the construction must
+  // still be reported as the reference it is.
+  it.each([
+    "const u = new URL('https://api.stripe.com/v1');\nfetch(`${u}`);",
+    "const u = new URL('https://api.stripe.com/v1');\nfetch(u + 'v1');",
+  ])('keeps the reference in %s', (code) => {
+    const { hits } = analyzeFile(code, 'input.ts');
+    expect(hits.some((h) => h.kind === 'reference' && h.host === 'api.stripe.com')).toBe(true);
   });
 });

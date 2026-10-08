@@ -439,17 +439,26 @@ function resolveArgument(
       return typeof value === 'string' ? hostFromUrlPrefix(value, false) : { kind: 'not-a-url' };
     }
 
+    // Both fold their leading static text -- literals, template chunks and
+    // stable module-scope strings -- and read the authority from the folded
+    // text once. Reading it from one piece alone is how `B + '.evil.example'`
+    // used to resolve to whatever vendor `B` named: the piece looked complete
+    // only because what followed it was never looked at.
     case 'TemplateLiteral': {
-      const quasis = (node.quasis as Node[] | undefined) ?? [];
-      const first = quasis[0];
-      const cooked = (first?.value as { cooked?: string; raw?: string } | undefined) ?? {};
-      const prefix = cooked.cooked ?? cooked.raw ?? '';
-      // `${base}/v1/charges` -- the destination is built at runtime. Reporting
-      // it as unresolved asks a human to look; guessing would invent a vendor.
-      if (prefix === '' && quasis.length > 1) {
-        return { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === '' && lead.head) {
+        // `${base}/v1/charges` -- the destination is built at runtime. Name
+        // the variable when it can be named; never resolve through a client
+        // or reference binding with something appended to it.
+        const mark = context.referencesRead?.length ?? 0;
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        // The head's result is discarded, so nothing it read was consumed.
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return head.kind === 'unresolved'
+          ? head
+          : { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
       }
-      return hostFromUrlPrefix(prefix, quasis.length > 1);
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
 
     case 'Identifier': {
@@ -518,12 +527,22 @@ function resolveArgument(
     }
 
     case 'BinaryExpression': {
-      // Only the left operand can contribute the authority in `a + b`.
       if (node.operator !== '+') return { kind: 'not-a-url' };
-      const left = node.left as Node | undefined;
-      return left
-        ? resolveArgument(left, configKeys, bindings, depth + 1, context)
-        : { kind: 'not-a-url' };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === '' && lead.head) {
+        // `getBase() + path` stays as silent as `getBase()` alone; an
+        // unresolved head keeps its reason; a head that resolves only through
+        // a client or reference binding is not followed past what is appended.
+        const mark = context.referencesRead?.length ?? 0;
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        // A head is never followed past what is appended, so whatever it read
+        // stays a reference rather than being consumed.
+        if (context.referencesRead) context.referencesRead.length = mark;
+        return head.kind === 'resolved'
+          ? { kind: 'unresolved', reason: 'URL is built from an interpolated value' }
+          : head;
+      }
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
 
     case 'ObjectExpression': {
@@ -540,6 +559,88 @@ function resolveArgument(
 
     default:
       return { kind: 'not-a-url' };
+  }
+}
+
+/** Concatenation chains longer than this are not folded; AST depth, not a constant chain. */
+const MAX_FOLD_DEPTH = 64;
+
+interface LeadingStatic {
+  /** The static text the expression is known to begin with. */
+  text: string;
+  /** True when `text` is the whole value, with nothing dynamic after it. */
+  complete: boolean;
+  /** The first part that could not be folded, when `complete` is false. */
+  head: Node | null;
+}
+
+/**
+ * The static text an expression begins with, folded across string literals,
+ * template chunks, `+`, and module-scope string constants that `readable()`
+ * accepts -- so a constant declared twice, reassigned, or used before its
+ * declaration stops the fold exactly as it stops resolution.
+ *
+ * Only the text is folded; whether it holds a complete authority is decided
+ * once, by `hostFromUrlPrefix`, with `hasMore` set from `complete`.
+ */
+function leadingStatic(
+  node: Node,
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+  depth = 0,
+): LeadingStatic {
+  const dynamic: LeadingStatic = { text: '', complete: false, head: node };
+  if (depth > MAX_FOLD_DEPTH) return dynamic;
+
+  switch (node.type) {
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+    case 'ParenthesizedExpression': {
+      const inner = node.expression as Node | undefined;
+      return inner ? leadingStatic(inner, bindings, context, depth + 1) : dynamic;
+    }
+
+    case 'Literal':
+      return typeof node.value === 'string'
+        ? { text: node.value, complete: true, head: null }
+        : dynamic;
+
+    case 'Identifier': {
+      const binding = readable(bindings, String(node.name), context.unstable, context.callStart);
+      return binding?.kind === 'string'
+        ? { text: binding.value, complete: true, head: null }
+        : dynamic;
+    }
+
+    case 'TemplateLiteral': {
+      const quasis = (node.quasis as Node[] | undefined) ?? [];
+      const expressions = (node.expressions as Node[] | undefined) ?? [];
+      let text = '';
+      for (let i = 0; i < quasis.length; i++) {
+        const cooked = (quasis[i]?.value as { cooked?: string; raw?: string } | undefined) ?? {};
+        text += cooked.cooked ?? cooked.raw ?? '';
+        const expression = expressions[i];
+        if (!expression) break;
+        const part = leadingStatic(expression, bindings, context, depth + 1);
+        text += part.text;
+        if (!part.complete) return { text, complete: false, head: part.head };
+      }
+      return { text, complete: true, head: null };
+    }
+
+    case 'BinaryExpression': {
+      const left = node.left as Node | undefined;
+      const right = node.right as Node | undefined;
+      if (node.operator !== '+' || !left || !right) return dynamic;
+      const head = leadingStatic(left, bindings, context, depth + 1);
+      if (!head.complete) return head;
+      const tail = leadingStatic(right, bindings, context, depth + 1);
+      return { text: head.text + tail.text, complete: tail.complete, head: tail.head };
+    }
+
+    default:
+      return dynamic;
   }
 }
 
@@ -763,24 +864,174 @@ function collectUnstableNames(program: Node): Map<string, string> {
   const seen = new Set<string>();
   const unstable = new Map<string, string>();
 
-  walk(program, (node) => {
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id as Node | undefined;
-      if (!id || id.type !== 'Identifier') return;
-      const name = String(id.name);
+  // Every form that binds a name counts as a declaration, not just `const`:
+  // a parameter, a catch clause or a destructured field named like a
+  // module-scope constant is a second binding of it, and the walk has no
+  // scope chain to say which one a call reads. Counting only declarators let
+  // `function f(B) { fetch(`${B}/v1`) }` resolve the module's `B`.
+  const declare = (pattern: Node | undefined | null) => {
+    for (const name of patternNames(pattern)) {
       if (seen.has(name)) unstable.set(name, `${name} is declared more than once in this file`);
       seen.add(name);
-      return;
     }
-    if (node.type === 'AssignmentExpression') {
-      const left = node.left as Node | undefined;
-      if (left?.type !== 'Identifier') return;
-      const name = String(left.name);
+  };
+  const reassign = (pattern: Node | undefined | null) => {
+    for (const name of patternNames(pattern)) {
       unstable.set(name, `${name} is reassigned after it is declared`);
+    }
+  };
+
+  // `with` and direct `eval` can rebind any name in reach, so either one
+  // makes every declared name in the file unresolvable.
+  let dynamicScope: string | null = null;
+
+  walk(program, (node) => {
+    switch (node.type) {
+      case 'VariableDeclarator':
+        declare(node.id as Node | undefined);
+        return;
+      case 'TSEnumDeclaration':
+      case 'TSImportEqualsDeclaration':
+      case 'TSEnumMember':
+        // An enum member is in scope as a bare name inside its own enum.
+        declare(node.id as Node | undefined);
+        return;
+      case 'TSModuleDeclaration': {
+        // `namespace A.B {}` binds `A`.
+        let id = node.id as Node | undefined;
+        while (id?.type === 'TSQualifiedName') id = id.left as Node | undefined;
+        declare(id);
+        return;
+      }
+      case 'WithStatement':
+        dynamicScope ??= 'a with statement';
+        return;
+      case 'CallExpression': {
+        // `(eval)(s)` and `(eval as any)(s)` are still direct eval.
+        const callee = unwrapExpression(node.callee as Node | undefined);
+        if (callee?.type === 'Identifier' && callee.name === 'eval') dynamicScope ??= 'direct eval';
+        return;
+      }
+      case 'FunctionDeclaration':
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression':
+        declare(node.id as Node | undefined);
+        for (const param of (node.params as Node[] | undefined) ?? []) declare(param);
+        return;
+      case 'ClassDeclaration':
+      case 'ClassExpression':
+        declare(node.id as Node | undefined);
+        return;
+      case 'CatchClause':
+        declare(node.param as Node | undefined);
+        return;
+      case 'ImportSpecifier':
+      case 'ImportDefaultSpecifier':
+      case 'ImportNamespaceSpecifier':
+        declare(node.local as Node | undefined);
+        return;
+      case 'AssignmentExpression': {
+        const left = node.left as Node | undefined;
+        reassign(left);
+        // `globalThis.B = ...` rebinds a script-scope `var B`.
+        const name = globalPropertyName(left);
+        if (name) unstable.set(name, `${name} is reassigned through the global object`);
+        return;
+      }
+      case 'UpdateExpression':
+        reassign(node.argument as Node | undefined);
+        return;
+      case 'ForInStatement':
+      case 'ForOfStatement': {
+        // `for (const B of xs)` is a declarator and is counted there.
+        const left = node.left as Node | undefined;
+        if (left && left.type !== 'VariableDeclaration') reassign(left);
+        return;
+      }
+      default:
+        return;
     }
   });
 
+  if (dynamicScope) {
+    for (const name of seen) {
+      if (!unstable.has(name))
+        unstable.set(name, `${name} may be rebound by ${dynamicScope} in this file`);
+    }
+  }
   return unstable;
+}
+
+const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
+
+/** `X` from `globalThis.X` or `window['X']`, the target of a global-object write. */
+function globalPropertyName(target: Node | undefined): string | null {
+  const node = unwrapExpression(target);
+  if (node?.type !== 'MemberExpression') return null;
+  const object = unwrapExpression(node.object as Node | undefined);
+  if (object?.type !== 'Identifier' || !GLOBAL_OBJECTS.has(String(object.name))) return null;
+  const property = node.property as Node | undefined;
+  if (!property) return null;
+  if (!node.computed && property.type === 'Identifier') return String(property.name);
+  if (node.computed && property.type === 'Literal' && typeof property.value === 'string') {
+    return property.value;
+  }
+  if (node.computed && property.type === 'TemplateLiteral') {
+    const quasis = (property.quasis as Node[] | undefined) ?? [];
+    if (quasis.length === 1) {
+      const cooked = (quasis[0]?.value as { cooked?: string } | undefined)?.cooked;
+      if (cooked !== undefined) return cooked;
+    }
+  }
+  return null;
+}
+
+/** Type assertions and parentheses change nothing at runtime, so see through them. */
+const TRANSPARENT_WRAPPERS = new Set([
+  'ParenthesizedExpression',
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+]);
+
+function unwrapExpression(node: Node | undefined): Node | undefined {
+  let current = node;
+  while (current && TRANSPARENT_WRAPPERS.has(current.type)) {
+    current = current.expression as Node | undefined;
+  }
+  return current;
+}
+
+/** The names a binding pattern introduces: `B`, `{ a, b: c }`, `[d, ...e]`, `f = 1`. */
+function patternNames(target: Node | undefined | null): string[] {
+  // `(B as any) += x` and `B! = x` assign to `B`.
+  const pattern = unwrapExpression(target ?? undefined);
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case 'Identifier':
+      return [String(pattern.name)];
+    case 'ObjectPattern':
+      return ((pattern.properties as Node[] | undefined) ?? []).flatMap((property) =>
+        patternNames(
+          property.type === 'RestElement'
+            ? (property.argument as Node | undefined)
+            : (property.value as Node | undefined),
+        ),
+      );
+    case 'ArrayPattern':
+      return ((pattern.elements as (Node | null)[] | undefined) ?? []).flatMap((element) =>
+        patternNames(element),
+      );
+    case 'AssignmentPattern':
+      return patternNames(pattern.left as Node | undefined);
+    case 'RestElement':
+      return patternNames(pattern.argument as Node | undefined);
+    case 'TSParameterProperty':
+      return patternNames(pattern.parameter as Node | undefined);
+    default:
+      return [];
+  }
 }
 
 /**

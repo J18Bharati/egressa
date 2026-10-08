@@ -224,6 +224,32 @@ record. Only the join key changes.
 
 ## Engine
 
+### Resolve an absolute request URL on an axios client by the request, not the base URL
+
+**What:** In `callsites/index.ts`, a call on a client binding (`api.get(arg)`) should resolve `arg`
+first and use its host when `arg` is an absolute URL, falling back to the client's `baseURL` only
+for a relative one.
+
+**Why:** `const api = axios.create({ baseURL: 'https://api.stripe.com' }); api.get('https://evil.example/x')`
+reports Stripe at high confidence. axios ignores `baseURL` for an absolute URL, so this is a wrong
+host, the one outcome the resolver exists to prevent. Found by the third review of the
+static-text fold; it predates that branch and is unchanged by it.
+
+**Context:** the client-binding branch around the `clientBindingFor` call sites. Add golden rows
+for absolute, relative and unresolvable request arguments.
+
+### Parse non-special connection URIs by their own rules, or not at all
+
+**What:** `normalise()` in `callsites/resolve-host.ts` takes the first `host[:port]` of any
+non-special scheme. `mongodb://a.example.com:27017,evil.com/` reports `a.example.com`;
+`postgres://api.stripe.com:p#w@evil.example/` reports `api.stripe.com`; libpq honours a
+`?host=` query parameter that is never read.
+
+**Why:** No current sink takes a database URI, so these are latent. The first sink that does would
+inherit a wrong host. Either parse each scheme the way its client does, or return unresolved for
+a non-special authority that contains `,` or `@` after a `#`, and for a `host=` query parameter.
+
+
 ### Carry a jurisdiction's role through to output
 
 **What:** Change `TransferFacts.jurisdictions` from `CountryCode[]` to a shape carrying the KB's
