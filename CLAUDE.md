@@ -85,6 +85,11 @@ constant folding; it must not require a resolved `Program` or installed packages
 closes the authority inside a static chunk. Everything else emits `transfer/unresolved-egress`
 naming the variable. Never add a heuristic that guesses.
 
+The static chunk is the *folded* one: `leadingStatic()` in `callsites/index.ts` joins literals,
+template chunks, `+` and stable module-scope strings before the authority is read, once. Reading it
+from one operand alone is how `B + '.attacker.example/x'` resolved to the vendor `B` named, at high
+confidence. The cost is that `BASE + path` with no delimiter in `BASE` is unresolved, deliberately.
+
 The same rule governs *which binding* a name refers to. Binding collection has no scope chain, so
 `callsites/index.ts` collects module-scope declarations only and refuses a name that is declared
 twice or reassigned — a shadowed `const` otherwise resolved to the wrong host at `high` confidence.

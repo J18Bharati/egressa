@@ -39,6 +39,19 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Fixed
 
+- **A concatenation could attribute a host it did not name.** `fetch(B + '.attacker.example/x')`,
+  with `B = 'https://api.stripe.com'`, reported Stripe at high confidence: the left operand was read
+  as a complete URL without looking at what followed it. Leading static text is now folded across
+  literals, template chunks, `+` and stable module-scope strings, and the authority is read once
+  from the folded text, so that call reports `api.stripe.com.attacker.example`. `BASE + path` with
+  an unknown `path` and no delimiter in `BASE` is now unresolved rather than a guess; across a
+  real backend codebase and every fixture repository, no resolution was lost to it.
+- **A template led by a constant did not resolve.** `` fetch(`${GMAIL_API_BASE}/watch`) `` reported
+  `unresolved-egress` although the constant was a plain module-scope string. The same fold resolves
+  it, and lifts the documented false negative for `` new URL(`${API_BASE}/messages`) ``. An
+  unresolved leading value now gives its own reason -- the variable, the environment variable, the
+  reassignment -- instead of the generic "built from an interpolated value".
+
 - **`SCOPE_OPT_OUT` was computed and used for nothing**, and SKILL.md did not say so. It is now
   documented as a context gate. The opt-out signals checklist stays routed on the tracker gates,
   because its own scope rule is to report nothing without an advertising tracker. A test fails on

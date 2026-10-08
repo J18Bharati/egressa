@@ -150,6 +150,15 @@ const RESOLVES: Case[] = [
     kind: 'reference',
   },
   {
+    // Lifted from docs/LIMITATIONS.md: this was a deliberate false negative
+    // while a template led by a constant could not be folded.
+    name: 'new URL over a template led by a module-scope base constant',
+    code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
+    host: 'gmail.googleapis.com',
+    kind: 'reference',
+    confidence: 'medium',
+  },
+  {
     // The case that stops this row being deleted outright: the vendor
     // attribution is correct and worth keeping, only the claim is narrower.
     name: 'new URL over a module-scope base constant',
@@ -268,6 +277,55 @@ const RESOLVES: Case[] = [
     code: `const C = () => { fetch('https://api.stripe.com/v1'); return <div />; };`,
     host: 'api.stripe.com',
   },
+  // Folding. A stable module-scope string is as static as a literal, so it is
+  // folded into the text around it before the authority is read, and the
+  // delimiter rule is applied once to the folded text. Field test: Gmail
+  // clients written `${GMAIL_API_BASE}/watch` used to report unresolved.
+  {
+    name: 'template led by a module-scope base constant',
+    code: "const B = 'https://www.googleapis.com/gmail/v1/users/me';\nfetch(`${B}/watch`);",
+    host: 'www.googleapis.com',
+    confidence: 'high',
+  },
+  {
+    name: 'template led by a base with no path, closed by the next chunk',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}/v1/charges/${id}`);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'constant folded into the authority itself',
+    code: "const host = 'api.stripe.com';\nfetch(`https://${host}/v1`);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'concatenation of a base constant and a static path',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + '/v1/' + id);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'concatenation of a base constant and a template path',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + `/v1/${id}`);",
+    host: 'api.stripe.com',
+  },
+  // The wrong-host regressions. Each of these used to resolve to the vendor
+  // named by the left operand alone -- api.stripe.com at high confidence --
+  // although the authority continues past it. The folded text is fully
+  // static, so the true host is known and is what must be reported.
+  {
+    name: 'concatenation that continues the authority past a base constant',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + '.attacker.example/x');",
+    host: 'api.stripe.com.attacker.example',
+  },
+  {
+    name: 'literal concatenation that continues the authority',
+    code: "fetch('https://api.stripe.com' + '.x.example/y');",
+    host: 'api.stripe.com.x.example',
+  },
+  {
+    name: 'template that continues the authority past a base constant',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}.eu/v1`);",
+    host: 'api.stripe.com.eu',
+  },
 ];
 
 const DOES_NOT_RESOLVE: Case[] = [
@@ -305,6 +363,55 @@ const DOES_NOT_RESOLVE: Case[] = [
     name: 'whole URL interpolated',
     code: 'fetch(`${base}/v1/charges`);',
     host: null,
+    reason: 'value of base is not known statically',
+  },
+  {
+    // Nothing proves `path` starts with a delimiter, so the authority is not
+    // closed. This used to resolve to api.stripe.com at high confidence.
+    name: 'base with no path followed by an unknown value',
+    code: "const B = 'https://api.stripe.com';\nfetch(B + path);",
+    host: null,
+    reason: 'interpolated',
+  },
+  {
+    name: 'template base with no path followed by an interpolation',
+    code: "const B = 'https://api.stripe.com';\nfetch(`${B}${rest}`);",
+    host: null,
+    reason: 'interpolated',
+  },
+  {
+    name: 'template base from an environment variable',
+    code: 'const B = process.env.API_BASE;\nfetch(`${B}/v1`);',
+    host: null,
+    reason: 'environment variable API_BASE',
+  },
+  {
+    name: 'template base declared twice',
+    code:
+      "const B = 'https://one.example.com/x';\nfetch(`${B}/y`);\n" +
+      "function z() { const B = 'https://two.example.com/x'; return B; }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'template base reassigned',
+    code: "let B = 'https://api.stripe.com';\nB = pick();\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'template base used before it is declared',
+    code: "fetch(`${B}/v1`);\nconst B = 'https://later.example.com';",
+    host: null,
+    reason: 'used before it is declared',
+  },
+  {
+    name: 'concatenated base declared twice',
+    code:
+      "const B = 'https://one.example.com';\nfetch(B + '/y');\n" +
+      "function z() { const B = 'https://two.example.com'; return B; }",
+    host: null,
+    reason: 'declared more than once',
   },
   {
     name: 'host from an object property read at runtime',
@@ -418,16 +525,6 @@ const NO_CALL_SITE: Case[] = [
     // rather than a prompt to look.
     name: 'new URL over an unknown connection string',
     code: `const url = new URL(connectionString);\nurl.searchParams.set('sslmode', 'verify-full');`,
-    host: null,
-    noHit: true,
-  },
-  {
-    // Deliberate false negative, new with the reference kind: a call sink
-    // would report transfer/unresolved-egress here. A reference sink stays
-    // silent, because "a variable was passed to new URL()" is not evidence
-    // that anything left. Recorded in docs/LIMITATIONS.md.
-    name: 'new URL built from a fully interpolated base',
-    code: 'const API_BASE = `https://gmail.googleapis.com`;\nconst u = new URL(`${API_BASE}/messages`);',
     host: null,
     noHit: true,
   },

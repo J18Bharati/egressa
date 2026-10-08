@@ -36,6 +36,23 @@ fetch(`https://${region}.example.com`);  // transfer/unresolved-egress, authorit
 Egressa names the variable and the location. It never guesses the host. That applies to call
 sinks; a `reference` sink stays silent instead, for the reason below.
 
+A stable module-scope string constant is folded into the text around it first, across template
+literals and `+`, and the authority is read once from the folded text. So `` `${BASE}/watch` `` and
+`BASE + '/v1'` resolve, and `BASE + '.example.net/x'` resolves to the host it actually names rather
+than to the vendor `BASE` alone would suggest. What does **not** resolve is a base whose authority
+is left open, followed by something unknown:
+
+```js
+const BASE = 'https://api.stripe.com';
+fetch(BASE + path);        // transfer/unresolved-egress: nothing proves `path` starts with '/'
+fetch(BASE + '/' + path);  // api.stripe.com
+```
+
+This is a deliberate false negative. Until the fold existed the first line resolved to
+`api.stripe.com` at high confidence, which was right only as long as `path` began with a delimiter;
+`BASE + '.attacker.example/x'` resolved to the same vendor. A base written with its trailing path,
+or a path added as a literal, resolves.
+
 ### Vendors absent from the knowledge base
 
 Reported as `transfer/unknown-vendor-egress`. The knowledge base is a curated seed set, not a
@@ -85,7 +102,9 @@ wrong host. Computed member access, array `join`, `eval`, and a dynamically `imp
 also untracked and unresolved.
 
 There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
-answer rather than declining.
+answer rather than declining. That sentence was written before concatenation was folded, and was not
+true then: `B + '.attacker.example/x'` resolved to the vendor `B` named, and no row covered it. The
+golden table now pins the true host for that case and for its template and literal forms.
 
 ### A constructed URL is a reference, not a call
 
@@ -148,8 +167,8 @@ Two consequences are deliberate false negatives:
   reported at all. A call sink in the same position emits `transfer/unresolved-egress` naming the
   variable; a reference sink stays silent, because "a variable was passed to `new URL()`" is not
   evidence that anything left. So `new URL(request.url)` and `new URL(connectionString)` above
-  produce no finding, and neither does `` new URL(`${API_BASE}/messages`) `` whose base is
-  interpolated.
+  produce no finding, and neither does `` new URL(`${base}/messages`) `` when `base` is not a
+  module-scope string constant. One whose base is such a constant is folded, and resolves.
 - **An in-process dispatcher is indistinguishable from a transfer.** Nothing in the source says
   whether `app.handle(new Request(host))` crosses a network. The analyzer reports the weaker claim
   rather than guessing either way, so a genuinely local dispatch still appears as a reference to

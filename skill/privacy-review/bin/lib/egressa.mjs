@@ -16036,15 +16036,18 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
       const value = node.value;
       return typeof value === "string" ? hostFromUrlPrefix(value, false) : { kind: "not-a-url" };
     }
+    // Both fold their leading static text -- literals, template chunks and
+    // stable module-scope strings -- and read the authority from the folded
+    // text once. Reading it from one piece alone is how `B + '.evil.example'`
+    // used to resolve to whatever vendor `B` named: the piece looked complete
+    // only because what followed it was never looked at.
     case "TemplateLiteral": {
-      const quasis = node.quasis ?? [];
-      const first = quasis[0];
-      const cooked = first?.value ?? {};
-      const prefix = cooked.cooked ?? cooked.raw ?? "";
-      if (prefix === "" && quasis.length > 1) {
-        return { kind: "unresolved", reason: "URL is built from an interpolated value" };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === "" && lead.head) {
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        return head.kind === "unresolved" ? head : { kind: "unresolved", reason: "URL is built from an interpolated value" };
       }
-      return hostFromUrlPrefix(prefix, quasis.length > 1);
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
     case "Identifier": {
       const name = String(node.name);
@@ -16100,8 +16103,12 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     }
     case "BinaryExpression": {
       if (node.operator !== "+") return { kind: "not-a-url" };
-      const left = node.left;
-      return left ? resolveArgument(left, configKeys, bindings, depth + 1, context) : { kind: "not-a-url" };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === "" && lead.head) {
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        return head.kind === "resolved" ? { kind: "unresolved", reason: "URL is built from an interpolated value" } : head;
+      }
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
     case "ObjectExpression": {
       for (const property of node.properties ?? []) {
@@ -16116,6 +16123,52 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
     }
     default:
       return { kind: "not-a-url" };
+  }
+}
+var MAX_FOLD_DEPTH = 64;
+function leadingStatic(node, bindings, context, depth = 0) {
+  const dynamic = { text: "", complete: false, head: node };
+  if (depth > MAX_FOLD_DEPTH) return dynamic;
+  switch (node.type) {
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "ParenthesizedExpression": {
+      const inner = node.expression;
+      return inner ? leadingStatic(inner, bindings, context, depth + 1) : dynamic;
+    }
+    case "Literal":
+      return typeof node.value === "string" ? { text: node.value, complete: true, head: null } : dynamic;
+    case "Identifier": {
+      const binding = readable(bindings, String(node.name), context.unstable, context.callStart);
+      return binding?.kind === "string" ? { text: binding.value, complete: true, head: null } : dynamic;
+    }
+    case "TemplateLiteral": {
+      const quasis = node.quasis ?? [];
+      const expressions = node.expressions ?? [];
+      let text = "";
+      for (let i2 = 0; i2 < quasis.length; i2++) {
+        const cooked = quasis[i2]?.value ?? {};
+        text += cooked.cooked ?? cooked.raw ?? "";
+        const expression = expressions[i2];
+        if (!expression) break;
+        const part = leadingStatic(expression, bindings, context, depth + 1);
+        text += part.text;
+        if (!part.complete) return { text, complete: false, head: part.head };
+      }
+      return { text, complete: true, head: null };
+    }
+    case "BinaryExpression": {
+      const left = node.left;
+      const right = node.right;
+      if (node.operator !== "+" || !left || !right) return dynamic;
+      const head = leadingStatic(left, bindings, context, depth + 1);
+      if (!head.complete) return head;
+      const tail = leadingStatic(right, bindings, context, depth + 1);
+      return { text: head.text + tail.text, complete: tail.complete, head: tail.head };
+    }
+    default:
+      return dynamic;
   }
 }
 var REFERENCE_VALUE_PROPERTY = "href";

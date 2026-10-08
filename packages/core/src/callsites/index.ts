@@ -439,17 +439,23 @@ function resolveArgument(
       return typeof value === 'string' ? hostFromUrlPrefix(value, false) : { kind: 'not-a-url' };
     }
 
+    // Both fold their leading static text -- literals, template chunks and
+    // stable module-scope strings -- and read the authority from the folded
+    // text once. Reading it from one piece alone is how `B + '.evil.example'`
+    // used to resolve to whatever vendor `B` named: the piece looked complete
+    // only because what followed it was never looked at.
     case 'TemplateLiteral': {
-      const quasis = (node.quasis as Node[] | undefined) ?? [];
-      const first = quasis[0];
-      const cooked = (first?.value as { cooked?: string; raw?: string } | undefined) ?? {};
-      const prefix = cooked.cooked ?? cooked.raw ?? '';
-      // `${base}/v1/charges` -- the destination is built at runtime. Reporting
-      // it as unresolved asks a human to look; guessing would invent a vendor.
-      if (prefix === '' && quasis.length > 1) {
-        return { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === '' && lead.head) {
+        // `${base}/v1/charges` -- the destination is built at runtime. Name
+        // the variable when it can be named; never resolve through a client
+        // or reference binding with something appended to it.
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        return head.kind === 'unresolved'
+          ? head
+          : { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
       }
-      return hostFromUrlPrefix(prefix, quasis.length > 1);
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
 
     case 'Identifier': {
@@ -518,12 +524,18 @@ function resolveArgument(
     }
 
     case 'BinaryExpression': {
-      // Only the left operand can contribute the authority in `a + b`.
       if (node.operator !== '+') return { kind: 'not-a-url' };
-      const left = node.left as Node | undefined;
-      return left
-        ? resolveArgument(left, configKeys, bindings, depth + 1, context)
-        : { kind: 'not-a-url' };
+      const lead = leadingStatic(node, bindings, context);
+      if (lead.text === '' && lead.head) {
+        // `getBase() + path` stays as silent as `getBase()` alone; an
+        // unresolved head keeps its reason; a head that resolves only through
+        // a client or reference binding is not followed past what is appended.
+        const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
+        return head.kind === 'resolved'
+          ? { kind: 'unresolved', reason: 'URL is built from an interpolated value' }
+          : head;
+      }
+      return hostFromUrlPrefix(lead.text, !lead.complete);
     }
 
     case 'ObjectExpression': {
@@ -540,6 +552,88 @@ function resolveArgument(
 
     default:
       return { kind: 'not-a-url' };
+  }
+}
+
+/** Concatenation chains longer than this are not folded; AST depth, not a constant chain. */
+const MAX_FOLD_DEPTH = 64;
+
+interface LeadingStatic {
+  /** The static text the expression is known to begin with. */
+  text: string;
+  /** True when `text` is the whole value, with nothing dynamic after it. */
+  complete: boolean;
+  /** The first part that could not be folded, when `complete` is false. */
+  head: Node | null;
+}
+
+/**
+ * The static text an expression begins with, folded across string literals,
+ * template chunks, `+`, and module-scope string constants that `readable()`
+ * accepts -- so a constant declared twice, reassigned, or used before its
+ * declaration stops the fold exactly as it stops resolution.
+ *
+ * Only the text is folded; whether it holds a complete authority is decided
+ * once, by `hostFromUrlPrefix`, with `hasMore` set from `complete`.
+ */
+function leadingStatic(
+  node: Node,
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+  depth = 0,
+): LeadingStatic {
+  const dynamic: LeadingStatic = { text: '', complete: false, head: node };
+  if (depth > MAX_FOLD_DEPTH) return dynamic;
+
+  switch (node.type) {
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+    case 'ParenthesizedExpression': {
+      const inner = node.expression as Node | undefined;
+      return inner ? leadingStatic(inner, bindings, context, depth + 1) : dynamic;
+    }
+
+    case 'Literal':
+      return typeof node.value === 'string'
+        ? { text: node.value, complete: true, head: null }
+        : dynamic;
+
+    case 'Identifier': {
+      const binding = readable(bindings, String(node.name), context.unstable, context.callStart);
+      return binding?.kind === 'string'
+        ? { text: binding.value, complete: true, head: null }
+        : dynamic;
+    }
+
+    case 'TemplateLiteral': {
+      const quasis = (node.quasis as Node[] | undefined) ?? [];
+      const expressions = (node.expressions as Node[] | undefined) ?? [];
+      let text = '';
+      for (let i = 0; i < quasis.length; i++) {
+        const cooked = (quasis[i]?.value as { cooked?: string; raw?: string } | undefined) ?? {};
+        text += cooked.cooked ?? cooked.raw ?? '';
+        const expression = expressions[i];
+        if (!expression) break;
+        const part = leadingStatic(expression, bindings, context, depth + 1);
+        text += part.text;
+        if (!part.complete) return { text, complete: false, head: part.head };
+      }
+      return { text, complete: true, head: null };
+    }
+
+    case 'BinaryExpression': {
+      const left = node.left as Node | undefined;
+      const right = node.right as Node | undefined;
+      if (node.operator !== '+' || !left || !right) return dynamic;
+      const head = leadingStatic(left, bindings, context, depth + 1);
+      if (!head.complete) return head;
+      const tail = leadingStatic(right, bindings, context, depth + 1);
+      return { text: head.text + tail.text, complete: tail.complete, head: tail.head };
+    }
+
+    default:
+      return dynamic;
   }
 }
 
