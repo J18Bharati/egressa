@@ -164,14 +164,15 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Knowledge base — `2026.09.21` → `2026.10.09`
 
-- **`google-gmail-api`: the Gmail API and Google's OAuth 2.0 token endpoint.** A field run against a
-  Gmail-ingesting backend reported both as `unknown-vendor-egress`. Exact hosts only
-  (`gmail.googleapis.com`, `oauth2.googleapis.com`) and the Gmail-specific `@googleapis/gmail`:
-  `www.googleapis.com`, `googleapis` and `google-auth-library` also serve Google Cloud APIs under
-  different terms, and host matching cannot see a path. Google is recorded as an independent
-  controller under the Controller-Controller Data Protection Terms, so `dpa` is unavailable, and
-  the EU region as unavailable to the API caller because Workspace data regions are set by the
-  mailbox owner's administrator.
+- **`google-gmail-api`: the Gmail API.** A field run against a Gmail-ingesting backend reported it
+  as `unknown-vendor-egress`. Only the Gmail-dedicated host (`gmail.googleapis.com`) and package
+  (`@googleapis/gmail`): Google's OAuth token endpoint, `www.googleapis.com` and the general client
+  packages serve Google APIs generally, and host matching cannot see a path or a scope, so they stay
+  unmatched rather than being filed as Gmail. Google is recorded as an independent controller under
+  the Controller-Controller Data Protection Terms, so `dpa` is unavailable, with no SCC row: section
+  5.3 of those terms says SCCs are not required for European data sent to Google. The EU region is
+  recorded as unavailable to the API caller, with its `docUrl`, because Workspace data regions are
+  set by the mailbox owner's administrator.
 
 - `pypi` aliases for Twilio (`twilio`) and AWS (`boto3`, `botocore`), each checked against the
   publisher on PyPI.
