@@ -319,6 +319,32 @@ const RESOLVES: Case[] = [
     code: "fetch('https://api.stripe.com\\\\@evil.example/x');",
     host: 'api.stripe.com',
   },
+  // The host is read as WHATWG URL parsing reads it.
+  {
+    name: 'leading whitespace before the scheme',
+    code: "fetch(' https://api.stripe.com/v1');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'multi-line template with leading whitespace',
+    code: 'fetch(`\n  https://api.stripe.com/v1`);',
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a tab inside the authority is removed, not kept',
+    code: "fetch('https://api.stripe.com\\t.evil.example/');",
+    host: 'api.stripe.com.evil.example',
+  },
+  {
+    name: 'percent-encoded dot in the host',
+    code: "fetch('https://api%2Estripe.com/v1');",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'IPv6 literal with a port',
+    code: "fetch('http://[::1]:8080/x');",
+    host: '[::1]',
+  },
   // The wrong-host regressions. Each of these used to resolve to the vendor
   // named by the left operand alone -- api.stripe.com at high confidence --
   // although the authority continues past it. The folded text is fully
@@ -452,6 +478,43 @@ const DOES_NOT_RESOLVE: Case[] = [
     host: null,
     reason: 'declared more than once',
   },
+  // TypeScript and dynamic-scope forms that bind or rebind a name.
+  {
+    name: 'local enum shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nfunction f() { enum B { X = 1 } return fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'namespace shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nnamespace N { namespace B {} fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'import-equals shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nnamespace N { import B = Foo.bar; fetch(`${B}/v1`); }",
+    host: null,
+    reason: 'declared more than once',
+  },
+  {
+    name: 'with statement can rebind any name',
+    code: "var B = 'https://api.stripe.com';\nwith (o) { fetch(B + '/v1'); }",
+    host: null,
+    reason: 'with',
+  },
+  {
+    name: 'direct eval can rebind any name',
+    code: "let B = 'https://api.stripe.com';\neval(s);\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'global object write to a module name',
+    code: "var B = 'https://api.stripe.com';\nglobalThis.B = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
   {
     // Nothing proves `path` starts with a delimiter, so the authority is not
     // closed. This used to resolve to api.stripe.com at high confidence.
@@ -567,6 +630,19 @@ const DOES_NOT_RESOLVE: Case[] = [
 ];
 
 const NO_CALL_SITE: Case[] = [
+  {
+    // `new URL` rejects both, so fetch throws before any request is made.
+    name: 'invalid authority with an encoded at-sign',
+    code: "fetch('https://evil.example%40api.stripe.com/');",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'invalid authority containing a space',
+    code: "fetch('https://api.stripe.com .evil.example/');",
+    host: null,
+    noHit: true,
+  },
   {
     // The scheme belongs to the query, not the request: the destination is
     // the app's own origin. Applies to the literal as much as to the fold.

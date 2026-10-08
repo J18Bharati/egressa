@@ -50,12 +50,15 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   each a confident wrong host. Binding collection counted only `const`/`let` declarators, so a
   parameter, `catch` clause or destructured name shadowing a module constant resolved to the
   module's value -- `function client({ apiUrl }) { fetch(`${apiUrl}/v1`) }` reported the vendor in
-  the module's `apiUrl`; every binding form now counts. A `://` anywhere in the string was taken as
+  the module's `apiUrl`; parameters, `catch` and destructuring now count. A `://` anywhere in the string was taken as
   the scheme, so `fetch('/proxy?u=https://api.stripe.com/v1')` reported Stripe; the scheme must now
   start the string. And a backslash did not end the authority, so
-  `https://api.stripe.com\@evil.example/x` reported `evil.example`; for the special schemes it now
-  does, as WHATWG URL parsing does. A `new URL()` read while resolving a discarded head is no longer
-  silently consumed.
+  `https://api.stripe.com\@evil.example/x` reported `evil.example`; for the special schemes the
+  authority is now read by the WHATWG URL parser itself, which also fixes IPv6 literals (reported
+  as `[`), percent-escapes, embedded tabs and leading whitespace, and reports nothing for an
+  authority `fetch` would reject. TypeScript `enum`, `namespace` and `import X =`, `with`, direct
+  `eval` and `globalThis.X =` writes also stop a name resolving. A `new URL()` read while resolving
+  a discarded head is no longer silently consumed.
 - **`'https://' + process.env.HOST + '/v1'` now reports `unresolved-egress`.** It produced no
   finding before, because the left operand alone had no authority and was read as not a URL.
 - **A template led by a constant did not resolve.** `` fetch(`${GMAIL_API_BASE}/watch`) `` reported

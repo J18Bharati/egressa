@@ -535,11 +535,12 @@ function resolveArgument(
         // a client or reference binding is not followed past what is appended.
         const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
-        if (head.kind !== 'resolved') return head;
-        // A resolved head is not followed past what is appended, so the
-        // reference it read stays a reference rather than being consumed.
+        // A head is never followed past what is appended, so whatever it read
+        // stays a reference rather than being consumed.
         if (context.referencesRead) context.referencesRead.length = mark;
-        return { kind: 'unresolved', reason: 'URL is built from an interpolated value' };
+        return head.kind === 'resolved'
+          ? { kind: 'unresolved', reason: 'URL is built from an interpolated value' }
+          : head;
       }
       return hostFromUrlPrefix(lead.text, !lead.complete);
     }
@@ -880,11 +881,34 @@ function collectUnstableNames(program: Node): Map<string, string> {
     }
   };
 
+  // `with` and direct `eval` can rebind any name in reach, so either one
+  // makes every declared name in the file unresolvable.
+  let dynamicScope: string | null = null;
+
   walk(program, (node) => {
     switch (node.type) {
       case 'VariableDeclarator':
         declare(node.id as Node | undefined);
         return;
+      case 'TSEnumDeclaration':
+      case 'TSImportEqualsDeclaration':
+        declare(node.id as Node | undefined);
+        return;
+      case 'TSModuleDeclaration': {
+        // `namespace A.B {}` binds `A`.
+        let id = node.id as Node | undefined;
+        while (id?.type === 'TSQualifiedName') id = id.left as Node | undefined;
+        declare(id);
+        return;
+      }
+      case 'WithStatement':
+        dynamicScope ??= 'a with statement';
+        return;
+      case 'CallExpression': {
+        const callee = node.callee as Node | undefined;
+        if (callee?.type === 'Identifier' && callee.name === 'eval') dynamicScope ??= 'direct eval';
+        return;
+      }
       case 'FunctionDeclaration':
       case 'FunctionExpression':
       case 'ArrowFunctionExpression':
@@ -903,9 +927,14 @@ function collectUnstableNames(program: Node): Map<string, string> {
       case 'ImportNamespaceSpecifier':
         declare(node.local as Node | undefined);
         return;
-      case 'AssignmentExpression':
-        reassign(node.left as Node | undefined);
+      case 'AssignmentExpression': {
+        const left = node.left as Node | undefined;
+        reassign(left);
+        // `globalThis.B = ...` rebinds a script-scope `var B`.
+        const name = globalPropertyName(left);
+        if (name) unstable.set(name, `${name} is reassigned through the global object`);
         return;
+      }
       case 'UpdateExpression':
         reassign(node.argument as Node | undefined);
         return;
@@ -921,7 +950,29 @@ function collectUnstableNames(program: Node): Map<string, string> {
     }
   });
 
+  if (dynamicScope) {
+    for (const name of seen) {
+      if (!unstable.has(name))
+        unstable.set(name, `${name} may be rebound by ${dynamicScope} in this file`);
+    }
+  }
   return unstable;
+}
+
+const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
+
+/** `X` from `globalThis.X` or `window['X']`, the target of a global-object write. */
+function globalPropertyName(node: Node | undefined): string | null {
+  if (node?.type !== 'MemberExpression') return null;
+  const object = node.object as Node | undefined;
+  if (object?.type !== 'Identifier' || !GLOBAL_OBJECTS.has(String(object.name))) return null;
+  const property = node.property as Node | undefined;
+  if (!property) return null;
+  if (!node.computed && property.type === 'Identifier') return String(property.name);
+  if (node.computed && property.type === 'Literal' && typeof property.value === 'string') {
+    return property.value;
+  }
+  return null;
 }
 
 /** The names a binding pattern introduces: `B`, `{ a, b: c }`, `[d, ...e]`, `f = 1`. */

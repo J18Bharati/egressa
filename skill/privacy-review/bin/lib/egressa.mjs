@@ -15714,10 +15714,12 @@ function strongest(values) {
 }
 var MAX_DEPTH = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
-  const scheme = SCHEME.exec(prefix);
+  const input = trimControls(prefix.replace(/[\t\n\r]/g, ""), !hasMore);
+  const scheme = SCHEME.exec(input);
   if (!scheme) return { kind: "not-a-url" };
-  const rest = prefix.slice(scheme[0].length);
-  const special = SPECIAL_SCHEMES.has(scheme[1]?.toLowerCase() ?? "");
+  const rest = input.slice(scheme[0].length);
+  const schemeName = scheme[1]?.toLowerCase() ?? "";
+  const special = SPECIAL_SCHEMES.has(schemeName);
   const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
   if (delimiter === -1) {
     if (hasMore) {
@@ -15726,10 +15728,27 @@ function hostFromUrlPrefix(prefix, hasMore) {
         reason: "host is completed by an interpolated value and cannot be resolved statically"
       };
     }
-    return rest === "" ? { kind: "not-a-url" } : { kind: "resolved", host: normalise(rest) };
+    return hostOf(schemeName, special, rest);
   }
-  const authority = rest.slice(0, delimiter);
-  return authority === "" ? { kind: "not-a-url" } : { kind: "resolved", host: normalise(authority) };
+  return hostOf(schemeName, special, rest.slice(0, delimiter));
+}
+function hostOf(scheme, special, authority) {
+  if (authority === "") return { kind: "not-a-url" };
+  if (!special) return { kind: "resolved", host: normalise(authority) };
+  try {
+    const host = new URL(`${scheme}://${authority}/`).hostname;
+    return host === "" ? { kind: "not-a-url" } : { kind: "resolved", host };
+  } catch {
+    return { kind: "not-a-url" };
+  }
+}
+var isControlOrSpace = (code) => code <= 32;
+function trimControls(value, trailing) {
+  let start = 0;
+  while (start < value.length && isControlOrSpace(value.charCodeAt(start))) start++;
+  let end = value.length;
+  if (trailing) while (end > start && isControlOrSpace(value.charCodeAt(end - 1))) end--;
+  return value.slice(start, end);
 }
 var SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
 var SPECIAL_SCHEMES = /* @__PURE__ */ new Set(["http", "https", "ws", "wss", "ftp"]);
@@ -15737,6 +15756,10 @@ function normalise(authority) {
   let value = authority;
   const at = value.lastIndexOf("@");
   if (at >= 0) value = value.slice(at + 1);
+  if (value.startsWith("[")) {
+    const close = value.indexOf("]");
+    return (close >= 0 ? value.slice(0, close + 1) : value).toLowerCase();
+  }
   const colon = value.indexOf(":");
   if (colon >= 0) value = value.slice(0, colon);
   return value.toLowerCase();
@@ -16112,9 +16135,8 @@ function resolveArgument(node, configKeys, bindings, depth, context) {
       if (lead.text === "" && lead.head) {
         const mark = context.referencesRead?.length ?? 0;
         const head = resolveArgument(lead.head, configKeys, bindings, depth + 1, context);
-        if (head.kind !== "resolved") return head;
         if (context.referencesRead) context.referencesRead.length = mark;
-        return { kind: "unresolved", reason: "URL is built from an interpolated value" };
+        return head.kind === "resolved" ? { kind: "unresolved", reason: "URL is built from an interpolated value" } : head;
       }
       return hostFromUrlPrefix(lead.text, !lead.complete);
     }
@@ -16311,11 +16333,30 @@ function collectUnstableNames(program) {
       unstable.set(name, `${name} is reassigned after it is declared`);
     }
   };
+  let dynamicScope = null;
   walk2(program, (node) => {
     switch (node.type) {
       case "VariableDeclarator":
         declare(node.id);
         return;
+      case "TSEnumDeclaration":
+      case "TSImportEqualsDeclaration":
+        declare(node.id);
+        return;
+      case "TSModuleDeclaration": {
+        let id = node.id;
+        while (id?.type === "TSQualifiedName") id = id.left;
+        declare(id);
+        return;
+      }
+      case "WithStatement":
+        dynamicScope ??= "a with statement";
+        return;
+      case "CallExpression": {
+        const callee = node.callee;
+        if (callee?.type === "Identifier" && callee.name === "eval") dynamicScope ??= "direct eval";
+        return;
+      }
       case "FunctionDeclaration":
       case "FunctionExpression":
       case "ArrowFunctionExpression":
@@ -16334,9 +16375,13 @@ function collectUnstableNames(program) {
       case "ImportNamespaceSpecifier":
         declare(node.local);
         return;
-      case "AssignmentExpression":
-        reassign(node.left);
+      case "AssignmentExpression": {
+        const left = node.left;
+        reassign(left);
+        const name = globalPropertyName(left);
+        if (name) unstable.set(name, `${name} is reassigned through the global object`);
         return;
+      }
       case "UpdateExpression":
         reassign(node.argument);
         return;
@@ -16350,7 +16395,26 @@ function collectUnstableNames(program) {
         return;
     }
   });
+  if (dynamicScope) {
+    for (const name of seen) {
+      if (!unstable.has(name))
+        unstable.set(name, `${name} may be rebound by ${dynamicScope} in this file`);
+    }
+  }
   return unstable;
+}
+var GLOBAL_OBJECTS = /* @__PURE__ */ new Set(["globalThis", "window", "self", "global"]);
+function globalPropertyName(node) {
+  if (node?.type !== "MemberExpression") return null;
+  const object = node.object;
+  if (object?.type !== "Identifier" || !GLOBAL_OBJECTS.has(String(object.name))) return null;
+  const property = node.property;
+  if (!property) return null;
+  if (!node.computed && property.type === "Identifier") return String(property.name);
+  if (node.computed && property.type === "Literal" && typeof property.value === "string") {
+    return property.value;
+  }
+  return null;
 }
 function patternNames(pattern) {
   if (!pattern) return [];

@@ -93,9 +93,13 @@ confidence. The cost is that `BASE + path` with no delimiter in `BASE` is unreso
 The same rule governs *which binding* a name refers to. Binding collection has no scope chain, so
 `callsites/index.ts` collects module-scope declarations only and refuses a name that is declared
 twice or reassigned — a shadowed `const` otherwise resolved to the wrong host at `high` confidence.
-"Declared" means every binding form, not just `const`: parameters (destructured, defaulted, rest),
-`catch`, destructuring declarations, function, class and import names. "Reassigned" includes pattern
-assignment, `for…in/of` targets and `++`/`--`. When only declarators were counted,
+"Declared" covers the binding forms `collectUnstableNames` lists, not just `const`: parameters
+(destructured, defaulted, rest), `catch`, destructuring declarations, function, class and import
+names, and TypeScript `enum`, `namespace` and `import X =`. "Reassigned" includes pattern
+assignment, `for…in/of` targets, `++`/`--` and a `globalThis.X =` write, and a `with` statement or
+direct `eval` anywhere makes every declared name unresolvable. A binding form missing from that list
+is a wrong-host bug, not a recall gap: a reviewer found the TypeScript three after the list was
+first called complete. When only declarators were counted,
 `function f(B) { fetch(`${B}/v1`) }` resolved the module's `B`.
 Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
 

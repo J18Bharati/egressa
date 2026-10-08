@@ -96,18 +96,24 @@ function a() { const D = 'https://inner.example.com/x'; }
 fetch(D);          // "value of D is not known statically"
 ```
 
-Only module-scope declarations are collected, and only those above the call. Every form that binds
-a name counts as a declaration -- a parameter (destructured, defaulted or rest), a `catch` clause, a
-destructuring declaration, a function, class or import name -- and every form that rebinds one
-counts as a reassignment: pattern assignment, a `for...in`/`for...of` target, `++` and `--`. So
+Only module-scope declarations are collected, and only those above the call. These forms count as a
+declaration -- a parameter (destructured, defaulted or rest), a `catch` clause, a destructuring
+declaration, a function, class or import name, and TypeScript `enum`, `namespace` and `import X =`
+-- and these as a reassignment: pattern assignment, a `for...in`/`for...of` target, `++`, `--`, and
+a write through `globalThis`, `window`, `self` or `global`. A `with` statement or a direct `eval`
+anywhere in a file makes every name declared in it unresolvable, since either can rebind any of
+them. So
 `function client({ apiUrl }) { fetch(`${apiUrl}/v1`) }` beside a module-scope `apiUrl` is refused
 rather than resolved to the module's value. The cost is recall on files that reuse a name; the
 benefit is that no shadowed or stale binding can produce a confident wrong host.
 
 Two more rules keep a resolved host the true one. A URL resolves only when its scheme starts the
 string: `fetch('/proxy?u=https://api.stripe.com/v1')` goes to the app's own origin, so it is not a
-transfer to Stripe. And for `http`, `https`, `ws`, `wss` and `ftp` a backslash ends the authority,
-as WHATWG URL parsing does, so `https://api.stripe.com\@evil.example/x` is Stripe's host. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
+transfer to Stripe. And for `http`, `https`, `ws`, `wss` and `ftp` the authority is read by
+the WHATWG URL parser itself once the folded text has closed it: a backslash ends it, so
+`https://api.stripe.com\@evil.example/x` is Stripe's host; percent-escapes, full-width dots, IPv6
+literals, embedded tabs and leading whitespace are handled as `fetch` handles them; and an authority
+the parser rejects reports nothing, because `fetch` would throw before sending. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
 also untracked and unresolved.
 
 There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
