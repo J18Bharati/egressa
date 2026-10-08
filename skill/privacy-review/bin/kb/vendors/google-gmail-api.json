@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "google-gmail-api",
+  "name": "Google LLC",
+  "product": "Gmail API and Google OAuth 2.0 token endpoint",
+  "category": "email",
+  "homepage": "https://developers.google.com/workspace/gmail/api",
+  "aliases": {
+    "packages": {
+      "npm": [{ "name": "@googleapis/gmail", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      { "pattern": "gmail.googleapis.com", "match": "exact", "purpose": "api" },
+      { "pattern": "oauth2.googleapis.com", "match": "exact", "purpose": "auth" }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "The Google APIs Terms of Service define \"Google\" as Google LLC, 1600 Amphitheatre Parkway, Mountain View, California, unless additional terms for a given API say otherwise, and select the laws of California."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "Under the Google Controller-Controller Data Protection Terms, which the Google APIs Terms of Service apply to personal data processed under them, Google Ireland Limited is the Google End Controller for European Controller Personal Data. Each party is an independent controller."
+      }
+    ],
+    "euRegion": {
+      "available": false,
+      "notes": "Recorded as unavailable to the API caller, not as absent from Google Workspace. Google Workspace data regions let a Workspace administrator store covered primary data at rest in the United States or the European Union, on the editions Google lists. The setting belongs to the administrator of the mailbox being accessed; the Gmail API and OAuth pages checked describe no region or endpoint an API caller can select. The data regions page is https://knowledge.workspace.google.com/admin/compliance/choose-a-geographic-location-for-your-data."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://policies.google.com/privacy/frameworks?hl=en",
+        "lastChecked": "2026-10-09"
+      },
+      {
+        "mechanism": "SCC",
+        "dpfCertified": false,
+        "url": "https://business.safety.google/controllerterms/",
+        "lastChecked": "2026-10-09"
+      }
+    ]
+  },
+  "dataCategories": [
+    { "category": "email", "typical": true },
+    { "category": "content", "typical": true },
+    { "category": "name", "typical": true },
+    { "category": "user_id", "typical": true }
+  ],
+  "sources": [
+    {
+      "url": "https://developers.google.com/terms",
+      "title": "Google APIs Terms of Service (last modified 9 November 2021)",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://business.safety.google/controllerterms/",
+      "title": "Google Controller-Controller Data Protection Terms (version 11, 7 May 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://policies.google.com/privacy/frameworks?hl=en",
+      "title": "Google Privacy Policy: data transfer frameworks",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://developers.google.com/workspace/gmail/api/reference/rest",
+      "title": "Gmail API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+      "title": "Using OAuth 2.0 for Web Server Applications: token endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://knowledge.workspace.google.com/admin/compliance/choose-a-geographic-location-for-your-data",
+      "title": "Google Workspace: choose a geographic location for your data (data regions)",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://github.com/googleapis/google-api-nodejs-client",
+      "title": "Google APIs Node.js client repository, publisher of @googleapis/gmail",
+      "publisher": "vendor",
+      "accessedAt": "2026-10-09"
+    }
+  ],
+  "lastVerified": "2026-10-09",
+  "notes": "This entry covers an application calling the Gmail API and the Google OAuth 2.0 token endpoint on a user's behalf, under the Google APIs Terms of Service. Those terms apply the Google Controller-Controller Data Protection Terms, so Google and the API caller are independent controllers; no processor terms under GDPR Art 28 were found for this relationship, which is why dpa is recorded as unavailable. A Workspace customer's own agreement with Google, including the Cloud Data Processing Addendum, governs the mailbox owner, not the API caller. Only the two dedicated hosts are listed. www.googleapis.com also serves the Gmail API under /gmail/, but it serves other Google APIs too, including Google Cloud APIs under different terms, and host matching cannot see the path, so it is deliberately not listed. For the same reason the general googleapis and google-auth-library packages are not listed: Google Cloud client libraries depend on them."
+}

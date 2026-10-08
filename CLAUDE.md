@@ -393,7 +393,7 @@ Because nothing has ever been published, `schemas/findings-1.0.0.json` was corre
 the Chapter V flag semantics were fixed, rather than a 2.0.0 being cut for a version no consumer
 has. That option closes at the first release; after it, a meaning change needs a new schema file.
 
-The knowledge base holds 16 vendors. `pnpm kb:coverage` reports the matched fraction over the
+The knowledge base holds 17 vendors. `pnpm kb:coverage` reports the matched fraction over the
 fixture repositories — note that the package denominator counts every declared dependency including
 frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 

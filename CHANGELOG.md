@@ -13,7 +13,7 @@ describes the state of the repository rather than an artifact anyone can install
 
 ## [Unreleased]
 
-Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
+Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Added
 
@@ -162,7 +162,16 @@ Knowledge base `2026.09.26`. Findings schema `1.1.0`, edited in place.
   accounts for every scanner finding. Step 4 checks the counts and names any specialist that returned
   no block.
 
-### Knowledge base — `2026.09.21` → `2026.09.26`
+### Knowledge base — `2026.09.21` → `2026.10.09`
+
+- **`google-gmail-api`: the Gmail API and Google's OAuth 2.0 token endpoint.** A field run against a
+  Gmail-ingesting backend reported both as `unknown-vendor-egress`. Exact hosts only
+  (`gmail.googleapis.com`, `oauth2.googleapis.com`) and the Gmail-specific `@googleapis/gmail`:
+  `www.googleapis.com`, `googleapis` and `google-auth-library` also serve Google Cloud APIs under
+  different terms, and host matching cannot see a path. Google is recorded as an independent
+  controller under the Controller-Controller Data Protection Terms, so `dpa` is unavailable, and
+  the EU region as unavailable to the API caller because Workspace data regions are set by the
+  mailbox owner's administrator.
 
 - `pypi` aliases for Twilio (`twilio`) and AWS (`boto3`, `botocore`), each checked against the
   publisher on PyPI.
