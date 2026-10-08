@@ -97,9 +97,11 @@ twice or reassigned — a shadowed `const` otherwise resolved to the wrong host 
 (destructured, defaulted, rest), `catch`, destructuring declarations, function, class and import
 names, and TypeScript `enum`, `namespace` and `import X =`. "Reassigned" includes pattern
 assignment, `for…in/of` targets, `++`/`--` and a `globalThis.X =` write, and a `with` statement or
-direct `eval` anywhere makes every declared name unresolvable. A binding form missing from that list
-is a wrong-host bug, not a recall gap: a reviewer found the TypeScript three after the list was
-first called complete. When only declarators were counted,
+direct `eval` anywhere makes every declared name unresolvable; type assertions and parentheses on a
+target or on `eval` are seen through. A binding form missing from that list is a wrong-host bug, not
+a recall gap: three successive reviews each found forms missing after the list was called complete.
+Rebinding a classic script's global `var` through indirect `eval`, `new Function` or an aliased
+`globalThis` is a documented boundary in `docs/LIMITATIONS.md`, not an oversight. When only declarators were counted,
 `function f(B) { fetch(`${B}/v1`) }` resolved the module's `B`.
 Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
 

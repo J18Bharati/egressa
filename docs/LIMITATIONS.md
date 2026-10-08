@@ -101,8 +101,15 @@ declaration -- a parameter (destructured, defaulted or rest), a `catch` clause, 
 declaration, a function, class or import name, and TypeScript `enum`, `namespace` and `import X =`
 -- and these as a reassignment: pattern assignment, a `for...in`/`for...of` target, `++`, `--`, and
 a write through `globalThis`, `window`, `self` or `global`. A `with` statement or a direct `eval`
-anywhere in a file makes every name declared in it unresolvable, since either can rebind any of
-them. So
+anywhere in a file -- parenthesised or type-asserted -- makes every name declared in it
+unresolvable, since either can rebind any of them. Type assertions and parentheses on an
+assignment target are seen through: `(B as any) += x` reassigns `B`.
+
+One boundary is deliberate. A top-level `var` in a classic, non-module browser script is also a
+property of the global object, and can be rebound in ways this does not follow: indirect `eval`,
+`new Function`, a write through an alias of `globalThis`, `Object.defineProperty` or
+`Object.assign` on it. None of these reach an ES module's or a CommonJS module's scope, which is
+where nearly all the code this tool reads declares its constants. So
 `function client({ apiUrl }) { fetch(`${apiUrl}/v1`) }` beside a module-scope `apiUrl` is refused
 rather than resolved to the module's value. The cost is recall on files that reuse a name; the
 benefit is that no shadowed or stale binding can produce a confident wrong host.

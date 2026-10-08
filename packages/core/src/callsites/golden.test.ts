@@ -515,6 +515,55 @@ const DOES_NOT_RESOLVE: Case[] = [
     host: null,
     reason: 'reassigned',
   },
+  // Wrappers on a binding target or callee are transparent at runtime.
+  {
+    name: 'compound assignment through an as-cast',
+    code: "let B = 'https://api.stripe.com';\n(B as any) += '.evil.example';\nfetch(B + '/v1');",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'assignment through a non-null assertion',
+    code: "let B = 'https://api.stripe.com';\nB! = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'array pattern assignment through an as-cast',
+    code: "let B = 'https://api.stripe.com';\n[(B as any)] = ['https://evil.example'];\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'parenthesised direct eval',
+    code: "let B = 'https://api.stripe.com';\n(eval)(s);\nfetch(B + '/v1');",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'as-cast direct eval',
+    code: "let B = 'https://api.stripe.com';\n(eval as any)(s);\nfetch(B + '/v1');",
+    host: null,
+    reason: 'eval',
+  },
+  {
+    name: 'global object write through an as-cast',
+    code: "var B = 'https://api.stripe.com';\n(globalThis as any).B = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'global object write with a template key',
+    code: "var B = 'https://api.stripe.com';\nglobalThis[`B`] = 'https://evil.example';\nfetch(`${B}/v1`);",
+    host: null,
+    reason: 'reassigned',
+  },
+  {
+    name: 'enum member shadowing a module constant',
+    code: "const B = 'https://api.stripe.com';\nenum E { B = 1, X = (fetch(B as any), 2) }",
+    host: null,
+    reason: 'declared more than once',
+  },
   {
     // Nothing proves `path` starts with a delimiter, so the authority is not
     // closed. This used to resolve to api.stripe.com at high confidence.

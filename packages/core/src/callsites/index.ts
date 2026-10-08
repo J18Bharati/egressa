@@ -892,6 +892,8 @@ function collectUnstableNames(program: Node): Map<string, string> {
         return;
       case 'TSEnumDeclaration':
       case 'TSImportEqualsDeclaration':
+      case 'TSEnumMember':
+        // An enum member is in scope as a bare name inside its own enum.
         declare(node.id as Node | undefined);
         return;
       case 'TSModuleDeclaration': {
@@ -905,7 +907,8 @@ function collectUnstableNames(program: Node): Map<string, string> {
         dynamicScope ??= 'a with statement';
         return;
       case 'CallExpression': {
-        const callee = node.callee as Node | undefined;
+        // `(eval)(s)` and `(eval as any)(s)` are still direct eval.
+        const callee = unwrapExpression(node.callee as Node | undefined);
         if (callee?.type === 'Identifier' && callee.name === 'eval') dynamicScope ??= 'direct eval';
         return;
       }
@@ -962,9 +965,10 @@ function collectUnstableNames(program: Node): Map<string, string> {
 const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
 
 /** `X` from `globalThis.X` or `window['X']`, the target of a global-object write. */
-function globalPropertyName(node: Node | undefined): string | null {
+function globalPropertyName(target: Node | undefined): string | null {
+  const node = unwrapExpression(target);
   if (node?.type !== 'MemberExpression') return null;
-  const object = node.object as Node | undefined;
+  const object = unwrapExpression(node.object as Node | undefined);
   if (object?.type !== 'Identifier' || !GLOBAL_OBJECTS.has(String(object.name))) return null;
   const property = node.property as Node | undefined;
   if (!property) return null;
@@ -972,11 +976,37 @@ function globalPropertyName(node: Node | undefined): string | null {
   if (node.computed && property.type === 'Literal' && typeof property.value === 'string') {
     return property.value;
   }
+  if (node.computed && property.type === 'TemplateLiteral') {
+    const quasis = (property.quasis as Node[] | undefined) ?? [];
+    if (quasis.length === 1) {
+      const cooked = (quasis[0]?.value as { cooked?: string } | undefined)?.cooked;
+      if (cooked !== undefined) return cooked;
+    }
+  }
   return null;
 }
 
+/** Type assertions and parentheses change nothing at runtime, so see through them. */
+const TRANSPARENT_WRAPPERS = new Set([
+  'ParenthesizedExpression',
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+]);
+
+function unwrapExpression(node: Node | undefined): Node | undefined {
+  let current = node;
+  while (current && TRANSPARENT_WRAPPERS.has(current.type)) {
+    current = current.expression as Node | undefined;
+  }
+  return current;
+}
+
 /** The names a binding pattern introduces: `B`, `{ a, b: c }`, `[d, ...e]`, `f = 1`. */
-function patternNames(pattern: Node | undefined | null): string[] {
+function patternNames(target: Node | undefined | null): string[] {
+  // `(B as any) += x` and `B! = x` assign to `B`.
+  const pattern = unwrapExpression(target ?? undefined);
   if (!pattern) return [];
   switch (pattern.type) {
     case 'Identifier':
