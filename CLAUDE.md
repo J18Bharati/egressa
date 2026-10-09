@@ -73,6 +73,12 @@ facts → `output/sarif.ts` or the CLI formatters.
 **Never read `node_modules`.** Scans are offline and must work on a fresh clone. Fixture repos ship
 lockfiles only, which enforces this structurally.
 
+**Never read outside the scan root.** The scanned repository is untrusted input, and a symlink is
+part of it. The walk does not follow links, and every reader in core opens files through
+`discovery/read-inside.ts`, which refuses a path whose real location leaves the root. A new reader
+that calls `readFileSync(join(root, …))` directly reopens the leak where a linked lockfile's first
+line reached the MCP result through a YAML parse error.
+
 **`jsonc-parser`, not `JSON.parse`, for manifests.** It yields source offsets (UTF-16 code units,
 not bytes — SARIF distinguishes the two, and `LineIndex` converts them to lines over the same
 string, so the pipeline is self-consistent). Without them every dependency finding degrades to a

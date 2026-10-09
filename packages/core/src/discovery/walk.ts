@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import ignore from 'ignore';
 import { globSync } from 'tinyglobby';
+import { readInsideRoot } from './read-inside.js';
 
 /**
  * Default exclusions. `node_modules` is excluded structurally rather than by
@@ -114,6 +114,7 @@ export function walk(options: WalkOptions): WalkResult {
     cwd: root,
     ignore: [...DEFAULT_EXCLUDES, ...exclude],
     dot: false,
+    followSymbolicLinks: false,
   })
     .map((p) =>
       p
@@ -127,7 +128,16 @@ export function walk(options: WalkOptions): WalkResult {
 
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
   const collect = (patterns: string[]): string[] =>
-    globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false })
+    globSync(patterns, {
+      cwd: root,
+      ignore: ignoreGlobs,
+      absolute: false,
+      dot: false,
+      // A linked directory is not descended into: `deps -> /` would walk the
+      // whole filesystem. Linked files are still listed, and every reader
+      // refuses one whose real path leaves the root (read-inside.ts).
+      followSymbolicLinks: false,
+    })
       .map((p) => p.split(sep).join('/'))
       .filter((p) => (filter ? !filter.ignores(p) : true))
       .sort();
@@ -144,7 +154,7 @@ function buildIgnoreFilter(root: string): ReturnType<typeof ignore> | null {
   let found = false;
   for (const name of ['.gitignore', '.egressaignore']) {
     try {
-      matcher.add(readFileSync(`${root}/${name}`, 'utf8'));
+      matcher.add(readInsideRoot(root, name));
       found = true;
     } catch {
       // Absent ignore files are the normal case, not an error.

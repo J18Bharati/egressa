@@ -1,10 +1,11 @@
-import { readFileSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
 import { type EgressaConfig, applySuppressions, suppressionProblems } from './config/index.js';
+import { readInsideRoot } from './discovery/read-inside.js';
 import { excludeProblem, walk } from './discovery/walk.js';
 import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
@@ -173,7 +174,7 @@ export function scan(options: ScanOptions): ScanResult {
     for (const file of sources) {
       let text: string;
       try {
-        text = readFileSync(join(root, file), 'utf8');
+        text = readInsideRoot(root, file);
       } catch (error) {
         errors.push({ file, message: `unreadable: ${(error as Error).message}`, fatal: false });
         continue;

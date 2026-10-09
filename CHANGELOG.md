@@ -39,6 +39,14 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Fixed
 
+- **A symlink could make a scan read, and quote, a file outside the repository.** The walk followed
+  links and nothing checked where a file really lived, so a committed
+  `pnpm-lock.yaml -> ~/.aws/credentials` was read and the YAML parser's error -- which quotes the
+  line it failed on -- carried that line into JSON, SARIF and the MCP result; a linked source file
+  outside the root produced findings with its snippets. Links are no longer followed, every reader
+  refuses a path whose real location leaves the root, and lockfile parse errors keep only their
+  first line. No finding changed across a real backend codebase and every fixture repository.
+
 - **The privacy review could run a command the reviewed repository supplied, through git.**
   `scope.sh` runs `git ls-files` and `git diff` inside the repository under review, and a
   repository handed over with its `.git` directory -- an archive, a shared folder -- brings its own

@@ -204,6 +204,19 @@ The distinction is carried by the type, not by the wording.
 
 Bounded at `MAX_DEPTH = 3`. Deeper chains report as unresolved rather than being followed.
 
+### Symbolic links are not followed
+
+A linked file or directory is not scanned, wherever it points. The scanned repository is untrusted
+input and a link is part of it: `pnpm-lock.yaml -> ~/.aws/credentials` used to be read, and the YAML
+parser's error quoted its first line into JSON, SARIF and the MCP result; `deps -> /` would walk the
+whole filesystem. The glob library offers no middle setting -- it either follows every link or
+lists none -- so none are followed, including links that stay inside the repository. Those are
+normally a second path to a file that is scanned under its real name; a repository that keeps a
+real manifest or source file *only* behind a link is the case this misses.
+
+Every reader also refuses a path whose real location leaves the scan root
+(`discovery/read-inside.ts`), which covers `.gitignore` and `.egressaignore`, read outside the walk.
+
 ### Minified, bundled and vendored code
 
 Skipped entirely: `*.min.js`, `*.bundle.js`, `dist/`, `build/`, `.next/`, `vendor/`. Matching

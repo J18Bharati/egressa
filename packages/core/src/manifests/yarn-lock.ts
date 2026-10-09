@@ -70,7 +70,13 @@ export function parseYarnBerryLock(text: string, manifestPath: string): Manifest
     return {
       dependencies: [],
       errors: [
-        { file: manifestPath, message: doc.errors[0]?.message ?? 'YAML parse error', fatal: false },
+        {
+          file: manifestPath,
+          // The parser's message quotes the failing line after its first one;
+          // the position is enough, and the excerpt is file content.
+          message: doc.errors[0]?.message.split('\n')[0] ?? 'YAML parse error',
+          fatal: false,
+        },
       ],
     };
   }
