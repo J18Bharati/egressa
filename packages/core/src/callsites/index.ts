@@ -82,7 +82,7 @@ export interface AnalyzeFileResult {
 type BindingValue =
   | { kind: 'string'; value: string }
   | { kind: 'env'; name: string }
-  | { kind: 'client'; host: string | null; reason?: string }
+  | { kind: 'client'; host: string | null; reason?: string; allowAbsolute: AllowAbsolute }
   /**
    * `const u = new URL('https://...')`: a constructed reference object whose
    * destination is known. `start` is the offset of the `new` expression, so a
@@ -219,34 +219,61 @@ export function analyzeFile(
     const shape = calleeShape(callee);
     const args = (node.arguments as Node[] | undefined) ?? [];
 
-    // A call on a client binding: `const api = axios.create({baseURL: X})` then
-    // `api.get('/v1/thing')` attributes to X.
-    if (callee.type === 'MemberExpression' && shape.object) {
-      const binding = readable(bindings, shape.object, unstable, node.start);
-      if (binding?.kind === 'client') {
-        emit(
-          node,
-          toHit(
-            binding.host
+    const context: ResolveContext = { unstable, callStart: node.start, referencesRead: [] };
+
+    // A request through axios, where a base URL and the request URL can both
+    // name a destination: `const api = axios.create({ baseURL: X })` then
+    // `api.get(Y)`, or `axios({ baseURL: X, url: Y })`. Which one wins is
+    // axios's rule, not ours -- see `resolveAxiosRequest`.
+    const binding =
+      callee.type === 'MemberExpression' && shape.object
+        ? readable(bindings, shape.object, unstable, node.start)
+        : null;
+    const onClient = binding?.kind === 'client';
+    const direct = isNew ? null : directAxiosMethod(shape);
+    if (onClient || direct) {
+      const request = axiosRequest(onClient ? (shape.property ?? '') : (direct ?? ''), args);
+      const inherited: AxiosBase | null = !onClient
+        ? null
+        : {
+            resolution: binding.host
               ? { kind: 'resolved', host: binding.host }
               : { kind: 'unresolved', reason: binding.reason ?? 'client base URL not resolvable' },
-            node,
-            index,
-            filePath,
-            // Resolved through a binding rather than read directly at the call.
-            'medium',
-            'callsite',
-          ),
-        );
+            atCall: false,
+          };
+      const base = requestBase(request.config, inherited, bindings, context);
+      const allowAbsolute = allowAbsoluteFrom(
+        request.config,
+        onClient ? binding.allowAbsolute : true,
+      );
+      const { resolution, fromBase } = resolveAxiosRequest(
+        request.url,
+        base,
+        allowAbsolute,
+        bindings,
+        context,
+      );
+      if (resolution.kind !== 'not-a-url') {
+        // A host joined from a client's base URL was read through a binding,
+        // not at the call, and says so.
+        const confidence = fromBase && base && !base.atCall ? 'medium' : 'high';
+        emit(node, toHit(resolution, node, index, filePath, confidence, 'callsite'));
+        if (resolution.kind === 'resolved') {
+          for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+        }
         return;
       }
+      // An absolute URL that does not parse sends nothing. A direct call falls
+      // through only to the knowledge base sinks, which read option names
+      // axios does not have; the axios rows themselves are not consulted
+      // again, since they read `url` and `baseURL` without axios's rule.
+      if (onClient) return;
     }
-
-    const context: ResolveContext = { unstable, callStart: node.start, referencesRead: [] };
 
     // Several sinks can match one call. Try each until one yields a
     // destination, so a name shared by two vendors cannot shadow the other.
     for (const sink of findSinks(shape, isNew, sinks)) {
+      if (direct && isAxiosSink(sink)) continue;
       const configKeys = sink.configKeys ?? [];
 
       if (sink.anyArg) {
@@ -807,15 +834,222 @@ function clientBindingFor(
 
   const args = (init.arguments as Node[] | undefined) ?? [];
   const argument = args[sink.argIndex];
-  if (!argument) return { kind: 'client', host: null, reason: 'client created with no base URL' };
+  const config = argument ? unwrap(argument) : undefined;
+  const allowAbsolute = allowAbsoluteFrom(config, true);
+  // Read the key the way the object literal evaluates: the last one wins.
+  const baseNode = config?.type === 'ObjectExpression' ? configProperty(config, 'baseURL') : config;
+  if (!baseNode) {
+    return { kind: 'client', host: null, reason: 'client created with no base URL', allowAbsolute };
+  }
 
-  const resolution = resolveArgument(argument, sink.configKeys, bindings, 0, context);
-  if (resolution.kind === 'resolved') return { kind: 'client', host: resolution.host };
+  const resolution = resolveArgument(baseNode, sink.configKeys, bindings, 0, context);
+  if (resolution.kind === 'resolved') {
+    return { kind: 'client', host: resolution.host, allowAbsolute };
+  }
   return {
     kind: 'client',
     host: null,
     reason: resolution.kind === 'unresolved' ? resolution.reason : 'base URL not a URL',
+    allowAbsolute,
   };
+}
+
+/**
+ * `allowAbsoluteUrls` as axios will apply it: a literal boolean, inherited
+ * when the key is absent, and `unknown` for anything else. axios compares it
+ * with `== false`, so a non-boolean literal is not simply truthy or falsy, and
+ * it is not worth reproducing loose equality to read one.
+ */
+type AllowAbsolute = boolean | 'unknown';
+
+/** A base URL, and whether it was written at the call or reached through a binding. */
+interface AxiosBase {
+  resolution: HostResolution;
+  atCall: boolean;
+}
+
+/** Request URL and config arguments of one axios call. */
+interface AxiosRequest {
+  url: Node | null;
+  config: Node | undefined;
+}
+
+/**
+ * Position of the config argument by method, from axios 1.12.2's
+ * `lib/core/Axios.js`: `get(url, config)` and `post(url, data, config)`.
+ * `request` is `request(configOrUrl, config)` and is handled apart.
+ */
+const AXIOS_CONFIG_INDEX: Record<string, number> = {
+  get: 1,
+  delete: 1,
+  head: 1,
+  options: 1,
+  post: 2,
+  put: 2,
+  patch: 2,
+  postForm: 2,
+  putForm: 2,
+  patchForm: 2,
+};
+
+/**
+ * axios's `isAbsoluteURL`, verbatim. It tests the raw string -- no trimming --
+ * so `' https://x'` and `'https:/x'` are relative and join under the base.
+ */
+const AXIOS_ABSOLUTE = /^([a-z][a-z\d+\-.]*:)?\/\//i;
+
+/**
+ * Static text that some continuation could still turn into an `AXIOS_ABSOLUTE`
+ * match: nothing, `/`, or a scheme still being written. `/${p}` is
+ * `//evil.example/x` when `p` begins with a slash.
+ */
+const COULD_BECOME_ABSOLUTE = /^(?:[a-z][a-z\d+\-.]*(?::\/?)?|\/)?$/i;
+
+/** `axios(...)` and `axios.<method>(...)` for the methods that send a request. */
+function directAxiosMethod(shape: CalleeShape): string | null {
+  if (shape.name === 'axios') return 'request';
+  if (shape.object !== 'axios' || !shape.property) return null;
+  if (shape.property === 'request' || shape.property in AXIOS_CONFIG_INDEX) return shape.property;
+  return null;
+}
+
+/** The built-in sink rows for axios, which `resolveAxiosRequest` replaces. */
+function isAxiosSink(sink: SinkDefinition): boolean {
+  return sink.callee === 'axios' || (sink.object === 'axios' && sink.property !== 'create');
+}
+
+function axiosRequest(method: string, args: Node[]): AxiosRequest {
+  const first = args[0] ? unwrap(args[0]) : undefined;
+  if (method === 'request') {
+    if (first?.type === 'ObjectExpression') {
+      return { url: configProperty(first, 'url'), config: first };
+    }
+    return { url: args[0] ?? null, config: args[1] };
+  }
+  const index = AXIOS_CONFIG_INDEX[method];
+  // A method axios does not have, on a client: its first argument is read as
+  // a URL, and no argument as config.
+  return {
+    url: first && first.type !== 'ObjectExpression' ? (args[0] ?? null) : null,
+    config: index === undefined ? undefined : args[index],
+  };
+}
+
+/** The request config's own `baseURL` when it has one, else the inherited base. */
+function requestBase(
+  config: Node | undefined,
+  inherited: AxiosBase | null,
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+): AxiosBase | null {
+  const object = config ? unwrap(config) : undefined;
+  const value = object?.type === 'ObjectExpression' ? configProperty(object, 'baseURL') : null;
+  if (!value) return inherited;
+  return { resolution: resolveArgument(value, [], bindings, 0, context), atCall: true };
+}
+
+/** A config's `allowAbsoluteUrls`, or `inherited` when it does not set one. */
+function allowAbsoluteFrom(config: Node | undefined, inherited: AllowAbsolute): AllowAbsolute {
+  const object = config ? unwrap(config) : undefined;
+  if (object?.type !== 'ObjectExpression') return inherited;
+  const value = configProperty(object, 'allowAbsoluteUrls');
+  if (!value) return inherited;
+  const literal = unwrap(value);
+  return literal.type === 'Literal' && typeof literal.value === 'boolean'
+    ? literal.value
+    : 'unknown';
+}
+
+/**
+ * Where an axios request goes, by axios's own `buildFullPath`: the request URL
+ * when it is absolute, the base URL when it is relative or when
+ * `allowAbsoluteUrls` is false.
+ *
+ * `base` is null when no base URL is visible at all, and then the request URL
+ * is read exactly as any other sink reads it. Otherwise a request URL that
+ * could be either -- an unknown variable, or static text that does not yet
+ * rule out a scheme -- is declined rather than given the base URL's host,
+ * because an absolute one would replace it.
+ */
+function resolveAxiosRequest(
+  url: Node | null,
+  base: AxiosBase | null,
+  allowAbsolute: AllowAbsolute,
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+): { resolution: HostResolution; fromBase: boolean } {
+  const notAUrl: HostResolution = { kind: 'not-a-url' };
+  const fromBase = { resolution: base?.resolution ?? notAUrl, fromBase: true };
+  const fromUrl = (resolution: HostResolution) => ({ resolution, fromBase: false });
+  const decline = (reason: string) => fromUrl({ kind: 'unresolved', reason });
+
+  if (!url) return fromBase;
+  if (base === null) return fromUrl(resolveArgument(url, [], bindings, 0, context));
+  if (allowAbsolute === false) return fromBase;
+
+  const lead = leadingStatic(url, bindings, context);
+  const absolute = AXIOS_ABSOLUTE.exec(lead.text);
+  if (!absolute) {
+    if (lead.complete || !COULD_BECOME_ABSOLUTE.test(lead.text)) return fromBase;
+    // Nothing static says what this is. A constructed URL is the one value
+    // known to render absolute; anything else names its reason or is declined.
+    const mark = context.referencesRead?.length ?? 0;
+    const resolution = resolveArgument(url, [], bindings, 0, context);
+    const viaReference =
+      resolution.kind === 'resolved' && (context.referencesRead?.length ?? 0) > mark;
+    if (!viaReference) {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return lead.text === '' && resolution.kind === 'unresolved'
+        ? fromUrl(resolution)
+        : decline('request URL may be absolute, which would replace the base URL');
+    }
+    if (allowAbsolute === 'unknown') {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return decline(UNKNOWN_ALLOW_ABSOLUTE);
+    }
+    return fromUrl(resolution);
+  }
+
+  if (allowAbsolute === 'unknown') return decline(UNKNOWN_ALLOW_ABSOLUTE);
+  if (!absolute[1]) {
+    return decline('request URL is protocol-relative; its scheme comes from the page at runtime');
+  }
+  return fromUrl(resolveArgument(url, [], bindings, 0, context));
+}
+
+const UNKNOWN_ALLOW_ABSOLUTE =
+  'allowAbsoluteUrls is not a literal, so the request URL may or may not replace the base URL';
+
+/**
+ * The value of the last non-computed property named `key` -- the one an
+ * object literal evaluates to. A spread or computed key is not read; a config
+ * whose `baseURL` arrives that way is a documented limitation.
+ */
+function configProperty(object: Node, key: string): Node | null {
+  let found: Node | null = null;
+  for (const property of (object.properties as Node[] | undefined) ?? []) {
+    if (property.type !== 'Property' || property.computed) continue;
+    const name = property.key as Node | undefined;
+    const label = name ? String(name.name ?? (name as { value?: string }).value ?? '') : '';
+    if (label === key) found = (property.value as Node | undefined) ?? null;
+  }
+  return found;
+}
+
+/** Strips the TypeScript and grouping wrappers that carry no meaning here. */
+function unwrap(node: Node): Node {
+  let current = node;
+  while (
+    current.type === 'TSAsExpression' ||
+    current.type === 'TSSatisfiesExpression' ||
+    current.type === 'TSNonNullExpression' ||
+    current.type === 'ParenthesizedExpression'
+  ) {
+    const inner = current.expression as Node | undefined;
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
 }
 
 /** Recovers `X` from `process.env.X` or `import.meta.env.X`. */

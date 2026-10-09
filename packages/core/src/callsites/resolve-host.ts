@@ -57,6 +57,11 @@ export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolut
   const special = SPECIAL_SCHEMES.has(schemeName);
   const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
 
+  if (!special) {
+    const refusal = connectionUriRefusal(rest, delimiter, hasMore);
+    if (refusal) return { kind: 'unresolved', reason: refusal };
+  }
+
   if (delimiter === -1) {
     if (hasMore) {
       return {
@@ -87,6 +92,51 @@ function hostOf(scheme: string, special: boolean, authority: string): HostResolu
   } catch {
     return { kind: 'not-a-url' };
   }
+}
+
+/**
+ * Why a non-special URI's authority is not its destination, or null when it is.
+ *
+ * These are connection strings, and their clients do not read them the way
+ * WHATWG reads a URL -- or the way each other does. Three shapes make the
+ * authority before the first `/`, `?` or `#` a confident wrong host:
+ *
+ * - A `,` in it. MongoDB's connection string spec and libpq both take a host
+ *   list, and the first entry is not the destination.
+ * - An `@` after a `?` or `#` and before the next `/`. libpq takes userinfo
+ *   up to the first `@` before any `/` and treats neither `?` nor `#` as a
+ *   delimiter, so `postgres://a.example:p#w@b.example/` connects to b.example.
+ *   An interpolation in that stretch could supply the `@`, so it is refused too.
+ * - A `host=` or `hostaddr=` query parameter, which libpq connects to in place
+ *   of the authority -- and an interpolation inside the query, which could be one.
+ *
+ * Refusing is chosen over parsing each scheme as its client does: the refusals
+ * are checkable against the specs, and a per-client parser is one more set of
+ * hand-written URL rules of the kind that kept producing wrong hosts.
+ */
+function connectionUriRefusal(rest: string, delimiter: number, hasMore: boolean): string | null {
+  const authority = delimiter === -1 ? rest : rest.slice(0, delimiter);
+  if (authority.includes(',')) return 'connection URI lists several hosts';
+  if (delimiter === -1) return null;
+
+  const tail = rest.slice(delimiter);
+  const slash = tail.indexOf('/');
+  const beforeSlash = slash === -1 ? tail : tail.slice(0, slash);
+  if (beforeSlash.includes('@') || (slash === -1 && hasMore && beforeSlash !== '')) {
+    return 'connection URI userinfo is ambiguous: an @ may follow its ? or #';
+  }
+
+  const query = tail.indexOf('?');
+  if (query === -1) return null;
+  const fragment = tail.indexOf('#', query);
+  const params = tail.slice(query, fragment === -1 ? undefined : fragment);
+  if (/[?&]host(?:addr)?=/i.test(params)) {
+    return 'connection URI names its host in a query parameter';
+  }
+  if (hasMore && fragment === -1) {
+    return 'connection URI query is completed by an interpolated value, which may name a host';
+  }
+  return null;
 }
 
 /** C0 controls and space, which WHATWG URL parsing strips from the ends of its input. */

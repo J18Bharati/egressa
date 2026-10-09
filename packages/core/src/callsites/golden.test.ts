@@ -136,6 +136,13 @@ const RESOLVES: Case[] = [
     host: 'api.eu.mailgun.net',
   },
   {
+    // A single-host connection string still names its host.
+    name: 'connection URI with userinfo and a port',
+    code: "const u = new URL('postgres://user:pw@db.example.com:5432/x');",
+    host: 'db.example.com',
+    kind: 'reference',
+  },
+  {
     name: 'client binding whose baseURL comes from a const',
     code: `const BASE = 'https://eu.api.openai.com';\nconst client = axios.create({ baseURL: BASE });\nclient.post('/v1/chat');`,
     host: 'eu.api.openai.com',
@@ -680,6 +687,28 @@ const DOES_NOT_RESOLVE: Case[] = [
 
 const NO_CALL_SITE: Case[] = [
   {
+    // A connection string, not an HTTP URL: its host list, userinfo and query
+    // are read by the database client's own rules. The reference sink is the
+    // one place one reaches today, and WHATWG rejects all three below.
+    name: 'connection URI with a host list',
+    code: "const u = new URL('mongodb://a.example.com:27017,evil.com/');",
+    host: null,
+    noHit: true,
+  },
+  {
+    name: 'connection URI with an at-sign after a fragment',
+    code: "const u = new URL('postgres://api.stripe.com:p#w@evil.example/');",
+    host: null,
+    noHit: true,
+  },
+  {
+    // libpq connects to the host= parameter, not the authority.
+    name: 'connection URI with a host query parameter',
+    code: "const u = new URL('postgres://db.example.com/app?host=evil.example');",
+    host: null,
+    noHit: true,
+  },
+  {
     // `new URL` rejects both, so fetch throws before any request is made.
     name: 'invalid authority with an encoded at-sign',
     code: "fetch('https://evil.example%40api.stripe.com/');",
@@ -771,6 +800,258 @@ const NO_CALL_SITE: Case[] = [
     noHit: true,
   },
 ];
+
+/**
+ * Requests made through axios, where a base URL and a request URL can both
+ * name a destination.
+ *
+ * axios joins them in `buildFullPath`: the request URL wins when
+ * `isAbsoluteURL` says it is absolute -- `/^([a-z][a-z\d+\-.]*:)?\/\//i` on
+ * the raw string, so `scheme://` and protocol-relative `//host` -- unless
+ * `allowAbsoluteUrls` is loosely `false`, in which case the base always wins.
+ * Every expectation here was checked against axios 1.12.2's source and, for
+ * the joined string, against Node's `new URL()`.
+ *
+ * The row checks the hit on the snippet's LAST line, which is always the
+ * request. In the client rows the first hit is the `axios.create(...)` call,
+ * and checking that one is how the earlier client rows never tested the
+ * request at all.
+ */
+const AXIOS_REQUESTS: Case[] = [
+  {
+    // The original wrong host: Stripe at high confidence. axios sends this
+    // to evil.example.
+    name: 'an absolute request URL overrides the client base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x');`,
+    host: 'evil.example',
+    confidence: 'high',
+  },
+  {
+    name: 'a relative request path joins the client base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/v1/charges');`,
+    host: 'api.stripe.com',
+    confidence: 'medium',
+  },
+  {
+    name: 'a path with no leading slash joins the client base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('v1/charges');`,
+    host: 'api.stripe.com',
+  },
+  {
+    // `https:/` is not `isAbsoluteURL`, so axios joins it under the base:
+    // https://api.stripe.com/https:/evil.example/x. WHATWG would not care.
+    name: 'a scheme with one slash is relative to axios',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https:/evil.example/x');`,
+    host: 'api.stripe.com',
+  },
+  {
+    // axios tests the raw string; the leading space makes it relative, and
+    // the joined URL is still Stripe's.
+    name: 'a leading space makes an absolute-looking URL relative to axios',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(' https://evil.example/x');`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a template whose static text is a relative path joins the base URL',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`/v1/charges/${id}`);",
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a template whose static text is absolute resolves to its own host',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`https://evil.example/v1/${id}`);",
+    host: 'evil.example',
+    confidence: 'high',
+  },
+  {
+    name: 'a request URL through a module-scope constant is read like a literal',
+    code: `const U = 'https://evil.example/x';\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(U);`,
+    host: 'evil.example',
+  },
+  {
+    // A URL object stringifies to an absolute URL, so axios uses it as is.
+    name: 'a constructed URL passed as the request URL',
+    code: `const u = new URL('https://evil.example/x');\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(u);`,
+    host: 'evil.example',
+  },
+  {
+    // Absolute and ignored: the base is joined in front of it.
+    name: 'a client created with allowAbsoluteUrls false keeps its base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com', allowAbsoluteUrls: false });\napi.get('https://evil.example/x');`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a request with allowAbsoluteUrls false keeps the client base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x', { allowAbsoluteUrls: false });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a baseURL in the request config replaces the client one',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', { baseURL: 'https://evil.example' });`,
+    host: 'evil.example',
+  },
+  {
+    // post's second argument is the body; its config is the third.
+    name: 'a baseURL in a post body is data, not config',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.post('/x', { baseURL: 'https://evil.example' });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a baseURL in a post config replaces the client one',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.post('/x', body, { baseURL: 'https://evil.example' });`,
+    host: 'evil.example',
+  },
+  {
+    name: 'request with a config object reads its url',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.request({ url: 'https://evil.example/x' });`,
+    host: 'evil.example',
+  },
+  {
+    name: 'request with a relative url in its config joins the base URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.request({ url: '/v1', method: 'POST' });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'request with a URL string',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.request('https://evil.example/x');`,
+    host: 'evil.example',
+  },
+  {
+    // Object literal keys: the last one wins.
+    name: 'a repeated baseURL key in the create config',
+    code: `const api = axios.create({ baseURL: 'https://evil.example', baseURL: 'https://api.stripe.com' });\napi.get('/x');`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a client with no base URL still resolves an absolute request URL',
+    code: `const api = axios.create();\napi.get('https://api.stripe.com/v1');`,
+    host: 'api.stripe.com',
+    confidence: 'high',
+  },
+  // Declines. Each is a request whose destination could be the base URL or
+  // something else entirely, and naming either would be a guess.
+  {
+    name: 'a request URL from an unknown variable',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(url);`,
+    host: null,
+    reason: 'value of url is not known statically',
+  },
+  {
+    name: 'a request URL from an environment variable',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(process.env.TARGET);`,
+    host: null,
+    reason: 'environment variable TARGET',
+  },
+  {
+    name: 'a template that begins with an interpolation',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`${path}/v1`);",
+    host: null,
+    reason: 'value of path is not known statically',
+  },
+  {
+    // `/${p}` with p = '/evil.example/x' is `//evil.example/x`.
+    name: 'a template whose static text is one slash',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`/${path}`);",
+    host: null,
+    reason: 'may be absolute',
+  },
+  {
+    // `users${p}` with p = '://evil.example' is a scheme.
+    name: 'a template whose static text could still be a scheme',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`users${p}`);",
+    host: null,
+    reason: 'may be absolute',
+  },
+  {
+    name: 'a template with an absolute scheme and an interpolated host',
+    code: "const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(`https://${host}/x`);",
+    host: null,
+    reason: 'completed by an interpolated value',
+  },
+  {
+    // Browsers resolve it against the page; Node rejects it. Neither is the
+    // base URL, and which origin it is cannot be read from source.
+    name: 'a protocol-relative request URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('//evil.example/x');`,
+    host: null,
+    reason: 'protocol-relative',
+  },
+  {
+    name: 'a client whose allowAbsoluteUrls is not a literal',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com', allowAbsoluteUrls: STRICT });\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'allowAbsoluteUrls',
+  },
+  {
+    name: 'a request baseURL that is an environment variable',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', { baseURL: process.env.OTHER });`,
+    host: null,
+    reason: 'environment variable OTHER',
+  },
+  // Direct axios calls, with no client: the same rule over one config.
+  {
+    // Used to report Stripe: the first matching key won.
+    name: 'axios config with both baseURL and an absolute url',
+    code: `axios({ baseURL: 'https://api.stripe.com', url: 'https://evil.example/x' });`,
+    host: 'evil.example',
+    confidence: 'high',
+  },
+  {
+    name: 'axios config with a relative url and a baseURL',
+    code: `axios({ url: '/v1', baseURL: 'https://api.stripe.com' });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'axios.request config with allowAbsoluteUrls false',
+    code: `axios.request({ baseURL: 'https://api.stripe.com', url: 'https://evil.example/x', allowAbsoluteUrls: false });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'axios.get with a baseURL and allowAbsoluteUrls false in its config',
+    code: `axios.get('https://evil.example/x', { baseURL: 'https://api.stripe.com', allowAbsoluteUrls: false });`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'axios.get with a relative URL and a baseURL in its config',
+    code: `axios.get('/v1', { baseURL: 'https://api.stripe.com' });`,
+    host: 'api.stripe.com',
+  },
+  // Documented limitations (docs/LIMITATIONS.md, "axios configuration the
+  // analyzer cannot see"): a config that is not an object literal is assumed
+  // not to replace the base URL. Recorded so a change is deliberate.
+  {
+    name: 'a request config passed by name is not read',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', opts);`,
+    host: 'api.stripe.com',
+  },
+];
+
+describe('golden table: requests made through axios', () => {
+  for (const testCase of AXIOS_REQUESTS) {
+    it(testCase.name, () => {
+      const { hits, error } = analyzeFile(testCase.code, 'input.ts');
+      expect(error).toBeUndefined();
+      const lastLine = testCase.code.split('\n').length;
+      const atRequest = hits.filter((h) => h.location.startLine === lastLine);
+      expect(atRequest).toHaveLength(1);
+      const hit = atRequest[0];
+      expect(hit?.kind).toBe('callsite');
+      expect(hit?.host).toBe(testCase.host);
+      if (testCase.host === null && testCase.reason) {
+        expect(hit?.unresolvedReason).toContain(testCase.reason);
+      }
+      if (testCase.confidence) expect(hit?.confidence).toBe(testCase.confidence);
+    });
+  }
+
+  it('reports nothing for an absolute request URL that does not parse', () => {
+    // fetch() and axios both throw before any request is made.
+    const { hits } = analyzeFile(
+      `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example%40api.stripe.com/');`,
+      'input.ts',
+    );
+    expect(hits.filter((h) => h.location.startLine === 2)).toEqual([]);
+  });
+});
 
 describe('golden table: knowledge base client constructors', () => {
   // Sinks derived from `aliases.clientConstructors`. A vendor SDK's own
