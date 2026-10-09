@@ -207,9 +207,9 @@ export function analyzeFile(
     if (literal) bindings.set(name, { ...literal, declaredAt: node.start });
   }
 
-  // Writes to `<client>.defaults.<key>` anywhere in the file, which change
-  // what an axios request joins.
-  const defaultsWrites = collectDefaultsWrites(program);
+  // Whether anything in the file could change an axios `defaults` object's
+  // base URL or `allowAbsoluteUrls`.
+  const defaultsTaint = collectDefaultsTaint(program);
 
   // Pass 2: find sinks and resolve their destination.
   walk(program, (node) => {
@@ -240,16 +240,19 @@ export function analyzeFile(
     if (onClient && AXIOS_NON_REQUEST_METHODS.has(shape.property ?? '')) return;
     if (onClient || direct) {
       const request = axiosRequest(onClient ? (shape.property ?? '') : (direct ?? ''), args);
-      const clientName = onClient ? (shape.object ?? '') : null;
-      const clientDefaults = clientName === null ? undefined : defaultsWrites.get(clientName);
+      if (request.urlOpaque) {
+        const reason = 'request URL may be set by a spread or computed key in its config';
+        emit(
+          node,
+          toHit({ kind: 'unresolved', reason }, node, index, filePath, 'high', 'callsite'),
+        );
+        return;
+      }
       const inherited: AxiosBase | null = !onClient
         ? null
         : {
-            resolution: overridesBase(clientDefaults)
-              ? {
-                  kind: 'unresolved',
-                  reason: `base URL is reassigned through ${clientName}.defaults`,
-                }
+            resolution: defaultsTaint.base
+              ? { kind: 'unresolved', reason: defaultsTaint.base }
               : binding.host
                 ? { kind: 'resolved', host: binding.host }
                 : {
@@ -259,16 +262,13 @@ export function analyzeFile(
             atCall: false,
           };
       const base = requestBase(request.config, inherited, bindings, context);
-      // A write to `axios.defaults` or `api.defaults` anywhere in the file can
-      // change `allowAbsoluteUrls` for this request; where it happens relative
-      // to the client's creation is not followed.
-      const written = [clientDefaults, defaultsWrites.get('axios')].find(overridesAllowAbsolute);
+      // Anything in the file that could change a `defaults` object's
+      // `allowAbsoluteUrls` applies to every request: with no scope chain,
+      // which client an alias or `Object.assign` reaches is not followed.
       const allowAbsolute = allowAbsoluteFrom(
         request.config,
-        written
-          ? {
-              reason: `allowAbsoluteUrls is written through ${written === clientDefaults ? clientName : 'axios'}.defaults, so the request URL may or may not replace the base URL`,
-            }
+        defaultsTaint.allowAbsolute
+          ? { reason: defaultsTaint.allowAbsolute }
           : onClient
             ? binding.allowAbsolute
             : true,
@@ -910,6 +910,8 @@ interface AxiosBase {
 /** Request URL and config arguments of one axios call. */
 interface AxiosRequest {
   url: Node | null;
+  /** A spread or computed key in the config could set `url`. */
+  urlOpaque: boolean;
   config: Node | undefined;
 }
 
@@ -961,15 +963,17 @@ function axiosRequest(method: string, args: Node[]): AxiosRequest {
   const first = args[0] ? unwrap(args[0]) : undefined;
   if (method === 'request') {
     if (first?.type === 'ObjectExpression') {
-      return { url: configProperty(first, 'url').value, config: first };
+      const { value, opaque } = configProperty(first, 'url');
+      return { url: value, urlOpaque: opaque, config: first };
     }
-    return { url: args[0] ?? null, config: args[1] };
+    return { url: args[0] ?? null, urlOpaque: false, config: args[1] };
   }
   const index = AXIOS_CONFIG_INDEX[method];
   // A method axios does not have, on a client: its first argument is read as
   // a URL, and no argument as config.
   return {
     url: first && first.type !== 'ObjectExpression' ? (args[0] ?? null) : null,
+    urlOpaque: false,
     config: index === undefined ? undefined : args[index],
   };
 }
@@ -1086,7 +1090,17 @@ function isUrlObject(node: Node, bindings: Map<string, Binding>, context: Resolv
   }
   if (value.type === 'NewExpression') {
     const callee = value.callee as Node | undefined;
-    return callee?.type === 'Identifier' && String(callee.name) === 'URL';
+    if (callee?.type !== 'Identifier' || String(callee.name) !== 'URL') return false;
+    // `new URL(new Request(X))` throws: a Request stringifies to
+    // `[object Request]`. A URL wrapping another URL, or a string, is fine.
+    const inner = ((value.arguments as Node[] | undefined) ?? [])[0];
+    const argument = inner ? unwrap(inner) : undefined;
+    if (argument?.type === 'NewExpression') return isUrlObject(argument, bindings, context);
+    if (argument?.type === 'Identifier') {
+      const bound = readable(bindings, String(argument.name), context.unstable, context.callStart);
+      if (bound?.kind === 'reference') return bound.via === 'URL';
+    }
+    return true;
   }
   if (value.type === 'Identifier') {
     const binding = readable(bindings, String(value.name), context.unstable, context.callStart);
@@ -1124,46 +1138,68 @@ function configProperty(object: Node, key: string): { value: Node | null; opaque
 const BASE_REPLACEABLE = 'base URL may be replaced by a spread or computed key that follows it';
 
 /**
- * Keys written through `<name>.defaults.<key> = ...` or `<name>.defaults = ...`
- * anywhere in the file, by object name. `*` stands for the whole defaults
- * object or a computed key.
+ * Whether the file could change an axios `defaults` object's base URL or
+ * `allowAbsoluteUrls`, as a reason, or null.
+ *
+ * Writes are not matched by shape -- `Object.assign(api.defaults, ...)`, an
+ * alias of the client or of its defaults, `Reflect.set`, destructuring and
+ * `delete` all reach it. Instead, every `<anything>.defaults` is suspect unless
+ * it is only the object of a named member other than the two keys, which is
+ * how `api.defaults.headers.common.Authorization = token` stays harmless. It
+ * covers the whole file and every client in it, because no scope chain says
+ * which client an alias names. A `.defaults` that is called -- lodash's
+ * `_.defaults(...)` -- is not an axios defaults object.
  */
-function collectDefaultsWrites(program: Node): Map<string, Set<string>> {
-  const writes = new Map<string, Set<string>>();
-  const record = (name: string, key: string) => {
-    const keys = writes.get(name) ?? new Set<string>();
-    keys.add(key);
-    writes.set(name, keys);
-  };
-  walk(program, (node) => {
-    if (node.type !== 'AssignmentExpression') return;
-    const target = node.left as Node | undefined;
-    if (target?.type !== 'MemberExpression') return;
-    const object = target.object as Node | undefined;
-    const property = target.property as Node | undefined;
-    const key = target.computed ? '*' : String(property?.name ?? '');
-    // `api.defaults = {...}`
-    if (object?.type === 'Identifier' && key === 'defaults') {
-      record(String(object.name), '*');
+function collectDefaultsTaint(program: Node): {
+  base: string | null;
+  allowAbsolute: string | null;
+} {
+  let base = false;
+  let allowAbsolute = false;
+  const visit = (node: unknown, parent: Node | null): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, parent);
       return;
     }
-    // `api.defaults.baseURL = ...`
-    if (object?.type !== 'MemberExpression' || object.computed) return;
-    const owner = object.object as Node | undefined;
-    const middle = object.property as Node | undefined;
-    if (owner?.type === 'Identifier' && String(middle?.name ?? '') === 'defaults') {
-      record(String(owner.name), key);
+    const current = node as Node;
+    const isNode = typeof current.type === 'string';
+    if (isNode && parent && isDefaultsAccess(current)) {
+      const isCallee = parent.type === 'CallExpression' && parent.callee === current;
+      if (!isCallee) {
+        const key =
+          parent.type === 'MemberExpression' && parent.object === current
+            ? memberKey(parent)
+            : null;
+        if (key === null || key === 'baseURL') base = true;
+        if (key === null || key === 'allowAbsoluteUrls') allowAbsolute = true;
+      }
     }
-  });
-  return writes;
+    for (const field of Object.keys(current)) {
+      if (field === 'type' || field === 'start' || field === 'end') continue;
+      visit(current[field], isNode ? current : parent);
+    }
+  };
+  visit(program, null);
+  return {
+    base: base ? 'base URL may be changed through a .defaults object in this file' : null,
+    allowAbsolute: allowAbsolute
+      ? 'allowAbsoluteUrls may be changed through a .defaults object in this file, so the request URL may or may not replace the base URL'
+      : null,
+  };
 }
 
-function overridesBase(keys: Set<string> | undefined): boolean {
-  return !!keys && (keys.has('*') || keys.has('baseURL'));
+/** `x.defaults` or `x['defaults']`. */
+function isDefaultsAccess(node: Node): boolean {
+  return node.type === 'MemberExpression' && memberKey(node) === 'defaults';
 }
 
-function overridesAllowAbsolute(keys: Set<string> | undefined): boolean {
-  return !!keys && (keys.has('*') || keys.has('allowAbsoluteUrls'));
+/** A member's static key, or null when it is computed from anything but a string literal. */
+function memberKey(node: Node): string | null {
+  const property = node.property as Node | undefined;
+  if (!property) return null;
+  if (!node.computed) return String(property.name ?? '');
+  return property.type === 'Literal' && typeof property.value === 'string' ? property.value : null;
 }
 
 /** Strips the TypeScript and grouping wrappers that carry no meaning here. */

@@ -229,14 +229,18 @@ api.get('//evil.example/x'); // unresolved: the scheme, and so the origin, come 
 
 `allowAbsoluteUrls` is read only where it is visible, and anything that could set it without being
 read makes an absolute request URL decline, since the base may or may not apply: a value other than
-a literal `true` or `false`, a config passed by name, a spread or computed key, or a write to
-`axios.defaults` or `api.defaults` anywhere in the file. A relative request URL is not affected:
-whatever `allowAbsoluteUrls` is, axios joins it under the base.
+a literal `true` or `false`, a config passed by name, a spread or computed key, or a `defaults`
+object reached in the file in any way other than through one of its other named keys. So
+`Object.assign(api.defaults, ...)`, an alias of the client or of its defaults, and `delete` all
+count, while `api.defaults.headers.common.Authorization = token` does not. This applies to every
+client in the file, because no scope chain says which one an alias names. A relative request URL is
+not affected: whatever `allowAbsoluteUrls` is, axios joins it under the base.
 
 `baseURL` is read the way the object literal evaluates, the last key winning. A spread or computed
 key that follows it may replace it, and the base is then unresolved; one that comes before it is
-overwritten by it. A write to `api.defaults.baseURL` in the file makes that client's base
-unresolved. `api.getUri()` and `api.create()` send nothing and are not reported.
+overwritten by it. A `defaults` object's `baseURL` reached in the file, by the same test, makes
+every client's base unresolved. A request config's `url` that a spread or computed key could set is
+unresolved too. `api.getUri()` and `api.create()` send nothing and are not reported.
 
 What the analyzer does **not** see, and assumes away:
 
@@ -268,7 +272,8 @@ A `hostaddr=` parameter is treated like `host=`, including when its name is perc
 follows a `#` inside the query, which libpq does not treat as a delimiter there; so is an
 interpolation inside the query or straight after a `?` or `#`, since it could supply either. More
 than one `@` in the authority is declined, since MongoDB's parser ends the userinfo at the first,
-and so is a `\`, which ioredis reads as `/`.
+and so is a `\`, which ioredis reads as `/`, or a character in the host at which ioredis's legacy
+`url.parse` ends a hostname (`%`, `;`, a quote, a brace, `|`, `^`, a backtick, `<`, `>`, a space).
 
 An interpolation in the path is not declined: `` `postgres://db.example.com:5432/${name}` ``
 resolves, on the assumption that a database name does not carry a query string. A `name` of

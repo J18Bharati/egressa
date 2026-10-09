@@ -15799,6 +15799,9 @@ function connectionUriRefusal(rest, delimiter, hasMore) {
   if (authority.indexOf("@") !== authority.lastIndexOf("@")) {
     return "connection URI userinfo is ambiguous: its authority has more than one @";
   }
+  if (/[%;'{}|^`<>" ]/.test(authority.slice(authority.lastIndexOf("@") + 1))) {
+    return "connection URI host contains a character legacy url.parse (ioredis) ends a hostname at";
+  }
   if (delimiter === -1) return null;
   const tail = rest.slice(delimiter);
   const slash = tail.indexOf("/");
@@ -15999,7 +16002,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
     const literal2 = literalBindingFor(init2);
     if (literal2) bindings.set(name, { ...literal2, declaredAt: node.start });
   }
-  const defaultsWrites = collectDefaultsWrites(program);
+  const defaultsTaint = collectDefaultsTaint(program);
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
     if (node.type !== "CallExpression" && !isNew) return;
@@ -16015,25 +16018,25 @@ function analyzeFile(text, filePath, extraSinks = []) {
     if (onClient && AXIOS_NON_REQUEST_METHODS.has(shape.property ?? "")) return;
     if (onClient || direct) {
       const request = axiosRequest(onClient ? shape.property ?? "" : direct ?? "", args);
-      const clientName = onClient ? shape.object ?? "" : null;
-      const clientDefaults = clientName === null ? void 0 : defaultsWrites.get(clientName);
+      if (request.urlOpaque) {
+        const reason = "request URL may be set by a spread or computed key in its config";
+        emit(
+          node,
+          toHit({ kind: "unresolved", reason }, node, index, filePath, "high", "callsite")
+        );
+        return;
+      }
       const inherited = !onClient ? null : {
-        resolution: overridesBase(clientDefaults) ? {
-          kind: "unresolved",
-          reason: `base URL is reassigned through ${clientName}.defaults`
-        } : binding.host ? { kind: "resolved", host: binding.host } : {
+        resolution: defaultsTaint.base ? { kind: "unresolved", reason: defaultsTaint.base } : binding.host ? { kind: "resolved", host: binding.host } : {
           kind: "unresolved",
           reason: binding.reason ?? "client base URL not resolvable"
         },
         atCall: false
       };
       const base = requestBase(request.config, inherited, bindings, context);
-      const written = [clientDefaults, defaultsWrites.get("axios")].find(overridesAllowAbsolute);
       const allowAbsolute = allowAbsoluteFrom(
         request.config,
-        written ? {
-          reason: `allowAbsoluteUrls is written through ${written === clientDefaults ? clientName : "axios"}.defaults, so the request URL may or may not replace the base URL`
-        } : onClient ? binding.allowAbsolute : true
+        defaultsTaint.allowAbsolute ? { reason: defaultsTaint.allowAbsolute } : onClient ? binding.allowAbsolute : true
       );
       const { resolution, fromBase } = resolveAxiosRequest(
         request.url,
@@ -16447,13 +16450,15 @@ function axiosRequest(method, args) {
   const first = args[0] ? unwrap(args[0]) : void 0;
   if (method === "request") {
     if (first?.type === "ObjectExpression") {
-      return { url: configProperty(first, "url").value, config: first };
+      const { value, opaque } = configProperty(first, "url");
+      return { url: value, urlOpaque: opaque, config: first };
     }
-    return { url: args[0] ?? null, config: args[1] };
+    return { url: args[0] ?? null, urlOpaque: false, config: args[1] };
   }
   const index = AXIOS_CONFIG_INDEX[method];
   return {
     url: first && first.type !== "ObjectExpression" ? args[0] ?? null : null,
+    urlOpaque: false,
     config: index === void 0 ? void 0 : args[index]
   };
 }
@@ -16523,7 +16528,15 @@ function isUrlObject(node, bindings, context) {
   }
   if (value.type === "NewExpression") {
     const callee = value.callee;
-    return callee?.type === "Identifier" && String(callee.name) === "URL";
+    if (callee?.type !== "Identifier" || String(callee.name) !== "URL") return false;
+    const inner = (value.arguments ?? [])[0];
+    const argument = inner ? unwrap(inner) : void 0;
+    if (argument?.type === "NewExpression") return isUrlObject(argument, bindings, context);
+    if (argument?.type === "Identifier") {
+      const bound = readable(bindings, String(argument.name), context.unstable, context.callStart);
+      if (bound?.kind === "reference") return bound.via === "URL";
+    }
+    return true;
   }
   if (value.type === "Identifier") {
     const binding = readable(bindings, String(value.name), context.unstable, context.callStart);
@@ -16550,38 +16563,44 @@ function configProperty(object, key) {
   return { value, opaque };
 }
 var BASE_REPLACEABLE = "base URL may be replaced by a spread or computed key that follows it";
-function collectDefaultsWrites(program) {
-  const writes = /* @__PURE__ */ new Map();
-  const record2 = (name, key) => {
-    const keys = writes.get(name) ?? /* @__PURE__ */ new Set();
-    keys.add(key);
-    writes.set(name, keys);
-  };
-  walk2(program, (node) => {
-    if (node.type !== "AssignmentExpression") return;
-    const target = node.left;
-    if (target?.type !== "MemberExpression") return;
-    const object = target.object;
-    const property = target.property;
-    const key = target.computed ? "*" : String(property?.name ?? "");
-    if (object?.type === "Identifier" && key === "defaults") {
-      record2(String(object.name), "*");
+function collectDefaultsTaint(program) {
+  let base = false;
+  let allowAbsolute = false;
+  const visit2 = (node, parent) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit2(child, parent);
       return;
     }
-    if (object?.type !== "MemberExpression" || object.computed) return;
-    const owner = object.object;
-    const middle = object.property;
-    if (owner?.type === "Identifier" && String(middle?.name ?? "") === "defaults") {
-      record2(String(owner.name), key);
+    const current = node;
+    const isNode = typeof current.type === "string";
+    if (isNode && parent && isDefaultsAccess(current)) {
+      const isCallee = parent.type === "CallExpression" && parent.callee === current;
+      if (!isCallee) {
+        const key = parent.type === "MemberExpression" && parent.object === current ? memberKey(parent) : null;
+        if (key === null || key === "baseURL") base = true;
+        if (key === null || key === "allowAbsoluteUrls") allowAbsolute = true;
+      }
     }
-  });
-  return writes;
+    for (const field of Object.keys(current)) {
+      if (field === "type" || field === "start" || field === "end") continue;
+      visit2(current[field], isNode ? current : parent);
+    }
+  };
+  visit2(program, null);
+  return {
+    base: base ? "base URL may be changed through a .defaults object in this file" : null,
+    allowAbsolute: allowAbsolute ? "allowAbsoluteUrls may be changed through a .defaults object in this file, so the request URL may or may not replace the base URL" : null
+  };
 }
-function overridesBase(keys) {
-  return !!keys && (keys.has("*") || keys.has("baseURL"));
+function isDefaultsAccess(node) {
+  return node.type === "MemberExpression" && memberKey(node) === "defaults";
 }
-function overridesAllowAbsolute(keys) {
-  return !!keys && (keys.has("*") || keys.has("allowAbsoluteUrls"));
+function memberKey(node) {
+  const property = node.property;
+  if (!property) return null;
+  if (!node.computed) return String(property.name ?? "");
+  return property.type === "Literal" && typeof property.value === "string" ? property.value : null;
 }
 function unwrap(node) {
   let current = node;

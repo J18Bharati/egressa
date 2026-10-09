@@ -1088,6 +1088,54 @@ const AXIOS_REQUESTS: Case[] = [
     reason: 'defaults',
   },
   {
+    name: 'defaults changed through Object.assign',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\nObject.assign(api.defaults, { allowAbsoluteUrls: false });\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    name: 'defaults changed through an alias of the client',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\nconst b = api;\nb.defaults.baseURL = 'https://evil.example';\napi.get('/x');`,
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    name: 'defaults read into a name',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\nconst d = api.defaults;\nd.allowAbsoluteUrls = false;\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    name: 'defaults reached through a computed owner',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi['defaults'].allowAbsoluteUrls = false;\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    name: 'a deleted baseURL default',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\ndelete api.defaults.baseURL;\napi.get('/x');`,
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    // Headers are not a destination; the common auth-header write keeps both.
+    name: 'a header default does not touch the destination',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.defaults.headers.common.Authorization = token;\napi.get('https://evil.example/x');`,
+    host: 'evil.example',
+  },
+  {
+    name: 'a request url that a spread could replace, on a client',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.request({ url: '/x', ...opts });`,
+    host: null,
+    reason: 'spread or computed key',
+  },
+  {
+    name: 'a direct call whose url could come from a spread',
+    code: `axios({ ...opts, baseURL: 'https://api.stripe.com' });`,
+    host: null,
+    reason: 'spread or computed key',
+  },
+  {
     name: "a client's own baseURL default written in the file",
     code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.defaults.baseURL = 'https://evil.example';\napi.get('/x');`,
     host: null,
@@ -1128,6 +1176,10 @@ describe('golden table: requests made through axios', () => {
     ],
     ['getUri, which builds a string and sends nothing', "api.getUri({ url: '/x' });"],
     ['create, which makes another client', 'api.create({ timeout: 5 });'],
+    [
+      'a URL built from a Request, which throws',
+      "api.get(new URL(new Request('https://evil.example/x')));",
+    ],
   ])('reports no call site for %s', (_name, call) => {
     const { hits } = analyzeFile(
       `const api = axios.create({ baseURL: 'https://api.stripe.com' });\n${call}`,

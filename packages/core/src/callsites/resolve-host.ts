@@ -127,6 +127,11 @@ function connectionUriRefusal(rest: string, delimiter: number, hasMore: boolean)
   if (authority.indexOf('@') !== authority.lastIndexOf('@')) {
     return 'connection URI userinfo is ambiguous: its authority has more than one @';
   }
+  // ...and its url.parse ends a hostname at these, connecting to what precedes
+  // them. Only the host is checked: a percent-encoded password is ordinary.
+  if (/[%;'{}|^`<>" ]/.test(authority.slice(authority.lastIndexOf('@') + 1))) {
+    return 'connection URI host contains a character legacy url.parse (ioredis) ends a hostname at';
+  }
   if (delimiter === -1) return null;
 
   const tail = rest.slice(delimiter);

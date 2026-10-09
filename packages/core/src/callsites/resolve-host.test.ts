@@ -89,12 +89,24 @@ const DECLINES: { name: string; input: string; hasMore?: boolean; reason: string
     input: 'redis://evil.example\\@api.stripe.com/',
     reason: 'backslash',
   },
+  {
+    // ioredis's url.parse ends the hostname at `;`: it connects to evil.example.
+    name: 'a character legacy url.parse ends a hostname at',
+    input: 'redis://evil.example;.cache.amazonaws.com/0',
+    reason: 'url.parse',
+  },
 ];
 
 const RESOLVES: { name: string; input: string; hasMore?: boolean; host: string }[] = [
   {
     name: 'a single host with userinfo and a port',
     input: 'postgres://user:pw@db.example.com:5432/x',
+    host: 'db.example.com',
+  },
+  {
+    // A percent-encoded password is ordinary; only the host part is checked.
+    name: 'a percent-encoded password',
+    input: 'postgres://user:p%40ss@db.example.com:5432/app',
     host: 'db.example.com',
   },
   {
