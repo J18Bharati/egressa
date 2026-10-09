@@ -15765,6 +15765,10 @@ function hostFromUrlPrefix(prefix, hasMore) {
   const schemeName = scheme[1]?.toLowerCase() ?? "";
   const special = SPECIAL_SCHEMES.has(schemeName);
   const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
+  if (!special) {
+    const refusal = connectionUriRefusal(rest, delimiter, hasMore);
+    if (refusal) return { kind: "unresolved", reason: refusal };
+  }
   if (delimiter === -1) {
     if (hasMore) {
       return {
@@ -15785,6 +15789,28 @@ function hostOf(scheme, special, authority) {
   } catch {
     return { kind: "not-a-url" };
   }
+}
+function connectionUriRefusal(rest, delimiter, hasMore) {
+  const authority = delimiter === -1 ? rest : rest.slice(0, delimiter);
+  if (authority.includes(",")) return "connection URI lists several hosts";
+  if (delimiter === -1) return null;
+  const tail = rest.slice(delimiter);
+  const slash = tail.indexOf("/");
+  const beforeSlash = slash === -1 ? tail : tail.slice(0, slash);
+  if (beforeSlash.includes("@") || slash === -1 && hasMore && beforeSlash !== "") {
+    return "connection URI userinfo is ambiguous: an @ may follow its ? or #";
+  }
+  const query = tail.indexOf("?");
+  if (query === -1) return null;
+  const fragment = tail.indexOf("#", query);
+  const params = tail.slice(query, fragment === -1 ? void 0 : fragment);
+  if (/[?&]host(?:addr)?=/i.test(params)) {
+    return "connection URI names its host in a query parameter";
+  }
+  if (hasMore && fragment === -1) {
+    return "connection URI query is completed by an interpolated value, which may name a host";
+  }
+  return null;
 }
 var isControlOrSpace = (code) => code <= 32;
 function trimControls(value, trailing) {
@@ -15965,26 +15991,40 @@ function analyzeFile(text, filePath, extraSinks = []) {
     if (!callee) return;
     const shape = calleeShape(callee);
     const args = node.arguments ?? [];
-    if (callee.type === "MemberExpression" && shape.object) {
-      const binding = readable(bindings, shape.object, unstable, node.start);
-      if (binding?.kind === "client") {
-        emit(
-          node,
-          toHit(
-            binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" },
-            node,
-            index,
-            filePath,
-            // Resolved through a binding rather than read directly at the call.
-            "medium",
-            "callsite"
-          )
-        );
+    const context = { unstable, callStart: node.start, referencesRead: [] };
+    const binding = callee.type === "MemberExpression" && shape.object ? readable(bindings, shape.object, unstable, node.start) : null;
+    const onClient = binding?.kind === "client";
+    const direct = isNew ? null : directAxiosMethod(shape);
+    if (onClient || direct) {
+      const request = axiosRequest(onClient ? shape.property ?? "" : direct ?? "", args);
+      const inherited = !onClient ? null : {
+        resolution: binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" },
+        atCall: false
+      };
+      const base = requestBase(request.config, inherited, bindings, context);
+      const allowAbsolute = allowAbsoluteFrom(
+        request.config,
+        onClient ? binding.allowAbsolute : true
+      );
+      const { resolution, fromBase } = resolveAxiosRequest(
+        request.url,
+        base,
+        allowAbsolute,
+        bindings,
+        context
+      );
+      if (resolution.kind !== "not-a-url") {
+        const confidence = fromBase && base && !base.atCall ? "medium" : "high";
+        emit(node, toHit(resolution, node, index, filePath, confidence, "callsite"));
+        if (resolution.kind === "resolved") {
+          for (const start of context.referencesRead ?? []) consumedReferences.add(start);
+        }
         return;
       }
+      if (onClient) return;
     }
-    const context = { unstable, callStart: node.start, referencesRead: [] };
     for (const sink of findSinks(shape, isNew, sinks)) {
+      if (direct && isAxiosSink(sink)) continue;
       const configKeys = sink.configKeys ?? [];
       if (sink.anyArg) {
         for (const argument2 of args) {
@@ -16326,14 +16366,124 @@ function clientBindingFor(init2, bindings, context) {
   if (!sink?.configKeys?.includes("baseURL")) return null;
   const args = init2.arguments ?? [];
   const argument = args[sink.argIndex];
-  if (!argument) return { kind: "client", host: null, reason: "client created with no base URL" };
-  const resolution = resolveArgument(argument, sink.configKeys, bindings, 0, context);
-  if (resolution.kind === "resolved") return { kind: "client", host: resolution.host };
+  const config = argument ? unwrap(argument) : void 0;
+  const allowAbsolute = allowAbsoluteFrom(config, true);
+  const baseNode = config?.type === "ObjectExpression" ? configProperty(config, "baseURL") : config;
+  if (!baseNode) {
+    return { kind: "client", host: null, reason: "client created with no base URL", allowAbsolute };
+  }
+  const resolution = resolveArgument(baseNode, sink.configKeys, bindings, 0, context);
+  if (resolution.kind === "resolved") {
+    return { kind: "client", host: resolution.host, allowAbsolute };
+  }
   return {
     kind: "client",
     host: null,
-    reason: resolution.kind === "unresolved" ? resolution.reason : "base URL not a URL"
+    reason: resolution.kind === "unresolved" ? resolution.reason : "base URL not a URL",
+    allowAbsolute
   };
+}
+var AXIOS_CONFIG_INDEX = {
+  get: 1,
+  delete: 1,
+  head: 1,
+  options: 1,
+  post: 2,
+  put: 2,
+  patch: 2,
+  postForm: 2,
+  putForm: 2,
+  patchForm: 2
+};
+var AXIOS_ABSOLUTE = /^([a-z][a-z\d+\-.]*:)?\/\//i;
+var COULD_BECOME_ABSOLUTE = /^(?:[a-z][a-z\d+\-.]*(?::\/?)?|\/)?$/i;
+function directAxiosMethod(shape) {
+  if (shape.name === "axios") return "request";
+  if (shape.object !== "axios" || !shape.property) return null;
+  if (shape.property === "request" || shape.property in AXIOS_CONFIG_INDEX) return shape.property;
+  return null;
+}
+function isAxiosSink(sink) {
+  return sink.callee === "axios" || sink.object === "axios" && sink.property !== "create";
+}
+function axiosRequest(method, args) {
+  const first = args[0] ? unwrap(args[0]) : void 0;
+  if (method === "request") {
+    if (first?.type === "ObjectExpression") {
+      return { url: configProperty(first, "url"), config: first };
+    }
+    return { url: args[0] ?? null, config: args[1] };
+  }
+  const index = AXIOS_CONFIG_INDEX[method];
+  return {
+    url: first && first.type !== "ObjectExpression" ? args[0] ?? null : null,
+    config: index === void 0 ? void 0 : args[index]
+  };
+}
+function requestBase(config, inherited, bindings, context) {
+  const object = config ? unwrap(config) : void 0;
+  const value = object?.type === "ObjectExpression" ? configProperty(object, "baseURL") : null;
+  if (!value) return inherited;
+  return { resolution: resolveArgument(value, [], bindings, 0, context), atCall: true };
+}
+function allowAbsoluteFrom(config, inherited) {
+  const object = config ? unwrap(config) : void 0;
+  if (object?.type !== "ObjectExpression") return inherited;
+  const value = configProperty(object, "allowAbsoluteUrls");
+  if (!value) return inherited;
+  const literal2 = unwrap(value);
+  return literal2.type === "Literal" && typeof literal2.value === "boolean" ? literal2.value : "unknown";
+}
+function resolveAxiosRequest(url, base, allowAbsolute, bindings, context) {
+  const notAUrl = { kind: "not-a-url" };
+  const fromBase = { resolution: base?.resolution ?? notAUrl, fromBase: true };
+  const fromUrl = (resolution) => ({ resolution, fromBase: false });
+  const decline = (reason) => fromUrl({ kind: "unresolved", reason });
+  if (!url) return fromBase;
+  if (base === null) return fromUrl(resolveArgument(url, [], bindings, 0, context));
+  if (allowAbsolute === false) return fromBase;
+  const lead = leadingStatic(url, bindings, context);
+  const absolute = AXIOS_ABSOLUTE.exec(lead.text);
+  if (!absolute) {
+    if (lead.complete || !COULD_BECOME_ABSOLUTE.test(lead.text)) return fromBase;
+    const mark = context.referencesRead?.length ?? 0;
+    const resolution = resolveArgument(url, [], bindings, 0, context);
+    const viaReference = resolution.kind === "resolved" && (context.referencesRead?.length ?? 0) > mark;
+    if (!viaReference) {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return lead.text === "" && resolution.kind === "unresolved" ? fromUrl(resolution) : decline("request URL may be absolute, which would replace the base URL");
+    }
+    if (allowAbsolute === "unknown") {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return decline(UNKNOWN_ALLOW_ABSOLUTE);
+    }
+    return fromUrl(resolution);
+  }
+  if (allowAbsolute === "unknown") return decline(UNKNOWN_ALLOW_ABSOLUTE);
+  if (!absolute[1]) {
+    return decline("request URL is protocol-relative; its scheme comes from the page at runtime");
+  }
+  return fromUrl(resolveArgument(url, [], bindings, 0, context));
+}
+var UNKNOWN_ALLOW_ABSOLUTE = "allowAbsoluteUrls is not a literal, so the request URL may or may not replace the base URL";
+function configProperty(object, key) {
+  let found = null;
+  for (const property of object.properties ?? []) {
+    if (property.type !== "Property" || property.computed) continue;
+    const name = property.key;
+    const label = name ? String(name.name ?? name.value ?? "") : "";
+    if (label === key) found = property.value ?? null;
+  }
+  return found;
+}
+function unwrap(node) {
+  let current = node;
+  while (current.type === "TSAsExpression" || current.type === "TSSatisfiesExpression" || current.type === "TSNonNullExpression" || current.type === "ParenthesizedExpression") {
+    const inner = current.expression;
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
 }
 function envVarName(node) {
   const object = node.object;

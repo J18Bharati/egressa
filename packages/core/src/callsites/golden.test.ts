@@ -1023,6 +1023,17 @@ const AXIOS_REQUESTS: Case[] = [
     code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', opts);`,
     host: 'api.stripe.com',
   },
+  {
+    name: 'a spread in the request config is not read',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', { ...opts });`,
+    host: 'api.stripe.com',
+  },
+  {
+    // Truth is api.stripe.com: the global default makes axios join the base.
+    name: 'a global allowAbsoluteUrls default is not followed',
+    code: `axios.defaults.allowAbsoluteUrls = false;\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x');`,
+    host: 'evil.example',
+  },
 ];
 
 describe('golden table: requests made through axios', () => {
@@ -1042,6 +1053,14 @@ describe('golden table: requests made through axios', () => {
       if (testCase.confidence) expect(hit?.confidence).toBe(testCase.confidence);
     });
   }
+
+  it('does not report a client called directly (documented limitation)', () => {
+    const { hits } = analyzeFile(
+      `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi('/v1');`,
+      'input.ts',
+    );
+    expect(hits.filter((h) => h.location.startLine === 2)).toEqual([]);
+  });
 
   it('reports nothing for an absolute request URL that does not parse', () => {
     // fetch() and axios both throw before any request is made.

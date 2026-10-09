@@ -39,6 +39,26 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Fixed
 
+- **A request on an axios client reported the client's base URL, even when the request URL was
+  absolute.** `axios.create({ baseURL: 'https://api.stripe.com' })` followed by
+  `api.get('https://evil.example/x')` was Stripe at high confidence; axios sends it to
+  evil.example. Requests are now resolved by axios's own `buildFullPath` rule, checked against
+  axios 1.12.2: the request URL when it is absolute, the base URL when it is relative or
+  `allowAbsoluteUrls` is `false`, and unresolved when the request URL could be either -- an unknown
+  variable, a protocol-relative URL, or a template whose static text does not rule out a scheme. The
+  same rule replaces a first-key-wins read of `axios({ baseURL, url })`, which reported the base
+  for an absolute `url`, and a `baseURL` or `allowAbsoluteUrls` in a request config literal is now
+  read. A config passed by name or spread, interceptors and `axios.defaults` are not followed, and
+  are recorded in `docs/LIMITATIONS.md`. Neither a real backend codebase nor the fixture repositories
+  use axios, so their scans are unchanged.
+- **A connection URI could resolve to a host its client does not connect to.** For non-special
+  schemes the first `host[:port]` was taken: `mongodb://a.example.com:27017,evil.com/` reported
+  a.example.com, and `postgres://api.stripe.com:p#w@evil.example/` reported api.stripe.com, where
+  libpq reads the userinfo up to the `@` and connects to evil.example. A host list, an `@` after a
+  `?` or `#`, a `host=` or `hostaddr=` query parameter, and an interpolation that could supply one
+  are now unresolved. Only the `new URL()` reference sink reaches these today, so a declined URI
+  reports nothing.
+
 - **A symlink could make a scan read, and quote, a file outside the repository.** The walk followed
   links and nothing checked where a file really lived, so a committed
   `pnpm-lock.yaml -> ~/.aws/credentials` was read and the YAML parser's error -- which quotes the
