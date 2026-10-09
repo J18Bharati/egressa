@@ -283,6 +283,50 @@ deliberately: `-name .git` hid source under a directory named `.git`.
 
 ## Engine
 
+### Review the defaults test and the spread-url decline independently
+
+**What:** Run an adversarial review over commit `6d618b9` alone: `collectDefaultsTaint` and the
+`urlOpaque` decline in `callsites/index.ts`.
+
+**Why:** It fixed the second review of the axios branch, and nothing has reviewed it since. Both
+rounds before it found new wrong hosts in code written to fix the round before. The first matched
+`defaults` writes by shape and missed seven shapes. Its replacement taints on any `.defaults` that
+is not only the object of another named key. That rule is broader and simpler, but it is unproven
+against an adversary. Look for a `.defaults` reach it treats as harmless, and a `url` key it
+reads as certain.
+
+**Context:** `docs/LIMITATIONS.md`, "Requests through axios". The axios rows in `golden.test.ts`
+check the hit on the snippet's last line, not `hits[0]`.
+
+### Report a call on an axios client written as a function call
+
+**What:** `const api = axios.create({ baseURL }); api('/v1')` and `api({ url })` report nothing.
+Route an `Identifier` callee bound to a client through `resolveAxiosRequest` as `request`.
+
+**Why:** A missed transfer, not a wrong host. Recorded in `docs/LIMITATIONS.md` and pinned by a
+golden test ("does not report a client called directly"), which must be lifted along with it.
+
+### Stop following a Request inside a URL
+
+**What:** `referenceObjectHost` in `callsites/index.ts` follows any reference sink as the inner
+argument, so `fetch(new URL(new Request('https://evil.example/x')))` resolves to evil.example.
+
+**Why:** `new URL(request)` throws, because a Request stringifies to `[object Request]`. Nothing is
+sent, so this reports a call site where no transfer can happen. Found by the axios re-review. The
+axios path already refuses it in `isUrlObject`; `fetch` and the other sinks do not. Contrived, but
+it is the reference-vs-callsite defect in miniature.
+
+### Read config objects by evaluation order in every sink, not only axios
+
+**What:** `resolveArgument`'s `ObjectExpression` case returns the *first* property matching any of
+the sink's `configKeys`, and ignores spreads and computed keys. axios now has its own reader
+(`configProperty`: the last key wins, and a later spread or computed key makes the value
+opaque). The other sinks still use the first-match read.
+
+**Why:** It is the same bug class as the axios `{ baseURL, url }` case it replaced. No other built-in
+sink reads two keys today, so it is latent, but a knowledge base `hostOption` duplicated or followed
+by a spread would read the stale value.
+
 ### Carry a jurisdiction's role through to output
 
 **What:** Change `TransferFacts.jurisdictions` from `CountryCode[]` to a shape carrying the KB's

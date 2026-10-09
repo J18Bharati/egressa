@@ -111,6 +111,29 @@ Rebinding a classic script's global `var` through indirect `eval`, `new Function
 `function f(B) { fetch(`${B}/v1`) }` resolved the module's `B`.
 Building a real scope chain to recover that recall is not worth the failure mode it reintroduces.
 
+**An axios request has two destinations, and axios picks one by its own rule.** `resolveAxiosRequest`
+in `callsites/index.ts` copies `buildFullPath` from axios 1.12.2's source: the request URL when
+`isAbsoluteURL` matches — axios's regex on the *raw* string, so `' https://x'` and `'https:/x'` are
+relative — and the base when it is relative or `allowAbsoluteUrls` is `false`. A request URL that
+could be either declines. Until this existed, `api.get('https://evil.example/x')` on a Stripe client
+reported Stripe at high confidence. Anything that could change the answer unseen counts as unknown:
+a config passed by name, a spread or computed key after the key it could replace, and any reach into
+a `.defaults` object other than through another named key (`headers`, `timeout`). The defaults test
+covers the whole file and every client in it, because there is no scope chain to say which client an
+alias or `Object.assign` names. Matching write *shapes* was tried first, and the next review found
+seven shapes it missed. Use axios's source as the ground truth for a new case, not WHATWG.
+
+**A non-special URI is a connection string, read by its client, not by WHATWG.**
+`connectionUriRefusal` in `resolve-host.ts` declines rather than parsing each client:
+- a host list (MongoDB, libpq);
+- an `@` after `?` or `#`, or more than one `@` (libpq and MongoDB read userinfo differently);
+- a `\`, or a character legacy `url.parse` ends a hostname at (ioredis);
+- a `host=` or `hostaddr=` parameter, percent-encoded or after a `#` (libpq);
+- an interpolation in the query.
+
+Each refusal was checked against the client that reads it. The special schemes still go through
+`new URL()` in `hostOf` and never reach this.
+
 **Client constructors come from the knowledge base, not a hardcoded table.**
 `aliases.clientConstructors` names the option carrying the destination, and
 `callsites/sinks.ts` turns those into sinks. This is where a *configured region* appears:
@@ -206,14 +229,25 @@ ship outside the contract just by nobody remembering to add it. Adding a file un
 entry under `kb/vendors/`, therefore opts it in automatically, and the `language-rules.md` exemption
 is itself asserted, so a file stops being exempt if it stops being the vocabulary table.
 
-**`packages/core/src/callsites/golden.test.ts`** is a table of ~110 snippets → `{host|null, reason}`.
+**`packages/core/src/callsites/golden.test.ts`** is a table of ~170 snippets → `{host|null, reason}`,
+and `resolve-host.test.ts` holds the same kind of table for connection URIs, read straight from
+`hostFromUrlPrefix`.
 The `null` half is the important half: every entry in `docs/LIMITATIONS.md` has a corresponding
 failing-by-design case. **A limitation starting to resolve is a test failure, not a win** — lift it
-deliberately in both places or fix the regression.
+deliberately in both places or fix the regression. The axios rows check the hit on the snippet's
+*last* line, which is the request. The older client rows checked `hits[0]`, which is the
+`axios.create(...)` call, and so never tested the request at all.
 
 Nothing in the table now records a *wrong* answer. The `let` reassignment case used to, and was
 lifted deliberately in both places when scope handling landed; if a future change reintroduces one,
-that is a regression rather than a documented limitation.
+that is a regression rather than a documented limitation. Three rows do record a *possibly* incorrect
+answer, each resting on a stated assumption in `docs/LIMITATIONS.md`, and are commented as such:
+- an axios request config passed by name, assumed not to carry its own `baseURL`;
+- an axios request config passed as a spread, under the same assumption;
+- an interpolated path in a connection URI, assumed not to carry a query string.
+
+Declining any of them would cost far more real recall than the case is worth. A fourth must be argued
+the same way, not added quietly.
 
 Tests do not pin the size of the knowledge base. Anything asserting "5 vendors" or a literal
 `kb.version` fails on every entry added, for no reason connected to what it tests — read the roster
