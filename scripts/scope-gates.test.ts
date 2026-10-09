@@ -5,6 +5,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -526,13 +528,108 @@ describe('the reviewed repository cannot run code through its own git config', (
   });
 });
 
+// A git invocation in any spelling a shell accepts: git, "git", 'git', \git.
+const BARE_GIT = /(^|[\s;&|($`])\\?["']?git["']?\s/;
+
 describe('every git call in scope.sh goes through git_safe', () => {
   it('has no bare git invocation outside the wrapper', () => {
     const offending = readFileSync(SCOPE, 'utf8')
       .split('\n')
       .filter((line) => !/^\s*#/.test(line))
-      .filter((line) => /(^|[\s;&|($`])git\s/.test(line))
-      .filter((line) => !/^\s*git -c core\.fsmonitor= /.test(line));
+      .filter((line) => BARE_GIT.test(line))
+      .filter((line) => !/^\s*(command )?git -c core\.fsmonitor= /.test(line))
+      .filter((line) => !/^\s*(command )?git -c core\.fsmonitor= config /.test(line));
     expect(offending).toEqual([]);
+  });
+
+  it('tells no specialist or the orchestrator to run git itself', () => {
+    // SKILL.md used to hand specialists `git ls-files` and `git diff`, which
+    // run the reviewed repository's core.fsmonitor and diff drivers.
+    const docs = [
+      'skill/privacy-review/SKILL.md',
+      ...readdirSync('skill/privacy-review/specialists').map(
+        (f) => `skill/privacy-review/specialists/${f}`,
+      ),
+    ];
+    for (const doc of docs) {
+      const lines = readFileSync(doc, 'utf8')
+        .split('\n')
+        .filter((line) => /`[^`]*\bgit (ls-files|diff|status|log|show)\b[^`]*`/.test(line));
+      expect({ doc, lines }).toEqual({ doc, lines: [] });
+    }
+  });
+});
+
+describe('the reviewed repository cannot run a filter driver through git diff', () => {
+  // A clean or process filter assigned by .git/info/attributes runs whenever
+  // git hashes a stat-dirty worktree file -- which every file is after an
+  // archive is extracted, since extraction re-dates them.
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+
+  it.each(['clean', 'process'])('does not run a planted %s filter in diff mode', (kind) => {
+    const root = scratch(`filter-${kind}`);
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"planted","private":true}\n');
+    plant(root, 'src/app.ts', 'export const a = 1;\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/app.ts', 'export const a = 2;\n');
+    git(root, 'commit', '-q', '-am', 'change');
+    plant(root, '.git/info/attributes', '* filter=evil\n');
+    git(root, 'config', `filter.evil.${kind}`, `sh -c 'touch "${marker}"; cat'`);
+    // Re-date every file, as extracting an archive does.
+    execFileSync('touch', [
+      '-d',
+      '2001-01-01',
+      join(root, 'src/app.ts'),
+      join(root, 'package.json'),
+    ]);
+
+    const out = execFileSync('bash', [SCOPE, '--base', 'main'], { cwd: root, encoding: 'utf8' });
+    expect(existsSync(marker)).toBe(false);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+});
+
+describe('a symlink out of the reviewed repository is not reviewed', () => {
+  const linked = () => {
+    const top = scratch('links');
+    const outside = join(top, 'outside');
+    const root = join(top, 'repo');
+    plant(outside, 'tracker.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(outside, 'dir/tracker.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(root, 'package.json', '{"name":"links","private":true}\n');
+    plant(root, 'src/app.js', 'export const app = 1;\n');
+    symlinkSync(join(outside, 'tracker.js'), join(root, 'src/linked.js'));
+    symlinkSync(join(outside, 'dir'), join(root, 'vendor'));
+    // Committed, as a clone delivers them: git ls-files lists a link, where
+    // the find fallback does not.
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: root });
+    git('init', '-q', '-b', 'main');
+    git('add', '.');
+    git('commit', '-q', '-m', 'links');
+    return root;
+  };
+
+  it('does not let a linked file or directory raise a gate', () => {
+    const { lines } = runScope(linked());
+    expect(lines.SCOPE_TRACKER_CODE).toBe('false');
+    expect(lines.SIGNAL_TRACKERS_NO_CONSENT).toBe('false');
+    expect(lines.FILES_UNDER_REVIEW).toBe('2');
+  });
+
+  it('leaves linked paths out of the file list handed to specialists', () => {
+    const out = execFileSync('bash', [SCOPE, '--repo', '--list'], {
+      cwd: linked(),
+      encoding: 'utf8',
+    });
+    expect(out.split('\n').filter(Boolean).sort()).toEqual(['package.json', 'src/app.js']);
   });
 });

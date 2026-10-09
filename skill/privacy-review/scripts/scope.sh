@@ -5,6 +5,8 @@
 #   scope.sh                 # review the working tree against the default base branch
 #   scope.sh --base main     # review the diff against an explicit base
 #   scope.sh --repo          # review the whole repository, ignoring git history
+#   scope.sh ... --list      # print only the reviewed file set, one path per line,
+#                            # for specialists -- never have them run git themselves
 #
 # Every signal is a gate, not a finding. The orchestrator decides which specialists
 # to dispatch from these lines; the specialists decide what is actually wrong.
@@ -13,10 +15,12 @@ set -uo pipefail
 
 MODE="diff"
 BASE=""
+LIST=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) MODE="repo"; shift ;;
+    --list) LIST=1; shift ;;
     # `shift; shift` rather than `shift 2`: with `--base` as the last argument
     # there is nothing to shift twice, and bash's `shift 2` then shifts nothing
     # at all rather than failing. With no `set -e` the loop never advances and
@@ -28,7 +32,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-emit() { printf '%s: %s\n' "$1" "$2"; }
+emit() { [ "$LIST" = 1 ] || printf '%s: %s\n' "$1" "$2"; }
 
 # git, run inside the repository under review, with that repository's own
 # configuration unable to execute anything. A repository handed over with its
@@ -41,7 +45,23 @@ git_safe() {
   git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat -c diff.external= "$@"
 }
 
-echo "SCOPE_PROTO: 1"
+# Filter drivers. `.git/info/attributes` or `.gitattributes` can assign a clean,
+# smudge or process filter that the repository's config defines, and git runs
+# it to hash every stat-dirty worktree file -- which every file is after an
+# archive is extracted. Every driver git can see is blanked and marked not
+# required, through GIT_CONFIG_COUNT rather than `-c`, because `-c` splits at
+# the first `=` and a driver name may contain one. `git config` itself runs
+# nothing.
+_n=0
+while IFS= read -r -d '' _key; do
+  export "GIT_CONFIG_KEY_$_n=$_key" "GIT_CONFIG_VALUE_$_n="
+  _n=$((_n + 1))
+  export "GIT_CONFIG_KEY_$_n=${_key%.*}.required" "GIT_CONFIG_VALUE_$_n=false"
+  _n=$((_n + 1))
+done < <(git_safe config -z --name-only --get-regexp '^filter\..*\.(clean|smudge|process)$' 2>/dev/null)
+export GIT_CONFIG_COUNT="$_n"
+
+emit SCOPE_PROTO 1
 emit MODE "$MODE"
 
 # ---------------------------------------------------------------- file set
@@ -107,6 +127,19 @@ GENERATED_EXCLUDE_RE="${_gen_re}|\\.min\\.js\$|\\.map\$"
 SRC="$(printf '%s\n' "${FILES:-}" \
   | grep -Ev "$GENERATED_EXCLUDE_RE" \
   | sed '/^$/d')"
+
+# Symbolic links are not reviewed, matching the engine. `git ls-files` lists a
+# committed link, and `[ -f ]` follows it, so a link to a file outside the
+# repository used to be grepped -- and could raise SIGNAL_TRACKERS_NO_CONSENT,
+# the one line this script asserts, from a file that is not the repository's.
+# A path is dropped when it is a link or sits under a linked directory. Paths
+# are passed through the environment, not `awk -v`, which rewrites backslashes.
+LINKED="$(find . \( -name .git -o -name node_modules \) -prune -o -type l -print 2>/dev/null | sed 's|^\./||')"
+if [ -n "$LINKED" ]; then
+  SRC="$(printf '%s\n' "$SRC" | LINKED="$LINKED" awk '
+    BEGIN { n = split(ENVIRON["LINKED"], link, "\n") }
+    { for (i = 1; i <= n; i++) if (link[i] != "" && ($0 == link[i] || index($0, link[i] "/") == 1)) next; print }')"
+fi
 emit FILES_UNDER_REVIEW "$(printf '%s\n' "$SRC" | sed '/^$/d' | wc -l | tr -d ' ')"
 
 # Existing files only -- a deleted path cannot be grepped.
@@ -127,6 +160,13 @@ case "$SELF_DIR" in
     emit SELF_EXCLUDED "$SELF_REL"
     ;;
 esac
+
+# `--list`: the reviewed file set and nothing else, so specialists read exactly
+# what the gates read without running git in the repository themselves.
+if [ "$LIST" = 1 ]; then
+  printf '%s\n' "$EXISTING" | sed '/^$/d'
+  exit 0
+fi
 
 # Code files only, for the content gates.
 #

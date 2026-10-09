@@ -148,8 +148,12 @@ Each specialist prompt contains, in this order:
 5. The scope lines from Step 1, verbatim, and the stack from `STACK`.
 5a. The absolute `SKILL_DIR`, stated as such, so a specialist that runs a script runs this copy of it
    and not one the reviewed repository supplies.
-6. The file list under review, and the command that produced it, so the specialist reads the same
-   set you did: in diff mode `git diff $DIFF_BASE HEAD`, in repo mode `git ls-files`.
+6. The file list under review, exactly as `bash "$SCOPE" <same mode flags> --list` prints it, so
+   the specialist reads the same set the gates did. Never have a specialist run `git` in the
+   reviewed repository to build its own list: the repository's own `.git/config` can make git run
+   commands (`core.fsmonitor`, filter drivers), and `scope.sh` is the one place that neutralises
+   that. Tell specialists the list excludes symbolic links, and that they must not follow a link or
+   read anything outside the repository root.
 7. This instruction:
 
 > You are a privacy review specialist. Apply the checklist below to the files under review. Open

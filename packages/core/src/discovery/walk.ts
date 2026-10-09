@@ -133,9 +133,10 @@ export function walk(options: WalkOptions): WalkResult {
       ignore: ignoreGlobs,
       absolute: false,
       dot: false,
-      // A linked directory is not descended into: `deps -> /` would walk the
-      // whole filesystem. Linked files are still listed, and every reader
-      // refuses one whose real path leaves the root (read-inside.ts).
+      // No link is listed or descended into, inside the root or out: the
+      // library has no setting between following every link and listing
+      // none, and following them lets `deps -> /` walk the filesystem. See
+      // "Symbolic links are not followed" in docs/LIMITATIONS.md.
       followSymbolicLinks: false,
     })
       .map((p) => p.split(sep).join('/'))

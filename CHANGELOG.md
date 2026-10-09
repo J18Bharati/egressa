@@ -44,16 +44,24 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   `pnpm-lock.yaml -> ~/.aws/credentials` was read and the YAML parser's error -- which quotes the
   line it failed on -- carried that line into JSON, SARIF and the MCP result; a linked source file
   outside the root produced findings with its snippets. Links are no longer followed, every reader
-  refuses a path whose real location leaves the root, and lockfile parse errors keep only their
-  first line. No finding changed across a real backend codebase and every fixture repository.
+  refuses a path whose real location leaves the root or is not a regular file -- a FIFO committed
+  as `.gitignore` used to hang the scan and the MCP server -- and lockfile parse errors keep only
+  their first line. A read error reports its code rather than a message carrying the reviewer's
+  absolute path. No finding changed across a real backend codebase and every fixture repository.
 
 - **The privacy review could run a command the reviewed repository supplied, through git.**
   `scope.sh` runs `git ls-files` and `git diff` inside the repository under review, and a
   repository handed over with its `.git` directory -- an archive, a shared folder -- brings its own
   `.git/config`, whose `core.fsmonitor` git runs on every index refresh: silently, at step one of a
   review presented as read-only. Every git call now goes through a wrapper that disables
-  `core.fsmonitor`, hooks, an external diff and the pager, and passes `--no-ext-diff --no-textconv`
-  to `git diff`. A clone cannot carry `.git/config`, which is why no fixture caught it.
+  `core.fsmonitor`, hooks, an external diff and the pager, passes `--no-ext-diff --no-textconv` to
+  `git diff`, and blanks every clean, smudge and process filter driver -- which git otherwise runs
+  on each re-dated file an extracted archive leaves. `SKILL.md` no longer tells specialists to run
+  `git ls-files` or `git diff`; they get the file set from `scope.sh --list`. A clone cannot carry
+  `.git/config`, which is why no fixture caught it.
+- **The privacy review read through committed symlinks.** `scope.sh` grepped a linked file outside
+  the repository and could raise `SIGNAL_TRACKERS_NO_CONSENT` from it, and handed it to specialists
+  to read. Links are now dropped from the reviewed set, as the engine drops them.
 
 - **A concatenation could attribute a host it did not name.** `fetch(B + '.attacker.example/x')`,
   with `B = 'https://api.stripe.com'`, reported Stripe at high confidence: the left operand was read

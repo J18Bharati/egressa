@@ -239,8 +239,14 @@ filter matching nothing (1) masks a real failure (2). And every file list is pas
 reviewed tree is arbitrary third-party source, and a file named `-i.js` otherwise reaches `sed` as
 its in-place flag and this read-only review rewrites what it was asked to read. For the same reason
 every `git` call goes through `git_safe`, which disables `core.fsmonitor`, hooks, an external diff
-and the pager: a repository handed over with its `.git` directory carries its own `.git/config`,
-and git runs `core.fsmonitor` on every index refresh. A test asserts no bare `git` call remains.
+and the pager, and the script blanks every clean, smudge and process filter driver git can see
+(through `GIT_CONFIG_COUNT`, since a driver name may contain `=`): a repository handed over with
+its `.git` directory carries its own `.git/config`, and git runs `core.fsmonitor` on every index
+refresh and a filter driver on every stat-dirty file. Specialists never run git themselves: they
+get the reviewed set from `scope.sh --list`. Symbolic links are dropped from that set, as the
+engine drops them. Tests plant each of these, and a text check rejects a bare `git` call in the
+script or a git command in `SKILL.md` or a checklist. That covers what these git commands are
+known to execute, not every key git could ever add.
 
 Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
 line is the one thing the script asserts rather than routes. Everything else matches raw text: a

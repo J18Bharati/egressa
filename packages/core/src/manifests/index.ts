@@ -1,5 +1,5 @@
 import { basename, join } from 'node:path';
-import { readInsideRoot } from '../discovery/read-inside.js';
+import { readErrorMessage, readInsideRoot } from '../discovery/read-inside.js';
 import { parseNpmLock } from './npm-lock.js';
 import { parsePackageJson } from './package-json.js';
 import { parsePnpmLock } from './pnpm-lock.js';
@@ -62,7 +62,7 @@ export function analyzeManifests(options: AnalyzeManifestsOptions): ManifestAnal
     try {
       text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${(error as Error).message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
 

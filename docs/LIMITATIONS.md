@@ -214,8 +214,10 @@ lists none -- so none are followed, including links that stay inside the reposit
 normally a second path to a file that is scanned under its real name; a repository that keeps a
 real manifest or source file *only* behind a link is the case this misses.
 
-Every reader also refuses a path whose real location leaves the scan root
-(`discovery/read-inside.ts`), which covers `.gitignore` and `.egressaignore`, read outside the walk.
+Every reader also refuses a path whose real location leaves the scan root, or that is not a regular
+file (`discovery/read-inside.ts`), which covers `.gitignore` and `.egressaignore`, read outside the
+walk. Hard links cannot be told apart from ordinary files and are read; making one to a file outside
+the repository needs write access on the scanning machine's filesystem.
 
 ### Minified, bundled and vendored code
 

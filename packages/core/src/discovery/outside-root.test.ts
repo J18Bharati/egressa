@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -98,3 +99,39 @@ describe('a lockfile parse error does not quote the lockfile', () => {
     expect(errors[0]?.message).not.toContain('\n');
   });
 });
+
+describe.skipIf(!symlinks)('a file that is not a regular file is not read', () => {
+  it('does not hang on a FIFO committed as an ignore file', () => {
+    const top = mkdtempSync(join(tmpdir(), 'egressa-fifo-'));
+    writeFileSync(join(top, 'package.json'), '{"name":"fifo","private":true}\n');
+    execFileSync('mkfifo', [join(top, '.gitignore')]);
+    execFileSync('mkfifo', [join(top, '.egressaignore')]);
+    // A blocking open would wait for a writer forever; the test timeout is the assertion.
+    const result = scan({ ...base, root: top });
+    expect(result.scan.manifestsScanned).toBe(1);
+  }, 5000);
+
+  it('refuses a FIFO through readInsideRoot rather than blocking', () => {
+    const top = mkdtempSync(join(tmpdir(), 'egressa-fifo-'));
+    execFileSync('mkfifo', [join(top, 'pipe.ts')]);
+    expect(() => readInsideRoot(top, 'pipe.ts')).toThrow(/not a regular file/);
+  }, 5000);
+});
+
+describe.skipIf(!symlinks || process.getuid?.() === 0)(
+  'a read error does not disclose a local path',
+  () => {
+    it('reports the error code, not a message carrying the absolute root', () => {
+      const top = mkdtempSync(join(tmpdir(), 'egressa-eacces-'));
+      writeFileSync(join(top, 'package.json'), '{"name":"eacces","private":true}\n');
+      mkdirSync(join(top, 'src'));
+      writeFileSync(join(top, 'src', 'app.ts'), "fetch('https://api.stripe.com/v1');\n");
+      chmodSync(join(top, 'src', 'app.ts'), 0o000);
+      const result = scan({ ...base, root: top, includeCallsites: true });
+      chmodSync(join(top, 'src', 'app.ts'), 0o644);
+      const error = result.errors.find((e) => e.file === 'src/app.ts');
+      expect(error?.message).toMatch(/EACCES/);
+      expect(error?.message).not.toContain(top);
+    });
+  },
+);

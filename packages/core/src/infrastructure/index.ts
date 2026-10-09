@@ -1,7 +1,7 @@
 import { basename, join } from 'node:path';
 import { parseTree } from 'jsonc-parser';
 import { parseDocument } from 'yaml';
-import { readInsideRoot } from '../discovery/read-inside.js';
+import { readErrorMessage, readInsideRoot } from '../discovery/read-inside.js';
 import { LineIndex } from '../util/line-index.js';
 import { regionsFromKeyLiterals } from './key-literal.js';
 import type { InfraParseResult, InfraRecord } from './types.js';
@@ -35,7 +35,7 @@ export function analyzeInfrastructure(options: AnalyzeInfrastructureOptions): In
     try {
       text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${(error as Error).message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
 
