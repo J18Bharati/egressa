@@ -538,8 +538,8 @@ describe('every git call in scope.sh goes through git_safe', () => {
       .split('\n')
       .filter((line) => !/^\s*#/.test(line))
       .filter((line) => BARE_GIT.test(line))
-      .filter((line) => !/^\s*(command )?git -c core\.fsmonitor= /.test(line))
-      .filter((line) => !/^\s*(command )?git -c core\.fsmonitor= config /.test(line));
+      // The wrapper's own body is the one line allowed to name git.
+      .filter((line) => !/ git -c core\.fsmonitor= -c core\.hooksPath=/.test(line));
     expect(offending).toEqual([]);
   });
 
@@ -717,5 +717,113 @@ describe('git in the reviewed repository reaches no network, no submodule, and f
     expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
     const list = runIn(root, ['--repo', '--list']).split('\n').filter(Boolean);
     expect(list).toContain('src/t.js');
+  });
+});
+
+describe('git is believed only about this directory, and only for paths inside it', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 20000 });
+
+  it('does not review a path outside the repository that a crafted tree lists', () => {
+    const top = scratch('dotdot');
+    const root = join(top, 'repo');
+    plant(top, 'outside/secret.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(root, 'package.json', '{"name":"d","private":true}\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    // A tree with an entry named `..`, which git mktree accepts and git diff
+    // then reports as ../outside/secret.js.
+    const blob = git(root, 'hash-object', '-w', join(top, 'outside/secret.js')).trim();
+    const mk = (input: string) =>
+      execFileSync('git', ['mktree'], { cwd: root, input, encoding: 'utf8' }).trim();
+    const outsideTree = mk(`100644 blob ${blob}\tsecret.js\n`);
+    const dotdotTree = mk(`040000 tree ${outsideTree}\toutside\n`);
+    const pkg = git(root, 'rev-parse', 'HEAD:package.json').trim();
+    const rootTree = mk(`040000 tree ${dotdotTree}\t..\n100644 blob ${pkg}\tpackage.json\n`);
+    const commit = execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=t@t',
+        '-c',
+        'user.name=t',
+        'commit-tree',
+        rootTree,
+        '-p',
+        'HEAD',
+        '-m',
+        'x',
+      ],
+      { cwd: root, encoding: 'utf8' },
+    ).trim();
+    git(root, 'reset', '-q', '--soft', commit);
+
+    const out = runIn(root);
+    expect(out).toMatch(/^SIGNAL_TRACKERS_NO_CONSENT: false$/m);
+    expect(out).toMatch(/^DEGRADED: .*outside/m);
+    const list = runIn(root, ['--list']);
+    expect(list).not.toContain('outside');
+  });
+
+  it('does not take a parent repository as the reviewed one', () => {
+    const parent = scratch('ancestor');
+    git(parent, 'init', '-q', '-b', 'main');
+    plant(parent, 'README.md', 'parent\n');
+    git(parent, 'add', '.');
+    git(parent, 'commit', '-q', '-m', 'p');
+    const drop = join(parent, 'vendor-drop');
+    plant(drop, 'package.json', '{"name":"drop","private":true}\n');
+    plant(drop, 'src/a.js', "gtag('config', 'G-X');\n");
+    const out = runIn(drop, ['--repo']);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+
+  it('does not follow a .git file to another repository', () => {
+    const top = scratch('gitfile');
+    const other = join(top, 'other');
+    mkdirSync(other, { recursive: true });
+    git(other, 'init', '-q', '-b', 'main');
+    const root = join(top, 'repo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    plant(root, '.git', `gitdir: ${join(other, '.git')}\n`);
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('reports an empty index over a populated tree instead of an empty review', () => {
+    const root = scratch('emptyindex');
+    plant(root, 'package.json', '{"name":"e","private":true}\n');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not hang on a FIFO inside .git', () => {
+    const root = scratch('gitfifo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    rmSync(join(root, '.git', 'config'));
+    execFileSync('mkfifo', [join(root, '.git', 'config')]);
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+});
+
+describe('SKILL.md carries every DEGRADED line into the report', () => {
+  it('names DEGRADED as a coverage gap the report must state', () => {
+    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    expect(skill).toMatch(/`DEGRADED:`[\s\S]{0,400}NOT CHECKED/);
   });
 });

@@ -111,6 +111,14 @@ If the user passes `--all`, dispatch every specialist regardless of gates. If th
 (`--consent`, `--retention`, `--logs`, `--session-replay`, `--opt-out`, `--transfers`), dispatch
 only that one.
 
+**A `DEGRADED:` line is a coverage gap, and the report must say so.** `scope.sh` emits one when
+it could not establish the file set the normal way: no base branch, a failed diff, a `.git` that is
+not this directory's own or not safe to read, an index that lists nothing over a populated tree,
+paths with a newline in the name, or paths outside the repository that git listed. Its fallback
+still produces a reviewed set, but not necessarily the one asked for. Carry every `DEGRADED:` line,
+verbatim, into NOT CHECKED in Step 5; a run that degraded and says nothing reads as a complete
+review of the change the user asked about.
+
 **A degraded gate is not a false gate.** `scope.sh` can emit a second line for a gate it failed to
 evaluate — a crash, a missing dependency, a timeout — in addition to that gate's ordinary
 `SCOPE_*: false`:
@@ -254,6 +262,8 @@ skipped:
 - Specialists that were gated off, by name, and any dispatched specialist that returned no block.
 - From the transfers specialist's `_scanner` line: a degraded engine, the `unmatched` counts, the
   scanner's own errors, the blind spots it names, and whether its counts added up.
+- Every `DEGRADED:` line `scope.sh` printed, verbatim: the file set was not established the normal
+  way, and the reader needs to know which set was reviewed instead.
 - Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
   a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two
   runs needs to know the selection was made defensively rather than on a real signal.

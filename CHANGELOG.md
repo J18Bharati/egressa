@@ -57,9 +57,13 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   `core.fsmonitor`, hooks, an external diff, the pager and submodule recursion; every clean, smudge
   and process filter driver is blanked -- git otherwise runs one on each re-dated file an extracted
   archive leaves; and no git command can reach a transport, which closes a partial clone's lazy
-  fetch running the repository's `core.sshCommand`, credential helper or `ext::` command. A git
-  command that fails is now reported as degraded with a fallback; a failed diff used to produce an
-  empty file set that read as a clean review. `SKILL.md` no longer tells specialists to run
+  fetch running the repository's `core.sshCommand`, credential helper or `ext::` command. Git is believed
+  only about this directory -- not a parent repository, not one a `.git` file points to, not past
+  a `.git` holding a FIFO, not a git older than 2.31 -- and never about a path outside it: a crafted
+  tree made git list `../outside/secret.js`, which was grepped and handed to specialists. A git
+  command that fails, or an index that lists nothing over a populated tree, is now reported as
+  degraded with a `find` fallback, and the skill carries that into the report; a failed diff used to
+  produce an empty file set that read as a clean review. `SKILL.md` no longer tells specialists to run
   `git ls-files` or `git diff`; they get the file set from `scope.sh --list`. A clone cannot carry
   `.git/config`, which is why no fixture caught it.
 - **The privacy review read through committed symlinks.** `scope.sh` grepped a linked file outside

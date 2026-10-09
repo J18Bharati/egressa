@@ -34,66 +34,125 @@ done
 
 emit() { [ "$LIST" = 1 ] || printf '%s: %s\n' "$1" "$2"; }
 
-# git, run inside the repository under review, with that repository's own
-# configuration unable to execute anything. A repository handed over with its
-# .git directory -- an archive, a shared folder; a clone cannot carry it --
-# brings its own .git/config, and git runs core.fsmonitor on every index
-# refresh: `git ls-files` and every worktree `git diff` below. The other keys
-# close the same door for an external diff, a pager and hooks. Every git call
-# in this script goes through here.
+# ------------------------------------------------- git, treated as hostile
+# The repository under review is untrusted input, and so is its .git: an
+# archive or a shared folder carries its own config, index and objects, and
+# git will run commands that config names and report paths that index holds.
+# Each rule below exists because a review found a way through without it.
+# This covers the paths reviews have found, by class where git allows it; it
+# is not a proof that git can run nothing.
+
+REPO_ROOT="$(pwd -P)"
+# Never search upward: an untracked folder inside some parent repository is
+# not that repository, and git would otherwise answer about the parent.
+export GIT_CEILING_DIRECTORIES="${REPO_ROOT%/*}"
+
+# A FIFO in .git, or an include git follows, would block git forever.
+if command -v timeout >/dev/null 2>&1; then _limit=(timeout 60); else _limit=(); fi
+
+# Every git call goes through here: no core.fsmonitor, hooks, external diff,
+# pager or submodule recursion -- each of those runs a command the
+# repository's config names.
 git_safe() {
-  git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat -c diff.external= \
-    -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@"
+  ${_limit[@]+"${_limit[@]}"} git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat \
+    -c diff.external= -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@"
 }
 
-# No git command here may reach a transport. A partial clone whose objects are
-# missing lazy-fetches them, and the fetch runs whatever the repository names:
-# core.sshCommand, a credential helper, remote upload-pack, an ext:: command.
-# GIT_ALLOW_PROTOCOL overrides every protocol.*.allow in config, so naming a
-# protocol that does not exist allows none; GIT_NO_LAZY_FETCH does the same on
-# git 2.44 and later. A diff that then cannot read an object fails, and fails
-# loudly below. Submodules are not recursed into for the same reason: their
-# own config is not the one the filter blanking below reads.
+# No git command may reach a transport. A partial clone lazy-fetches a missing
+# object, and the fetch runs core.sshCommand, a credential helper, remote
+# upload-pack or an ext:: command. GIT_ALLOW_PROTOCOL overrides every
+# protocol.*.allow in config, so naming a protocol that does not exist allows
+# none; GIT_NO_LAZY_FETCH does the same on git 2.44 and later.
 export GIT_ALLOW_PROTOCOL=egressa-none GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0
+
+# Whether git may be asked anything about this directory at all. GIT_REASON
+# says why not; empty with USE_GIT=0 means there is simply no repository.
+USE_GIT=1
+GIT_REASON=""
+if [ ! -e .git ] && [ ! -L .git ]; then
+  USE_GIT=0
+elif [ -L .git ] || [ ! -d .git ]; then
+  # A .git file (gitdir:) or link names a repository somewhere else.
+  GIT_REASON=".git is not this directory's own repository"
+else
+  for _f in config HEAD index packed-refs commondir objects/info/alternates info/attributes; do
+    if { [ -e ".git/$_f" ] || [ -L ".git/$_f" ]; } && { [ -L ".git/$_f" ] || [ ! -f ".git/$_f" ]; }; then
+      GIT_REASON=".git/$_f is not a regular file"
+      break
+    fi
+  done
+  if [ -z "$GIT_REASON" ]; then
+    # GIT_CONFIG_COUNT, which the filter blanking below relies on, is 2.31+.
+    _ver="$(git_safe --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+    if [ "${_ver%%.*}" -lt 2 ] 2>/dev/null || { [ "${_ver%%.*}" = 2 ] && [ "${_ver#*.}" -lt 31 ]; }; then
+      GIT_REASON="the installed Git ${_ver:-unknown} is older than 2.31"
+    elif [ "$(git_safe rev-parse --show-toplevel 2>/dev/null)" != "$REPO_ROOT" ] \
+      || [ "$(git_safe rev-parse --absolute-git-dir 2>/dev/null)" != "$REPO_ROOT/.git" ]; then
+      # core.worktree, or anything else that points git's view elsewhere.
+      GIT_REASON="Git's repository is not this directory"
+    fi
+  fi
+fi
+[ -n "$GIT_REASON" ] && USE_GIT=0
 
 # Filter drivers. `.git/info/attributes` or `.gitattributes` can assign a clean,
 # smudge or process filter that the repository's config defines, and git runs
 # it to hash every stat-dirty worktree file -- which every file is after an
 # archive is extracted. Every driver git can see is blanked and marked not
 # required, through GIT_CONFIG_COUNT rather than `-c`, because `-c` splits at
-# the first `=` and a driver name may contain one. `git config` itself runs
-# nothing.
-# Appended after any GIT_CONFIG_COUNT entries the reviewer already has.
-_n="${GIT_CONFIG_COUNT:-0}"
-while IFS= read -r -d '' _key; do
-  export "GIT_CONFIG_KEY_$_n=$_key" "GIT_CONFIG_VALUE_$_n="
-  _n=$((_n + 1))
-  export "GIT_CONFIG_KEY_$_n=${_key%.*}.required" "GIT_CONFIG_VALUE_$_n=false"
-  _n=$((_n + 1))
-done < <(git_safe config -z --name-only --get-regexp '^filter\..*\.(clean|smudge|process)$' 2>/dev/null)
-export GIT_CONFIG_COUNT="$_n"
+# the first `=` and a driver name may contain one. Appended after any entries
+# the reviewer already has.
+if [ "$USE_GIT" = 1 ]; then
+  _n="${GIT_CONFIG_COUNT:-0}"
+  while IFS= read -r -d '' _key; do
+    export "GIT_CONFIG_KEY_$_n=$_key" "GIT_CONFIG_VALUE_$_n="
+    _n=$((_n + 1))
+    export "GIT_CONFIG_KEY_$_n=${_key%.*}.required" "GIT_CONFIG_VALUE_$_n=false"
+    _n=$((_n + 1))
+  done < <(git_safe config -z --name-only --get-regexp '^filter\..*\.(clean|smudge|process)$' 2>/dev/null)
+  export GIT_CONFIG_COUNT="$_n"
+fi
 
-# git's paths, NUL-separated, as one path per line. A name holding a newline
-# cannot be carried in this script's line-based lists -- parsing such a name as
-# two lines is how a link named `zz<newline>src` used to hide all of src/ -- so
-# it is replaced by a line holding only \001, counted and reported below. The
-# status is git's, through pipefail.
+# NUL-separated paths as one path per line. Two kinds are never passed on,
+# and are replaced by a marker line counted and reported below -- a marker
+# starts with `/`, which no passed-on path can:
+# - a name holding a newline, which a line-based list would split (a link
+#   named `zz<newline>src` used to hide all of src/);
+# - a path that is not plainly inside this directory: absolute, or with an
+#   empty, `.` or `..` component. A crafted tree or index makes git report
+#   `../outside/secret.js`, and it used to be grepped and handed on.
+# The status is the producer's, through pipefail.
 nul_paths() {
   local p
   while IFS= read -r -d '' p; do
+    p="${p#./}"
     case "$p" in
-      *$'\n'*) printf '\001\n' ;;
+      *$'\n'*) printf '%s\n' '//newline' ;;
+      '' | /* | . | .. | ../* | */.. | */../* | ./* | */. | */./* | *//*)
+        printf '%s\n' '//outside' ;;
       *) printf '%s\n' "$p" ;;
     esac
   done
 }
 git_paths() { local sub="$1"; shift; git_safe "$sub" -z "$@" | nul_paths; }
+find_paths() {
+  find . \( -name .git -o -name node_modules \) -prune -o -type f -print0 2>/dev/null | nul_paths
+}
 
 emit SCOPE_PROTO 1
 emit MODE "$MODE"
+if [ -n "$GIT_REASON" ]; then
+  emit DEGRADED "$GIT_REASON; Git is not used and files are listed with find"
+fi
 
 # ---------------------------------------------------------------- file set
 # FILES is the newline-separated list of source files under review.
+if [ "$MODE" = "diff" ] && [ "$USE_GIT" = 0 ]; then
+  # Without a trustworthy repository there is no diff to take.
+  [ -z "$GIT_REASON" ] && emit DEGRADED "not a Git repository; falling back to whole-repo mode"
+  emit MODE repo
+  MODE="repo"
+fi
 if [ "$MODE" = "diff" ]; then
   if [ -z "$BASE" ]; then
     for cand in main master develop; do
@@ -132,21 +191,29 @@ if [ "$MODE" = "diff" ]; then
 fi
 
 if [ "$MODE" = "repo" ]; then
-  # Not being a git repository is ordinary; being one whose listing fails is not.
-  if ! git_safe rev-parse --git-dir >/dev/null 2>&1; then
-    FILES="$(find . -path ./.git -prune -o -type f -print0 | nul_paths | sed 's|^\./||')"
+  if [ "$USE_GIT" = 0 ]; then
+    FILES="$(find_paths)"
   elif ! FILES="$(git_paths ls-files 2>/dev/null)"; then
     emit DEGRADED "listing tracked files failed; listing files with find"
-    FILES="$(find . -path ./.git -prune -o -type f -print0 | nul_paths | sed 's|^\./||')"
+    FILES="$(find_paths)"
+  elif [ -z "$FILES" ] && [ -n "$(find_paths | head -1)" ]; then
+    # An index that lists nothing over a populated tree is not an empty repository.
+    emit DEGRADED "the index lists no files although files are present; listing files with find"
+    FILES="$(find_paths)"
   fi
   emit DIFF_LINES "n/a"
 fi
 
-_unusual="$(printf '%s\n' "${FILES:-}" | grep -c $'^\001$' || true)"
-if [ "${_unusual:-0}" -gt 0 ]; then
-  emit DEGRADED "$_unusual path(s) with a newline in the name were not reviewed"
-  FILES="$(printf '%s\n' "$FILES" | grep -v $'^\001$' || true)"
-fi
+for _kind in newline outside; do
+  _count="$(printf '%s\n' "${FILES:-}" | grep -cx "//$_kind" || true)"
+  if [ "${_count:-0}" -gt 0 ]; then
+    case "$_kind" in
+      newline) emit DEGRADED "$_count path(s) with a newline in the name were not reviewed" ;;
+      outside) emit DEGRADED "$_count path(s) outside the repository were listed by Git and not reviewed" ;;
+    esac
+  fi
+done
+FILES="$(printf '%s\n' "${FILES:-}" | grep -vx -e '//newline' -e '//outside' || true)"
 
 # Source files we can reason about. node_modules is never read -- same rule as the engine.
 #
@@ -206,7 +273,6 @@ EXISTING="$(printf '%s\n' "$SRC" | while IFS= read -r f; do [ -n "$f" ] && [ -f 
 # scan would otherwise read, so a repository that merely *contains* the reviewer
 # trips every gate. Same failure as a secret scanner flagging its own fixtures.
 SELF_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd -P || true)"
-REPO_ROOT="$(pwd -P)"
 case "$SELF_DIR" in
   "$REPO_ROOT"/*)
     SELF_REL="${SELF_DIR#"$REPO_ROOT"/}"

@@ -244,9 +244,15 @@ goes through `git_safe` (no `core.fsmonitor`, hooks, external diff, pager or sub
 every clean, smudge and process filter driver git can see is blanked through `GIT_CONFIG_COUNT`;
 and `GIT_ALLOW_PROTOCOL` names a protocol that does not exist, so no command can reach a transport
 -- which is what a partial clone's lazy fetch, `core.sshCommand`, a credential helper and `ext::`
-all need. A git command that fails is reported as `DEGRADED` with a fallback, never as an empty
-review. Paths travel NUL-separated, and a link -- or a path under one -- is dropped by checking the
-filesystem, not a parsed listing. Specialists never run git: they get the set from
+all need. Git is believed only about this directory: `.git` must be a plain directory whose control files
+are regular files, git must be 2.31 or later, its top level and git directory must be exactly
+this directory's, it may not search upward (`GIT_CEILING_DIRECTORIES`), and each call runs under
+`timeout` where one exists. Anything else, a failed listing, or an index that lists nothing over a
+populated tree is reported as `DEGRADED` and the files are listed with `find` -- never presented as
+an empty review, and `SKILL.md` carries every `DEGRADED:` line into the report. Paths travel
+NUL-separated; one that is absolute or has an empty, `.` or `..` component is never reviewed, which
+is how a crafted tree had git list `../outside/secret.js`; and a link, or a path under one, is
+dropped by checking the filesystem, not a parsed listing. Specialists never run git: they get the set from
 `scope.sh --list`. Each of these has a test that plants it. This covers the execution paths
 reviews have found, by class where git allows it; it is not a proof that git can run nothing.
 
