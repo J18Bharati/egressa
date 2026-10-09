@@ -123,10 +123,13 @@ literals, embedded tabs and leading whitespace are handled as `fetch` handles th
 the parser rejects reports nothing, because `fetch` would throw before sending. Computed member access, array `join`, `eval`, and a dynamically `import()`ed SDK are
 also untracked and unresolved.
 
-There is no longer any case in the golden table where the analyzer produces a **possibly incorrect**
-answer rather than declining. That sentence was written before concatenation was folded, and was not
-true then: `B + '.attacker.example/x'` resolved to the vendor `B` named, and no row covered it. The
-golden table now pins the true host for that case and for its template and literal forms.
+An earlier version of this file said no case in the golden table produced a **possibly incorrect**
+answer rather than declining. It was not true when written: `B + '.attacker.example/x'` resolved to
+the vendor `B` named, and no row covered it, and a request on an axios client reported the client's
+base URL even when the request URL was absolute. The golden table now pins the true host for both.
+Two kinds of possibly incorrect answer are kept on purpose, each documented with the assumption
+it rests on: an axios base URL that configuration the analyzer cannot read might replace, under
+"Requests through axios", and an interpolated path in a connection URI, under "Connection URIs".
 
 ### A constructed URL is a reference, not a call
 
@@ -199,6 +202,84 @@ Two consequences are deliberate false negatives:
 
 A consumer that renders a `reference` the way it renders a `callsite` re-creates the whole defect.
 The distinction is carried by the type, not by the wording.
+
+### Requests through axios
+
+axios can be given two destinations: a base URL, on the client or in the request config, and the
+request URL. It joins them by its own rule (`buildFullPath`, checked against axios 1.12.2): the
+request URL when it is absolute -- `scheme://` or protocol-relative `//`, tested on the raw string --
+and the base URL when it is relative or when `allowAbsoluteUrls` is `false`. Egressa applies that
+rule:
+
+```js
+const api = axios.create({ baseURL: 'https://api.stripe.com' });
+api.get('/v1/charges');               // api.stripe.com, medium: read through the client binding
+api.get('https://evil.example/x');    // evil.example, high: the request URL replaces the base
+api.get(' https://evil.example/x');   // api.stripe.com: a leading space is relative to axios
+```
+
+Where the request URL could be either, it declines rather than reporting the base URL:
+
+```js
+api.get(url);                // unresolved: names url
+api.get(`/${path}`);         // unresolved: `path` beginning with '/' makes it protocol-relative
+api.get(`users${rest}`);     // unresolved: `rest` could finish a scheme
+api.get('//evil.example/x'); // unresolved: the scheme, and so the origin, come from the page
+```
+
+`allowAbsoluteUrls` is read only where it is visible, and anything that could set it without being
+read makes an absolute request URL decline, since the base may or may not apply: a value other than
+a literal `true` or `false`, a config passed by name, a spread or computed key, or a `defaults`
+object reached in the file in any way other than through one of its other named keys. So
+`Object.assign(api.defaults, ...)`, an alias of the client or of its defaults, and `delete` all
+count, while `api.defaults.headers.common.Authorization = token` does not. This applies to every
+client in the file, because no scope chain says which one an alias names. A relative request URL is
+not affected: whatever `allowAbsoluteUrls` is, axios joins it under the base.
+
+`baseURL` is read the way the object literal evaluates, the last key winning. A spread or computed
+key that follows it may replace it, and the base is then unresolved; one that comes before it is
+overwritten by it. A `defaults` object's `baseURL` reached in the file, by the same test, makes
+every client's base unresolved. A request config's `url` that a spread or computed key could set is
+unresolved too. `api.getUri()` and `api.create()` send nothing and are not reported.
+
+What the analyzer does **not** see, and assumes away:
+
+- **A request config passed by name, or spread, with no `baseURL` of its own.**
+  `api.get('/x', opts)` and `api.get('/x', { ...opts })` could carry a `baseURL`; it is not read,
+  and the client's own base is reported. These are possibly incorrect answers, recorded as such in
+  the golden table. Declining would cost every `api.get(path, options)` in a codebase, and a
+  per-request base URL hidden in a variable is rare next to that.
+- **Interceptors, and defaults written in another module.** A request interceptor can rewrite
+  `config.url` or `config.baseURL`, and `axios.defaults` set in a different file changes clients
+  created after it, which is the cross-module constant problem above. Neither is followed.
+- **Calling the client directly.** `api('/v1')` and `api({ url })` are not reported. A missed call,
+  not a wrong host.
+
+### Connection URIs
+
+A `postgres://`, `mongodb://` or `redis://` URI is read by its database client, not by the WHATWG
+URL parser, and those clients do not agree with WHATWG or with each other. A URI whose authority is
+not its destination is declined rather than parsed per client:
+
+```js
+new URL('postgres://user:pw@db.example.com:5432/app');      // db.example.com
+new URL('mongodb://a.example.com:27017,b.example.com/');    // nothing: a host list
+new URL('postgres://a.example.com:p#w@b.example.com/');      // nothing: libpq reads userinfo past '#'
+new URL('postgres://db.example.com/app?host=b.example.com'); // nothing: libpq connects to host=
+```
+
+A `hostaddr=` parameter is treated like `host=`, including when its name is percent-encoded or it
+follows a `#` inside the query, which libpq does not treat as a delimiter there; so is an
+interpolation inside the query or straight after a `?` or `#`, since it could supply either. More
+than one `@` in the authority is declined, since MongoDB's parser ends the userinfo at the first,
+and so is a `\`, which ioredis reads as `/`, or a character in the host at which ioredis's legacy
+`url.parse` ends a hostname (`%`, `;`, a quote, a brace, `|`, `^`, a backtick, `<`, `>`, a space).
+
+An interpolation in the path is not declined: `` `postgres://db.example.com:5432/${name}` ``
+resolves, on the assumption that a database name does not carry a query string. A `name` of
+`app?host=other.example` would be a wrong host, so this is a possibly incorrect answer, recorded as
+the row "a path completed by an interpolation" in `resolve-host.test.ts`. These are `reference` hits today -- no call sink takes a connection URI --
+so declining one is silent.
 
 ### Constant chains deeper than three steps
 

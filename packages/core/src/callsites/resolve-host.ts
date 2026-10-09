@@ -57,6 +57,11 @@ export function hostFromUrlPrefix(prefix: string, hasMore: boolean): HostResolut
   const special = SPECIAL_SCHEMES.has(schemeName);
   const delimiter = rest.search(special ? /[/?#\\]/ : /[/?#]/);
 
+  if (!special) {
+    const refusal = connectionUriRefusal(rest, delimiter, hasMore);
+    if (refusal) return { kind: 'unresolved', reason: refusal };
+  }
+
   if (delimiter === -1) {
     if (hasMore) {
       return {
@@ -86,6 +91,79 @@ function hostOf(scheme: string, special: boolean, authority: string): HostResolu
     return host === '' ? { kind: 'not-a-url' } : { kind: 'resolved', host };
   } catch {
     return { kind: 'not-a-url' };
+  }
+}
+
+/**
+ * Why a non-special URI's authority is not its destination, or null when it is.
+ *
+ * These are connection strings, and their clients do not read them the way
+ * WHATWG reads a URL -- or the way each other does. Three shapes make the
+ * authority before the first `/`, `?` or `#` a confident wrong host:
+ *
+ * - A `,` in it. MongoDB's connection string spec and libpq both take a host
+ *   list, and the first entry is not the destination.
+ * - An `@` after a `?` or `#` and before the next `/`. libpq takes userinfo
+ *   up to the first `@` before any `/` and treats neither `?` nor `#` as a
+ *   delimiter, so `postgres://a.example:p#w@b.example/` connects to b.example.
+ *   An interpolation in that stretch could supply the `@`, so it is refused too.
+ * - A `host=` or `hostaddr=` query parameter, which libpq connects to in place
+ *   of the authority -- and an interpolation inside the query, which could be one.
+ * - More than one `@`, or a `\`, in the authority: MongoDB's parser ends the
+ *   userinfo at the first `@`, and ioredis's `url.parse` reads `\` as `/`.
+ *
+ * Refusing is chosen over parsing each scheme as its client does: the refusals
+ * are checkable against the specs, and a per-client parser is one more set of
+ * hand-written URL rules of the kind that kept producing wrong hosts.
+ */
+function connectionUriRefusal(rest: string, delimiter: number, hasMore: boolean): string | null {
+  const authority = delimiter === -1 ? rest : rest.slice(0, delimiter);
+  if (authority.includes(',')) return 'connection URI lists several hosts';
+  // ioredis parses with Node's legacy `url.parse`, which reads `\` as `/`.
+  if (authority.includes('\\')) {
+    return 'connection URI authority contains a backslash, which some clients read as a slash';
+  }
+  // MongoDB's parser ends the userinfo at the first `@`; `normalise` takes the last.
+  if (authority.indexOf('@') !== authority.lastIndexOf('@')) {
+    return 'connection URI userinfo is ambiguous: its authority has more than one @';
+  }
+  // ...and its url.parse ends a hostname at these, connecting to what precedes
+  // them. Only the host is checked: a percent-encoded password is ordinary.
+  if (/[%;'{}|^`<>" ]/.test(authority.slice(authority.lastIndexOf('@') + 1))) {
+    return 'connection URI host contains a character legacy url.parse (ioredis) ends a hostname at';
+  }
+  if (delimiter === -1) return null;
+
+  const tail = rest.slice(delimiter);
+  const slash = tail.indexOf('/');
+  const beforeSlash = slash === -1 ? tail : tail.slice(0, slash);
+  if (beforeSlash.includes('@') || (slash === -1 && hasMore && beforeSlash !== '')) {
+    return 'connection URI userinfo is ambiguous: an @ may follow its ? or #';
+  }
+
+  const query = tail.indexOf('?');
+  if (query === -1) return null;
+  // libpq ends neither the query nor a value at `#`, so the whole remainder is
+  // read; and both libpq and URLSearchParams decode a parameter's name.
+  for (const pair of tail.slice(query + 1).split('&')) {
+    const name = decodedParamName(pair);
+    if (name === null) return 'connection URI has a query parameter name that does not decode';
+    if (name === 'host' || name === 'hostaddr') {
+      return 'connection URI names its host in a query parameter';
+    }
+  }
+  if (hasMore) {
+    return 'connection URI query is completed by an interpolated value, which may name a host';
+  }
+  return null;
+}
+
+function decodedParamName(pair: string): string | null {
+  const equals = pair.indexOf('=');
+  try {
+    return decodeURIComponent(equals === -1 ? pair : pair.slice(0, equals)).toLowerCase();
+  } catch {
+    return null;
   }
 }
 
