@@ -15793,6 +15793,12 @@ function hostOf(scheme, special, authority) {
 function connectionUriRefusal(rest, delimiter, hasMore) {
   const authority = delimiter === -1 ? rest : rest.slice(0, delimiter);
   if (authority.includes(",")) return "connection URI lists several hosts";
+  if (authority.includes("\\")) {
+    return "connection URI authority contains a backslash, which some clients read as a slash";
+  }
+  if (authority.indexOf("@") !== authority.lastIndexOf("@")) {
+    return "connection URI userinfo is ambiguous: its authority has more than one @";
+  }
   if (delimiter === -1) return null;
   const tail = rest.slice(delimiter);
   const slash = tail.indexOf("/");
@@ -15802,15 +15808,25 @@ function connectionUriRefusal(rest, delimiter, hasMore) {
   }
   const query = tail.indexOf("?");
   if (query === -1) return null;
-  const fragment = tail.indexOf("#", query);
-  const params = tail.slice(query, fragment === -1 ? void 0 : fragment);
-  if (/[?&]host(?:addr)?=/i.test(params)) {
-    return "connection URI names its host in a query parameter";
+  for (const pair of tail.slice(query + 1).split("&")) {
+    const name = decodedParamName(pair);
+    if (name === null) return "connection URI has a query parameter name that does not decode";
+    if (name === "host" || name === "hostaddr") {
+      return "connection URI names its host in a query parameter";
+    }
   }
-  if (hasMore && fragment === -1) {
+  if (hasMore) {
     return "connection URI query is completed by an interpolated value, which may name a host";
   }
   return null;
+}
+function decodedParamName(pair) {
+  const equals = pair.indexOf("=");
+  try {
+    return decodeURIComponent(equals === -1 ? pair : pair.slice(0, equals)).toLowerCase();
+  } catch {
+    return null;
+  }
 }
 var isControlOrSpace = (code) => code <= 32;
 function trimControls(value, trailing) {
@@ -15983,6 +15999,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
     const literal2 = literalBindingFor(init2);
     if (literal2) bindings.set(name, { ...literal2, declaredAt: node.start });
   }
+  const defaultsWrites = collectDefaultsWrites(program);
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
     if (node.type !== "CallExpression" && !isNew) return;
@@ -15995,16 +16012,28 @@ function analyzeFile(text, filePath, extraSinks = []) {
     const binding = callee.type === "MemberExpression" && shape.object ? readable(bindings, shape.object, unstable, node.start) : null;
     const onClient = binding?.kind === "client";
     const direct = isNew ? null : directAxiosMethod(shape);
+    if (onClient && AXIOS_NON_REQUEST_METHODS.has(shape.property ?? "")) return;
     if (onClient || direct) {
       const request = axiosRequest(onClient ? shape.property ?? "" : direct ?? "", args);
+      const clientName = onClient ? shape.object ?? "" : null;
+      const clientDefaults = clientName === null ? void 0 : defaultsWrites.get(clientName);
       const inherited = !onClient ? null : {
-        resolution: binding.host ? { kind: "resolved", host: binding.host } : { kind: "unresolved", reason: binding.reason ?? "client base URL not resolvable" },
+        resolution: overridesBase(clientDefaults) ? {
+          kind: "unresolved",
+          reason: `base URL is reassigned through ${clientName}.defaults`
+        } : binding.host ? { kind: "resolved", host: binding.host } : {
+          kind: "unresolved",
+          reason: binding.reason ?? "client base URL not resolvable"
+        },
         atCall: false
       };
       const base = requestBase(request.config, inherited, bindings, context);
+      const written = [clientDefaults, defaultsWrites.get("axios")].find(overridesAllowAbsolute);
       const allowAbsolute = allowAbsoluteFrom(
         request.config,
-        onClient ? binding.allowAbsolute : true
+        written ? {
+          reason: `allowAbsoluteUrls is written through ${written === clientDefaults ? clientName : "axios"}.defaults, so the request URL may or may not replace the base URL`
+        } : onClient ? binding.allowAbsolute : true
       );
       const { resolution, fromBase } = resolveAxiosRequest(
         request.url,
@@ -16337,7 +16366,9 @@ function referenceBindingFor(init2, bindings, context) {
   if (init2.type !== "NewExpression") return null;
   const resolution = referenceObjectHost(init2, [], bindings, 0, context);
   if (resolution?.kind !== "resolved") return null;
-  return { kind: "reference", host: resolution.host, start: init2.start };
+  const callee = init2.callee;
+  const via = callee?.type === "Identifier" ? String(callee.name) : "";
+  return { kind: "reference", host: resolution.host, start: init2.start, via };
 }
 function literalBindingFor(init2) {
   if (init2.type === "Literal" && typeof init2.value === "string") {
@@ -16368,7 +16399,11 @@ function clientBindingFor(init2, bindings, context) {
   const argument = args[sink.argIndex];
   const config = argument ? unwrap(argument) : void 0;
   const allowAbsolute = allowAbsoluteFrom(config, true);
-  const baseNode = config?.type === "ObjectExpression" ? configProperty(config, "baseURL") : config;
+  const read = config?.type === "ObjectExpression" ? configProperty(config, "baseURL") : null;
+  if (read?.value && read.opaque) {
+    return { kind: "client", host: null, reason: BASE_REPLACEABLE, allowAbsolute };
+  }
+  const baseNode = read ? read.value : config;
   if (!baseNode) {
     return { kind: "client", host: null, reason: "client created with no base URL", allowAbsolute };
   }
@@ -16383,6 +16418,8 @@ function clientBindingFor(init2, bindings, context) {
     allowAbsolute
   };
 }
+var UNREADABLE_CONFIG = "allowAbsoluteUrls may be set by a config the analyzer cannot read, so the request URL may or may not replace the base URL";
+var AXIOS_NON_REQUEST_METHODS = /* @__PURE__ */ new Set(["getUri", "create"]);
 var AXIOS_CONFIG_INDEX = {
   get: 1,
   delete: 1,
@@ -16410,7 +16447,7 @@ function axiosRequest(method, args) {
   const first = args[0] ? unwrap(args[0]) : void 0;
   if (method === "request") {
     if (first?.type === "ObjectExpression") {
-      return { url: configProperty(first, "url"), config: first };
+      return { url: configProperty(first, "url").value, config: first };
     }
     return { url: args[0] ?? null, config: args[1] };
   }
@@ -16422,17 +16459,21 @@ function axiosRequest(method, args) {
 }
 function requestBase(config, inherited, bindings, context) {
   const object = config ? unwrap(config) : void 0;
-  const value = object?.type === "ObjectExpression" ? configProperty(object, "baseURL") : null;
+  if (object?.type !== "ObjectExpression") return inherited;
+  const { value, opaque } = configProperty(object, "baseURL");
   if (!value) return inherited;
+  if (opaque) return { resolution: { kind: "unresolved", reason: BASE_REPLACEABLE }, atCall: true };
   return { resolution: resolveArgument(value, [], bindings, 0, context), atCall: true };
 }
 function allowAbsoluteFrom(config, inherited) {
-  const object = config ? unwrap(config) : void 0;
-  if (object?.type !== "ObjectExpression") return inherited;
-  const value = configProperty(object, "allowAbsoluteUrls");
+  if (!config) return inherited;
+  const object = unwrap(config);
+  if (object.type !== "ObjectExpression") return { reason: UNREADABLE_CONFIG };
+  const { value, opaque } = configProperty(object, "allowAbsoluteUrls");
+  if (opaque) return { reason: UNREADABLE_CONFIG };
   if (!value) return inherited;
   const literal2 = unwrap(value);
-  return literal2.type === "Literal" && typeof literal2.value === "boolean" ? literal2.value : "unknown";
+  return literal2.type === "Literal" && typeof literal2.value === "boolean" ? literal2.value : { reason: UNKNOWN_ALLOW_ABSOLUTE };
 }
 function resolveAxiosRequest(url, base, allowAbsolute, bindings, context) {
   const notAUrl = { kind: "not-a-url" };
@@ -16453,28 +16494,94 @@ function resolveAxiosRequest(url, base, allowAbsolute, bindings, context) {
       if (context.referencesRead) context.referencesRead.length = mark;
       return lead.text === "" && resolution.kind === "unresolved" ? fromUrl(resolution) : decline("request URL may be absolute, which would replace the base URL");
     }
-    if (allowAbsolute === "unknown") {
+    if (!isUrlObject(url, bindings, context)) {
       if (context.referencesRead) context.referencesRead.length = mark;
-      return decline(UNKNOWN_ALLOW_ABSOLUTE);
+      return fromUrl(notAUrl);
+    }
+    if (allowAbsolute !== true) {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return decline(allowAbsolute.reason);
     }
     return fromUrl(resolution);
   }
-  if (allowAbsolute === "unknown") return decline(UNKNOWN_ALLOW_ABSOLUTE);
+  if (allowAbsolute !== true) return decline(allowAbsolute.reason);
   if (!absolute[1]) {
     return decline("request URL is protocol-relative; its scheme comes from the page at runtime");
   }
   return fromUrl(resolveArgument(url, [], bindings, 0, context));
 }
+function isUrlObject(node, bindings, context) {
+  const value = unwrap(node);
+  if (value.type === "MemberExpression") {
+    const object = value.object;
+    return !!object && isUrlObject(object, bindings, context);
+  }
+  if (value.type === "CallExpression") {
+    const callee = value.callee;
+    const object = callee?.type === "MemberExpression" ? callee.object : void 0;
+    return !!object && isUrlObject(object, bindings, context);
+  }
+  if (value.type === "NewExpression") {
+    const callee = value.callee;
+    return callee?.type === "Identifier" && String(callee.name) === "URL";
+  }
+  if (value.type === "Identifier") {
+    const binding = readable(bindings, String(value.name), context.unstable, context.callStart);
+    return binding?.kind === "reference" && binding.via === "URL";
+  }
+  return false;
+}
 var UNKNOWN_ALLOW_ABSOLUTE = "allowAbsoluteUrls is not a literal, so the request URL may or may not replace the base URL";
 function configProperty(object, key) {
-  let found = null;
+  let value = null;
+  let opaque = false;
   for (const property of object.properties ?? []) {
-    if (property.type !== "Property" || property.computed) continue;
+    if (property.type !== "Property" || property.computed) {
+      opaque = true;
+      continue;
+    }
     const name = property.key;
     const label = name ? String(name.name ?? name.value ?? "") : "";
-    if (label === key) found = property.value ?? null;
+    if (label === key) {
+      value = property.value ?? null;
+      opaque = false;
+    }
   }
-  return found;
+  return { value, opaque };
+}
+var BASE_REPLACEABLE = "base URL may be replaced by a spread or computed key that follows it";
+function collectDefaultsWrites(program) {
+  const writes = /* @__PURE__ */ new Map();
+  const record2 = (name, key) => {
+    const keys = writes.get(name) ?? /* @__PURE__ */ new Set();
+    keys.add(key);
+    writes.set(name, keys);
+  };
+  walk2(program, (node) => {
+    if (node.type !== "AssignmentExpression") return;
+    const target = node.left;
+    if (target?.type !== "MemberExpression") return;
+    const object = target.object;
+    const property = target.property;
+    const key = target.computed ? "*" : String(property?.name ?? "");
+    if (object?.type === "Identifier" && key === "defaults") {
+      record2(String(object.name), "*");
+      return;
+    }
+    if (object?.type !== "MemberExpression" || object.computed) return;
+    const owner = object.object;
+    const middle = object.property;
+    if (owner?.type === "Identifier" && String(middle?.name ?? "") === "defaults") {
+      record2(String(owner.name), key);
+    }
+  });
+  return writes;
+}
+function overridesBase(keys) {
+  return !!keys && (keys.has("*") || keys.has("baseURL"));
+}
+function overridesAllowAbsolute(keys) {
+  return !!keys && (keys.has("*") || keys.has("allowAbsoluteUrls"));
 }
 function unwrap(node) {
   let current = node;

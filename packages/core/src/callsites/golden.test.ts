@@ -808,9 +808,11 @@ const NO_CALL_SITE: Case[] = [
  * axios joins them in `buildFullPath`: the request URL wins when
  * `isAbsoluteURL` says it is absolute -- `/^([a-z][a-z\d+\-.]*:)?\/\//i` on
  * the raw string, so `scheme://` and protocol-relative `//host` -- unless
- * `allowAbsoluteUrls` is loosely `false`, in which case the base always wins.
- * Every expectation here was checked against axios 1.12.2's source and, for
- * the joined string, against Node's `new URL()`.
+ * `allowAbsoluteUrls` is loosely `false`, in which case a non-empty base wins.
+ * The expectations were checked against axios 1.12.2's source and, for the
+ * joined string, against Node's `new URL()` -- except the rows marked as
+ * documented limitations, which record what the analyzer reports rather than
+ * where the request goes.
  *
  * The row checks the hit on the snippet's LAST line, which is always the
  * request. In the client rows the first hit is the `axios.create(...)` call,
@@ -871,6 +873,11 @@ const AXIOS_REQUESTS: Case[] = [
     // A URL object stringifies to an absolute URL, so axios uses it as is.
     name: 'a constructed URL passed as the request URL',
     code: `const u = new URL('https://evil.example/x');\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(u);`,
+    host: 'evil.example',
+  },
+  {
+    name: 'the href of a constructed URL passed as the request URL',
+    code: `const u = new URL('https://evil.example/x');\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get(u.href);`,
     host: 'evil.example',
   },
   {
@@ -1015,9 +1022,9 @@ const AXIOS_REQUESTS: Case[] = [
     code: `axios.get('/v1', { baseURL: 'https://api.stripe.com' });`,
     host: 'api.stripe.com',
   },
-  // Documented limitations (docs/LIMITATIONS.md, "axios configuration the
-  // analyzer cannot see"): a config that is not an object literal is assumed
-  // not to replace the base URL. Recorded so a change is deliberate.
+  // Documented limitations (docs/LIMITATIONS.md, "Requests through axios"): a
+  // request config passed by name or spread is assumed not to carry its own
+  // baseURL. Possibly incorrect answers, recorded so a change is deliberate.
   {
     name: 'a request config passed by name is not read',
     code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', opts);`,
@@ -1028,11 +1035,63 @@ const AXIOS_REQUESTS: Case[] = [
     code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('/x', { ...opts });`,
     host: 'api.stripe.com',
   },
+  // Configuration that could change the answer and cannot be read. An absolute
+  // request URL declines, since `allowAbsoluteUrls` could be false; a relative
+  // one keeps the base unless the base itself could have been replaced.
   {
-    // Truth is api.stripe.com: the global default makes axios join the base.
-    name: 'a global allowAbsoluteUrls default is not followed',
+    name: 'a create config passed by name, with an absolute request URL',
+    code: `const cfg = { baseURL: 'https://api.stripe.com', allowAbsoluteUrls: false };\nconst api = axios.create(cfg);\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'allowAbsoluteUrls',
+  },
+  {
+    name: 'a spread create config, with an absolute request URL',
+    code: `const api = axios.create({ ...shared, baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'allowAbsoluteUrls',
+  },
+  {
+    name: 'a spread before baseURL does not replace it',
+    code: `const api = axios.create({ ...shared, baseURL: 'https://api.stripe.com' });\napi.get('/v1');`,
+    host: 'api.stripe.com',
+  },
+  {
+    name: 'a spread after baseURL may replace it',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com', ...overrides });\napi.get('/v1');`,
+    host: null,
+    reason: 'may be replaced',
+  },
+  {
+    name: 'a computed allowAbsoluteUrls key',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com', ['allowAbsoluteUrls']: false });\napi.get('https://evil.example/x');`,
+    host: null,
+    reason: 'allowAbsoluteUrls',
+  },
+  {
+    name: 'a computed baseURL key after baseURL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com', ['baseURL']: 'https://evil.example' });\napi.get('/x');`,
+    host: null,
+    reason: 'may be replaced',
+  },
+  {
+    name: 'a request config passed by name, with an absolute request URL',
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x', opts);`,
+    host: null,
+    reason: 'allowAbsoluteUrls',
+  },
+  {
+    // A write in the same file is seen; one in another module is not, like
+    // any cross-module constant.
+    name: 'a global allowAbsoluteUrls default written in the file',
     code: `axios.defaults.allowAbsoluteUrls = false;\nconst api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.get('https://evil.example/x');`,
-    host: 'evil.example',
+    host: null,
+    reason: 'defaults',
+  },
+  {
+    name: "a client's own baseURL default written in the file",
+    code: `const api = axios.create({ baseURL: 'https://api.stripe.com' });\napi.defaults.baseURL = 'https://evil.example';\napi.get('/x');`,
+    host: null,
+    reason: 'defaults',
   },
 ];
 
@@ -1060,6 +1119,21 @@ describe('golden table: requests made through axios', () => {
       'input.ts',
     );
     expect(hits.filter((h) => h.location.startLine === 2)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'a Request object, which axios cannot join',
+      "api.get(new Request('https://evil.example/x'));",
+    ],
+    ['getUri, which builds a string and sends nothing', "api.getUri({ url: '/x' });"],
+    ['create, which makes another client', 'api.create({ timeout: 5 });'],
+  ])('reports no call site for %s', (_name, call) => {
+    const { hits } = analyzeFile(
+      `const api = axios.create({ baseURL: 'https://api.stripe.com' });\n${call}`,
+      'input.ts',
+    );
+    expect(hits.filter((h) => h.location.startLine === 2 && h.kind === 'callsite')).toEqual([]);
   });
 
   it('reports nothing for an absolute request URL that does not parse', () => {

@@ -127,8 +127,9 @@ An earlier version of this file said no case in the golden table produced a **po
 answer rather than declining. It was not true when written: `B + '.attacker.example/x'` resolved to
 the vendor `B` named, and no row covered it, and a request on an axios client reported the client's
 base URL even when the request URL was absolute. The golden table now pins the true host for both.
-Possibly incorrect answers are kept in one place on purpose, each recorded as one: axios
-configuration the analyzer cannot see, under "Requests through axios" below.
+Two kinds of possibly incorrect answer are kept on purpose, each documented with the assumption
+it rests on: an axios base URL that configuration the analyzer cannot read might replace, under
+"Requests through axios", and an interpolated path in a connection URI, under "Connection URIs".
 
 ### A constructed URL is a reference, not a call
 
@@ -226,21 +227,27 @@ api.get(`users${rest}`);     // unresolved: `rest` could finish a scheme
 api.get('//evil.example/x'); // unresolved: the scheme, and so the origin, come from the page
 ```
 
-A client whose `allowAbsoluteUrls` is anything but a literal `true` or `false` declines on an
-absolute request URL too, since the base may or may not apply.
+`allowAbsoluteUrls` is read only where it is visible, and anything that could set it without being
+read makes an absolute request URL decline, since the base may or may not apply: a value other than
+a literal `true` or `false`, a config passed by name, a spread or computed key, or a write to
+`axios.defaults` or `api.defaults` anywhere in the file. A relative request URL is not affected:
+whatever `allowAbsoluteUrls` is, axios joins it under the base.
+
+`baseURL` is read the way the object literal evaluates, the last key winning. A spread or computed
+key that follows it may replace it, and the base is then unresolved; one that comes before it is
+overwritten by it. A write to `api.defaults.baseURL` in the file makes that client's base
+unresolved. `api.getUri()` and `api.create()` send nothing and are not reported.
 
 What the analyzer does **not** see, and assumes away:
 
-- **A config passed by name, or spread.** `api.get('/x', opts)` and `{ ...defaults }` could carry a
-  `baseURL` or `allowAbsoluteUrls`; they are not read, and the client's own base is reported.
-  Declining would cost every `api.get(path, options)` in a codebase, and a per-request base URL
-  hidden in a variable is rare next to that.
-- **Interceptors and global defaults.** A request interceptor can rewrite `config.url` or
-  `config.baseURL`, and `axios.defaults.baseURL` or `axios.defaults.allowAbsoluteUrls` changes every
-  client created after it. Neither is followed.
-
-The golden table records the first two as possibly incorrect answers, with the true host noted:
-a named config, a spread config, and a global `allowAbsoluteUrls` default.
+- **A request config passed by name, or spread, with no `baseURL` of its own.**
+  `api.get('/x', opts)` and `api.get('/x', { ...opts })` could carry a `baseURL`; it is not read,
+  and the client's own base is reported. These are possibly incorrect answers, recorded as such in
+  the golden table. Declining would cost every `api.get(path, options)` in a codebase, and a
+  per-request base URL hidden in a variable is rare next to that.
+- **Interceptors, and defaults written in another module.** A request interceptor can rewrite
+  `config.url` or `config.baseURL`, and `axios.defaults` set in a different file changes clients
+  created after it, which is the cross-module constant problem above. Neither is followed.
 - **Calling the client directly.** `api('/v1')` and `api({ url })` are not reported. A missed call,
   not a wrong host.
 
@@ -257,10 +264,16 @@ new URL('postgres://a.example.com:p#w@b.example.com/');      // nothing: libpq r
 new URL('postgres://db.example.com/app?host=b.example.com'); // nothing: libpq connects to host=
 ```
 
-A `hostaddr=` parameter is treated like `host=`, and so is an interpolation inside the query or
-straight after a `?` or `#`, since it could supply either. An interpolation in the path is not:
-`` `postgres://db.example.com:5432/${name}` `` resolves, on the assumption that a database name does
-not carry a query string. These are `reference` hits today -- no call sink takes a connection URI --
+A `hostaddr=` parameter is treated like `host=`, including when its name is percent-encoded or it
+follows a `#` inside the query, which libpq does not treat as a delimiter there; so is an
+interpolation inside the query or straight after a `?` or `#`, since it could supply either. More
+than one `@` in the authority is declined, since MongoDB's parser ends the userinfo at the first,
+and so is a `\`, which ioredis reads as `/`.
+
+An interpolation in the path is not declined: `` `postgres://db.example.com:5432/${name}` ``
+resolves, on the assumption that a database name does not carry a query string. A `name` of
+`app?host=other.example` would be a wrong host, so this is a possibly incorrect answer, recorded as
+the row "a path completed by an interpolation" in `resolve-host.test.ts`. These are `reference` hits today -- no call sink takes a connection URI --
 so declining one is silent.
 
 ### Constant chains deeper than three steps

@@ -89,7 +89,7 @@ type BindingValue =
    * call that later consumes the binding can suppress the reference hit the
    * construction itself emitted.
    */
-  | { kind: 'reference'; host: string; start: number };
+  | { kind: 'reference'; host: string; start: number; via: string };
 
 /** A binding plus where it was declared, so a call above it cannot read it. */
 type Binding = BindingValue & { declaredAt: number };
@@ -207,6 +207,10 @@ export function analyzeFile(
     if (literal) bindings.set(name, { ...literal, declaredAt: node.start });
   }
 
+  // Writes to `<client>.defaults.<key>` anywhere in the file, which change
+  // what an axios request joins.
+  const defaultsWrites = collectDefaultsWrites(program);
+
   // Pass 2: find sinks and resolve their destination.
   walk(program, (node) => {
     const isNew = node.type === 'NewExpression';
@@ -231,20 +235,43 @@ export function analyzeFile(
         : null;
     const onClient = binding?.kind === 'client';
     const direct = isNew ? null : directAxiosMethod(shape);
+    // `api.getUri()` builds a string and `api.create()` makes another client;
+    // neither sends anything.
+    if (onClient && AXIOS_NON_REQUEST_METHODS.has(shape.property ?? '')) return;
     if (onClient || direct) {
       const request = axiosRequest(onClient ? (shape.property ?? '') : (direct ?? ''), args);
+      const clientName = onClient ? (shape.object ?? '') : null;
+      const clientDefaults = clientName === null ? undefined : defaultsWrites.get(clientName);
       const inherited: AxiosBase | null = !onClient
         ? null
         : {
-            resolution: binding.host
-              ? { kind: 'resolved', host: binding.host }
-              : { kind: 'unresolved', reason: binding.reason ?? 'client base URL not resolvable' },
+            resolution: overridesBase(clientDefaults)
+              ? {
+                  kind: 'unresolved',
+                  reason: `base URL is reassigned through ${clientName}.defaults`,
+                }
+              : binding.host
+                ? { kind: 'resolved', host: binding.host }
+                : {
+                    kind: 'unresolved',
+                    reason: binding.reason ?? 'client base URL not resolvable',
+                  },
             atCall: false,
           };
       const base = requestBase(request.config, inherited, bindings, context);
+      // A write to `axios.defaults` or `api.defaults` anywhere in the file can
+      // change `allowAbsoluteUrls` for this request; where it happens relative
+      // to the client's creation is not followed.
+      const written = [clientDefaults, defaultsWrites.get('axios')].find(overridesAllowAbsolute);
       const allowAbsolute = allowAbsoluteFrom(
         request.config,
-        onClient ? binding.allowAbsolute : true,
+        written
+          ? {
+              reason: `allowAbsoluteUrls is written through ${written === clientDefaults ? clientName : 'axios'}.defaults, so the request URL may or may not replace the base URL`,
+            }
+          : onClient
+            ? binding.allowAbsolute
+            : true,
       );
       const { resolution, fromBase } = resolveAxiosRequest(
         request.url,
@@ -796,7 +823,9 @@ function referenceBindingFor(
   if (init.type !== 'NewExpression') return null;
   const resolution = referenceObjectHost(init, [], bindings, 0, context);
   if (resolution?.kind !== 'resolved') return null;
-  return { kind: 'reference', host: resolution.host, start: init.start };
+  const callee = init.callee as Node | undefined;
+  const via = callee?.type === 'Identifier' ? String(callee.name) : '';
+  return { kind: 'reference', host: resolution.host, start: init.start, via };
 }
 
 /** `const B = 'https://...'` or `const B = process.env.X`. */
@@ -837,7 +866,11 @@ function clientBindingFor(
   const config = argument ? unwrap(argument) : undefined;
   const allowAbsolute = allowAbsoluteFrom(config, true);
   // Read the key the way the object literal evaluates: the last one wins.
-  const baseNode = config?.type === 'ObjectExpression' ? configProperty(config, 'baseURL') : config;
+  const read = config?.type === 'ObjectExpression' ? configProperty(config, 'baseURL') : null;
+  if (read?.value && read.opaque) {
+    return { kind: 'client', host: null, reason: BASE_REPLACEABLE, allowAbsolute };
+  }
+  const baseNode = read ? read.value : config;
   if (!baseNode) {
     return { kind: 'client', host: null, reason: 'client created with no base URL', allowAbsolute };
   }
@@ -856,11 +889,17 @@ function clientBindingFor(
 
 /**
  * `allowAbsoluteUrls` as axios will apply it: a literal boolean, inherited
- * when the key is absent, and `unknown` for anything else. axios compares it
- * with `== false`, so a non-boolean literal is not simply truthy or falsy, and
- * it is not worth reproducing loose equality to read one.
+ * when the key is absent, and unknown -- with the reason -- for anything else.
+ * axios compares it with `== false`, so a non-boolean literal is not simply
+ * truthy or falsy, and it is not worth reproducing loose equality to read one.
  */
-type AllowAbsolute = boolean | 'unknown';
+type AllowAbsolute = boolean | { reason: string };
+
+const UNREADABLE_CONFIG =
+  'allowAbsoluteUrls may be set by a config the analyzer cannot read, so the request URL may or may not replace the base URL';
+
+/** Methods on an axios client that send nothing. */
+const AXIOS_NON_REQUEST_METHODS = new Set(['getUri', 'create']);
 
 /** A base URL, and whether it was written at the call or reached through a binding. */
 interface AxiosBase {
@@ -922,7 +961,7 @@ function axiosRequest(method: string, args: Node[]): AxiosRequest {
   const first = args[0] ? unwrap(args[0]) : undefined;
   if (method === 'request') {
     if (first?.type === 'ObjectExpression') {
-      return { url: configProperty(first, 'url'), config: first };
+      return { url: configProperty(first, 'url').value, config: first };
     }
     return { url: args[0] ?? null, config: args[1] };
   }
@@ -943,21 +982,29 @@ function requestBase(
   context: ResolveContext,
 ): AxiosBase | null {
   const object = config ? unwrap(config) : undefined;
-  const value = object?.type === 'ObjectExpression' ? configProperty(object, 'baseURL') : null;
+  if (object?.type !== 'ObjectExpression') return inherited;
+  const { value, opaque } = configProperty(object, 'baseURL');
+  // A spread or computed key with no `baseURL` before it is not read: a
+  // documented limitation, like a config passed by name.
   if (!value) return inherited;
+  if (opaque) return { resolution: { kind: 'unresolved', reason: BASE_REPLACEABLE }, atCall: true };
   return { resolution: resolveArgument(value, [], bindings, 0, context), atCall: true };
 }
 
 /** A config's `allowAbsoluteUrls`, or `inherited` when it does not set one. */
 function allowAbsoluteFrom(config: Node | undefined, inherited: AllowAbsolute): AllowAbsolute {
-  const object = config ? unwrap(config) : undefined;
-  if (object?.type !== 'ObjectExpression') return inherited;
-  const value = configProperty(object, 'allowAbsoluteUrls');
+  if (!config) return inherited;
+  const object = unwrap(config);
+  // A config passed by name, or one with a spread or computed key after the
+  // key, could set it to anything.
+  if (object.type !== 'ObjectExpression') return { reason: UNREADABLE_CONFIG };
+  const { value, opaque } = configProperty(object, 'allowAbsoluteUrls');
+  if (opaque) return { reason: UNREADABLE_CONFIG };
   if (!value) return inherited;
   const literal = unwrap(value);
   return literal.type === 'Literal' && typeof literal.value === 'boolean'
     ? literal.value
-    : 'unknown';
+    : { reason: UNKNOWN_ALLOW_ABSOLUTE };
 }
 
 /**
@@ -1003,37 +1050,120 @@ function resolveAxiosRequest(
         ? fromUrl(resolution)
         : decline('request URL may be absolute, which would replace the base URL');
     }
-    if (allowAbsolute === 'unknown') {
+    // Only a `URL` renders as its own address. A `Request` is not a string
+    // axios can join, and `buildFullPath` throws on it: nothing is sent, and
+    // the construction stays the reference it is.
+    if (!isUrlObject(url, bindings, context)) {
       if (context.referencesRead) context.referencesRead.length = mark;
-      return decline(UNKNOWN_ALLOW_ABSOLUTE);
+      return fromUrl(notAUrl);
+    }
+    if (allowAbsolute !== true) {
+      if (context.referencesRead) context.referencesRead.length = mark;
+      return decline(allowAbsolute.reason);
     }
     return fromUrl(resolution);
   }
 
-  if (allowAbsolute === 'unknown') return decline(UNKNOWN_ALLOW_ABSOLUTE);
+  if (allowAbsolute !== true) return decline(allowAbsolute.reason);
   if (!absolute[1]) {
     return decline('request URL is protocol-relative; its scheme comes from the page at runtime');
   }
   return fromUrl(resolveArgument(url, [], bindings, 0, context));
 }
 
+/** `new URL(...)` or a stable name bound to one, or its `href`, `toString()` or `toJSON()`. */
+function isUrlObject(node: Node, bindings: Map<string, Binding>, context: ResolveContext): boolean {
+  const value = unwrap(node);
+  if (value.type === 'MemberExpression') {
+    const object = value.object as Node | undefined;
+    return !!object && isUrlObject(object, bindings, context);
+  }
+  if (value.type === 'CallExpression') {
+    const callee = value.callee as Node | undefined;
+    const object =
+      callee?.type === 'MemberExpression' ? (callee.object as Node | undefined) : undefined;
+    return !!object && isUrlObject(object, bindings, context);
+  }
+  if (value.type === 'NewExpression') {
+    const callee = value.callee as Node | undefined;
+    return callee?.type === 'Identifier' && String(callee.name) === 'URL';
+  }
+  if (value.type === 'Identifier') {
+    const binding = readable(bindings, String(value.name), context.unstable, context.callStart);
+    return binding?.kind === 'reference' && binding.via === 'URL';
+  }
+  return false;
+}
+
 const UNKNOWN_ALLOW_ABSOLUTE =
   'allowAbsoluteUrls is not a literal, so the request URL may or may not replace the base URL';
 
 /**
- * The value of the last non-computed property named `key` -- the one an
- * object literal evaluates to. A spread or computed key is not read; a config
- * whose `baseURL` arrives that way is a documented limitation.
+ * The value of the last property named `key` -- the one an object literal
+ * evaluates to -- and whether a spread or computed key after it (or anywhere,
+ * when there is none) could set the key instead. Those are never read.
  */
-function configProperty(object: Node, key: string): Node | null {
-  let found: Node | null = null;
+function configProperty(object: Node, key: string): { value: Node | null; opaque: boolean } {
+  let value: Node | null = null;
+  let opaque = false;
   for (const property of (object.properties as Node[] | undefined) ?? []) {
-    if (property.type !== 'Property' || property.computed) continue;
+    if (property.type !== 'Property' || property.computed) {
+      opaque = true;
+      continue;
+    }
     const name = property.key as Node | undefined;
     const label = name ? String(name.name ?? (name as { value?: string }).value ?? '') : '';
-    if (label === key) found = (property.value as Node | undefined) ?? null;
+    if (label === key) {
+      value = (property.value as Node | undefined) ?? null;
+      opaque = false;
+    }
   }
-  return found;
+  return { value, opaque };
+}
+
+const BASE_REPLACEABLE = 'base URL may be replaced by a spread or computed key that follows it';
+
+/**
+ * Keys written through `<name>.defaults.<key> = ...` or `<name>.defaults = ...`
+ * anywhere in the file, by object name. `*` stands for the whole defaults
+ * object or a computed key.
+ */
+function collectDefaultsWrites(program: Node): Map<string, Set<string>> {
+  const writes = new Map<string, Set<string>>();
+  const record = (name: string, key: string) => {
+    const keys = writes.get(name) ?? new Set<string>();
+    keys.add(key);
+    writes.set(name, keys);
+  };
+  walk(program, (node) => {
+    if (node.type !== 'AssignmentExpression') return;
+    const target = node.left as Node | undefined;
+    if (target?.type !== 'MemberExpression') return;
+    const object = target.object as Node | undefined;
+    const property = target.property as Node | undefined;
+    const key = target.computed ? '*' : String(property?.name ?? '');
+    // `api.defaults = {...}`
+    if (object?.type === 'Identifier' && key === 'defaults') {
+      record(String(object.name), '*');
+      return;
+    }
+    // `api.defaults.baseURL = ...`
+    if (object?.type !== 'MemberExpression' || object.computed) return;
+    const owner = object.object as Node | undefined;
+    const middle = object.property as Node | undefined;
+    if (owner?.type === 'Identifier' && String(middle?.name ?? '') === 'defaults') {
+      record(String(owner.name), key);
+    }
+  });
+  return writes;
+}
+
+function overridesBase(keys: Set<string> | undefined): boolean {
+  return !!keys && (keys.has('*') || keys.has('baseURL'));
+}
+
+function overridesAllowAbsolute(keys: Set<string> | undefined): boolean {
+  return !!keys && (keys.has('*') || keys.has('allowAbsoluteUrls'));
 }
 
 /** Strips the TypeScript and grouping wrappers that carry no meaning here. */

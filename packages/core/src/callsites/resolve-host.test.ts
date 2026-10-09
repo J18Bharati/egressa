@@ -59,6 +59,36 @@ const DECLINES: { name: string; input: string; hasMore?: boolean; reason: string
     hasMore: true,
     reason: 'userinfo',
   },
+  {
+    // URLSearchParams and libpq both decode a parameter name.
+    name: 'a percent-encoded host query parameter',
+    input: 'postgres://api.stripe.com/db?%68ost=evil.example',
+    reason: 'host',
+  },
+  {
+    // libpq does not end the query at `#`, so host= still applies.
+    name: 'a host parameter after a # inside the query',
+    input: 'postgres://api.stripe.com/db?x=1#&host=evil.example',
+    reason: 'host',
+  },
+  {
+    name: 'a fragment in the query completed by an interpolation',
+    input: 'postgres://api.stripe.com/db?sslmode=require#',
+    hasMore: true,
+    reason: 'query',
+  },
+  {
+    // MongoDB's parser ends the userinfo at the first @: hosts ["evil.example"].
+    name: 'two at-signs in the authority',
+    input: 'mongodb://u:p@evil.example@api.stripe.com/db',
+    reason: 'userinfo',
+  },
+  {
+    // ioredis parses with url.parse, which reads a backslash as a slash.
+    name: 'a backslash in the authority',
+    input: 'redis://evil.example\\@api.stripe.com/',
+    reason: 'backslash',
+  },
 ];
 
 const RESOLVES: { name: string; input: string; hasMore?: boolean; host: string }[] = [
@@ -78,6 +108,8 @@ const RESOLVES: { name: string; input: string; hasMore?: boolean; host: string }
     host: 'db.example.com',
   },
   {
+    // Documented in docs/LIMITATIONS.md, "Connection URIs": a possibly
+    // incorrect answer, resting on a database name not carrying a query.
     name: 'a path completed by an interpolation',
     input: 'postgres://db.example.com:5432/',
     hasMore: true,

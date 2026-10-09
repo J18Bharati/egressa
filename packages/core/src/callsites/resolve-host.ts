@@ -109,6 +109,8 @@ function hostOf(scheme: string, special: boolean, authority: string): HostResolu
  *   An interpolation in that stretch could supply the `@`, so it is refused too.
  * - A `host=` or `hostaddr=` query parameter, which libpq connects to in place
  *   of the authority -- and an interpolation inside the query, which could be one.
+ * - More than one `@`, or a `\`, in the authority: MongoDB's parser ends the
+ *   userinfo at the first `@`, and ioredis's `url.parse` reads `\` as `/`.
  *
  * Refusing is chosen over parsing each scheme as its client does: the refusals
  * are checkable against the specs, and a per-client parser is one more set of
@@ -117,6 +119,14 @@ function hostOf(scheme: string, special: boolean, authority: string): HostResolu
 function connectionUriRefusal(rest: string, delimiter: number, hasMore: boolean): string | null {
   const authority = delimiter === -1 ? rest : rest.slice(0, delimiter);
   if (authority.includes(',')) return 'connection URI lists several hosts';
+  // ioredis parses with Node's legacy `url.parse`, which reads `\` as `/`.
+  if (authority.includes('\\')) {
+    return 'connection URI authority contains a backslash, which some clients read as a slash';
+  }
+  // MongoDB's parser ends the userinfo at the first `@`; `normalise` takes the last.
+  if (authority.indexOf('@') !== authority.lastIndexOf('@')) {
+    return 'connection URI userinfo is ambiguous: its authority has more than one @';
+  }
   if (delimiter === -1) return null;
 
   const tail = rest.slice(delimiter);
@@ -128,15 +138,28 @@ function connectionUriRefusal(rest: string, delimiter: number, hasMore: boolean)
 
   const query = tail.indexOf('?');
   if (query === -1) return null;
-  const fragment = tail.indexOf('#', query);
-  const params = tail.slice(query, fragment === -1 ? undefined : fragment);
-  if (/[?&]host(?:addr)?=/i.test(params)) {
-    return 'connection URI names its host in a query parameter';
+  // libpq ends neither the query nor a value at `#`, so the whole remainder is
+  // read; and both libpq and URLSearchParams decode a parameter's name.
+  for (const pair of tail.slice(query + 1).split('&')) {
+    const name = decodedParamName(pair);
+    if (name === null) return 'connection URI has a query parameter name that does not decode';
+    if (name === 'host' || name === 'hostaddr') {
+      return 'connection URI names its host in a query parameter';
+    }
   }
-  if (hasMore && fragment === -1) {
+  if (hasMore) {
     return 'connection URI query is completed by an interpolated value, which may name a host';
   }
   return null;
+}
+
+function decodedParamName(pair: string): string | null {
+  const equals = pair.indexOf('=');
+  try {
+    return decodeURIComponent(equals === -1 ? pair : pair.slice(0, equals)).toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 /** C0 controls and space, which WHATWG URL parsing strips from the ends of its input. */
