@@ -281,6 +281,30 @@ Even a high-confidence, resolved call site only shows that code *references* a v
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
 
+## The privacy review's file set
+
+`skill/privacy-review/scripts/scope.sh` decides which files the privacy review reads, and in a git
+repository it asks git. The repository under review is untrusted, and so is its `.git`, which an
+archive or shared folder carries. The script blocks the execution and outside-read paths reviews
+have found, and reports `DEGRADED` -- which the skill must carry into its report -- whenever it
+cannot believe git. What it does not do:
+
+- **Untracked files are not reviewed**, in diff mode or whole-repository mode. A tracker in a file
+  nobody committed is outside the review, exactly as it is outside the repository's history.
+- **In whole-repository mode the repository's own index decides the set.** An index that lists
+  nothing over a populated tree is caught and the script falls back to `find`; an index that lists
+  *some* files is believed, so a `.git` delivered with a crafted index can leave a committed-looking
+  file out. Reviewing an archive you do not trust is safest from a fresh clone of its source, or
+  from the extracted tree with its `.git` removed, which makes the script list every file.
+- **On a machine with no `timeout` command -- stock macOS -- git calls are not bounded.** A `.git`
+  holding a FIFO in a place the script does not pre-check (an `include.path` target, a ref, a
+  split-index file) can hang the review there. Elsewhere each call is limited to 15 seconds and the
+  first timeout ends git's part in the run.
+- **A `git worktree` checkout or a submodule checkout always degrades** to whole-repository mode
+  over `find`, because its `.git` is a file naming a repository elsewhere, and the script believes
+  git only about a directory whose `.git` is its own. Review a diff from the main checkout.
+- **A diff is taken only from a repository's top level**, and needs git 2.31 or later.
+
 ## The review skills have no golden table
 
 Everything above is about the engine, and every limitation above has a corresponding

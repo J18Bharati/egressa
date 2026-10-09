@@ -264,6 +264,9 @@ skipped:
   scanner's own errors, the blind spots it names, and whether its counts added up.
 - Every `DEGRADED:` line `scope.sh` printed, verbatim: the file set was not established the normal
   way, and the reader needs to know which set was reviewed instead.
+- Untracked files, which no mode reviews; and, in whole-repository mode, any file the repository's
+  own index leaves out. If the repository arrived as an archive rather than a clone, say that its
+  `.git` decided the file set (`docs/LIMITATIONS.md`, "The privacy review's file set").
 - Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
   a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two
   runs needs to know the selection was made defensively rather than on a real signal.

@@ -247,14 +247,18 @@ and `GIT_ALLOW_PROTOCOL` names a protocol that does not exist, so no command can
 all need. Git is believed only about this directory: `.git` must be a plain directory whose control files
 are regular files, git must be 2.31 or later, its top level and git directory must be exactly
 this directory's, it may not search upward (`GIT_CEILING_DIRECTORIES`), and each call runs under
-`timeout` where one exists. Anything else, a failed listing, or an index that lists nothing over a
+`timeout` where one exists, the first timeout ending git's part in the run. The reviewer's own
+`GIT_DIR`/`GIT_INDEX_FILE`-style variables are unset. Anything else, a failed listing, or an index that lists nothing over a
 populated tree is reported as `DEGRADED` and the files are listed with `find` -- never presented as
 an empty review, and `SKILL.md` carries every `DEGRADED:` line into the report. Paths travel
 NUL-separated; one that is absolute or has an empty, `.` or `..` component is never reviewed, which
 is how a crafted tree had git list `../outside/secret.js`; and a link, or a path under one, is
 dropped by checking the filesystem, not a parsed listing. Specialists never run git: they get the set from
 `scope.sh --list`. Each of these has a test that plants it. This covers the execution paths
-reviews have found, by class where git allows it; it is not a proof that git can run nothing.
+reviews have found, by class where git allows it; it is not a proof that git can run nothing. Four
+review rounds kept finding ways a hostile `.git` misleads the file set, and the remaining ones --
+untracked files, a partial index, no `timeout` on macOS, worktrees and submodules degrading -- are
+deliberate, documented gaps in `docs/LIMITATIONS.md`, not oversights.
 
 Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
 line is the one thing the script asserts rather than routes. Everything else matches raw text: a

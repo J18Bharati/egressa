@@ -61,8 +61,11 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   only about this directory -- not a parent repository, not one a `.git` file points to, not past
   a `.git` holding a FIFO, not a git older than 2.31 -- and never about a path outside it: a crafted
   tree made git list `../outside/secret.js`, which was grepped and handed to specialists. A git
-  command that fails, or an index that lists nothing over a populated tree, is now reported as
-  degraded with a `find` fallback, and the skill carries that into the report; a failed diff used to
+  command that fails or times out (15 seconds, after which git is not asked again), or an index
+  that lists nothing over a populated tree, is now reported as degraded with a `find` fallback, and
+  the skill carries that into the report. A `package.json` that is a FIFO no longer hangs the
+  stack check, nor is one linked from outside the repository read. Untracked files, a partially
+  crafted index, unbounded git calls on macOS and worktree checkouts are documented gaps; a failed diff used to
   produce an empty file set that read as a clean review. `SKILL.md` no longer tells specialists to run
   `git ls-files` or `git diff`; they get the file set from `scope.sh --list`. A clone cannot carry
   `.git/config`, which is why no fixture caught it.

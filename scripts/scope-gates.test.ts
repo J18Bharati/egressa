@@ -827,3 +827,84 @@ describe('SKILL.md carries every DEGRADED line into the report', () => {
     expect(skill).toMatch(/`DEGRADED:`[\s\S]{0,400}NOT CHECKED/);
   });
 });
+
+describe('plain bugs from the fourth hardening review', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = [], env: NodeJS.ProcessEnv = process.env) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 45000, env });
+
+  it('does not hang on a package.json that is a FIFO', () => {
+    const root = scratch('pkgfifo');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    execFileSync('mkfifo', [join(root, 'package.json')]);
+    expect(runIn(root, ['--repo'])).toMatch(/^SCOPE_END: ok$/m);
+  });
+
+  it('does not read a package.json linked from outside the repository', () => {
+    const top = scratch('pkglink');
+    plant(top, 'outside/package.json', '{"dependencies":{"next":"14.0.0"}}\n');
+    const root = join(top, 'repo');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    symlinkSync(join(top, 'outside/package.json'), join(root, 'package.json'));
+    expect(runIn(root, ['--repo'])).not.toMatch(/^STACK: .*\bnext\b/m);
+  });
+
+  it('stops asking git after the first timeout, and says it timed out', () => {
+    const root = scratch('reffifo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    for (const ref of ['main', 'master', 'develop']) {
+      execFileSync('mkfifo', [join(root, '.git', 'refs', 'heads', ref)]);
+    }
+    const started = Date.now();
+    const out = runIn(root);
+    expect(Date.now() - started).toBeLessThan(40000);
+    expect(out).toMatch(/^DEGRADED: .*timed out/m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  }, 60000);
+
+  it("ignores a GIT_INDEX_FILE in the reviewer's environment", () => {
+    const other = scratch('otherindex');
+    plant(other, 'elsewhere.js', 'export const e = 1;\n');
+    git(other, 'init', '-q', '-b', 'main');
+    git(other, 'add', '.');
+    const root = scratch('ownindex');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    const list = runIn(root, ['--repo', '--list'], {
+      ...process.env,
+      GIT_INDEX_FILE: join(other, '.git', 'index'),
+    });
+    expect(list).toContain('src/a.js');
+    expect(list).not.toContain('elsewhere.js');
+  });
+
+  it('says a subdirectory of a repository is one, rather than "not a Git repository"', () => {
+    const root = scratch('subdir');
+    plant(root, 'pkg/src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'x');
+    expect(runIn(join(root, 'pkg'))).toMatch(/^DEGRADED: .*subdirectory/m);
+  });
+
+  it('reviews source under a nested directory named .git that git cannot track', () => {
+    const root = scratch('nestedgit');
+    plant(root, 'package.json', '{"name":"n","private":true}\n');
+    plant(root, 'lib/.git/t.js', "gtag('config', 'G-X');\n");
+    expect(runIn(root, ['--repo'])).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not believe git when objects/info/alternates points elsewhere', () => {
+    const root = scratch('alternates');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, '.git/objects/info/alternates', '/elsewhere/objects\n');
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*alternates/m);
+  });
+});

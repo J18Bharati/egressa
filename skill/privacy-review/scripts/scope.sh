@@ -43,19 +43,34 @@ emit() { [ "$LIST" = 1 ] || printf '%s: %s\n' "$1" "$2"; }
 # is not a proof that git can run nothing.
 
 REPO_ROOT="$(pwd -P)"
+# The reviewer's environment must not point git at another repository, index
+# or object store either.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG GIT_PREFIX
 # Never search upward: an untracked folder inside some parent repository is
 # not that repository, and git would otherwise answer about the parent.
 export GIT_CEILING_DIRECTORIES="${REPO_ROOT%/*}"
 
-# A FIFO in .git, or an include git follows, would block git forever.
-if command -v timeout >/dev/null 2>&1; then _limit=(timeout 60); else _limit=(); fi
+# A FIFO in .git, or an include git follows, would block git forever. Each
+# call is bounded, and the first call to time out ends git's part in the run:
+# a marker file rather than a variable, because git_safe often runs inside a
+# `$(...)` subshell. Stock macOS has no `timeout`, and there calls are not
+# bounded -- see "The privacy review's file set" in docs/LIMITATIONS.md.
+GIT_TIMEOUT_SECONDS=15
+if command -v timeout >/dev/null 2>&1; then _limit=(timeout "$GIT_TIMEOUT_SECONDS"); else _limit=(); fi
+_TIMED_OUT="$(mktemp -u "${TMPDIR:-/tmp}/egressa-scope-timeout.XXXXXX")"
+trap 'rm -f "$_TIMED_OUT"' EXIT
 
 # Every git call goes through here: no core.fsmonitor, hooks, external diff,
 # pager or submodule recursion -- each of those runs a command the
 # repository's config names.
 git_safe() {
+  [ -e "$_TIMED_OUT" ] && return 124
+  local rc=0
   ${_limit[@]+"${_limit[@]}"} git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat \
-    -c diff.external= -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@"
+    -c diff.external= -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@" || rc=$?
+  [ "$rc" = 124 ] && : >"$_TIMED_OUT"
+  return "$rc"
 }
 
 # No git command may reach a transport. A partial clone lazy-fetches a missing
@@ -69,8 +84,16 @@ export GIT_ALLOW_PROTOCOL=egressa-none GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0
 # says why not; empty with USE_GIT=0 means there is simply no repository.
 USE_GIT=1
 GIT_REASON=""
+SUBDIR_OF_REPO=0
 if [ ! -e .git ] && [ ! -L .git ]; then
   USE_GIT=0
+  # Said only when a diff is asked for: reviewing a subdirectory as a whole is
+  # an ordinary request, but there is no diff to take from inside one.
+  _d="${REPO_ROOT%/*}"
+  while [ -n "$_d" ]; do
+    if [ -e "$_d/.git" ]; then SUBDIR_OF_REPO=1; break; fi
+    _d="${_d%/*}"
+  done
 elif [ -L .git ] || [ ! -d .git ]; then
   # A .git file (gitdir:) or link names a repository somewhere else.
   GIT_REASON=".git is not this directory's own repository"
@@ -81,18 +104,31 @@ else
       break
     fi
   done
+  # Alternates lend this repository objects stored somewhere else.
+  if [ -z "$GIT_REASON" ] && [ -s .git/objects/info/alternates ]; then
+    GIT_REASON=".git/objects/info/alternates points at objects outside this repository"
+  fi
   if [ -z "$GIT_REASON" ]; then
     # GIT_CONFIG_COUNT, which the filter blanking below relies on, is 2.31+.
     _ver="$(git_safe --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
-    if [ "${_ver%%.*}" -lt 2 ] 2>/dev/null || { [ "${_ver%%.*}" = 2 ] && [ "${_ver#*.}" -lt 31 ]; }; then
-      GIT_REASON="the installed Git ${_ver:-unknown} is older than 2.31"
-    elif [ "$(git_safe rev-parse --show-toplevel 2>/dev/null)" != "$REPO_ROOT" ] \
-      || [ "$(git_safe rev-parse --absolute-git-dir 2>/dev/null)" != "$REPO_ROOT/.git" ]; then
-      # core.worktree, or anything else that points git's view elsewhere.
-      GIT_REASON="Git's repository is not this directory"
+    if [ -z "$_ver" ]; then
+      GIT_REASON="Git could not be run to read its version"
+    elif [ "${_ver%%.*}" -lt 2 ] || { [ "${_ver%%.*}" = 2 ] && [ "${_ver#*.}" -lt 31 ]; }; then
+      GIT_REASON="the installed Git $_ver is older than 2.31"
+    else
+      _top="$(git_safe rev-parse --show-toplevel 2>/dev/null)"
+      if [ -z "$_top" ]; then
+        GIT_REASON="Git could not read this repository (it may refuse one owned by another user)"
+      elif [ "$_top" != "$REPO_ROOT" ] \
+        || [ "$(git_safe rev-parse --absolute-git-dir 2>/dev/null)" != "$REPO_ROOT/.git" ]; then
+        # core.worktree, or anything else that points git's view elsewhere.
+        GIT_REASON="Git's repository is not this directory"
+      fi
     fi
   fi
 fi
+# A timeout says why, whatever the check that hit it.
+[ -e "$_TIMED_OUT" ] && GIT_REASON="a Git command timed out after ${GIT_TIMEOUT_SECONDS}s"
 [ -n "$GIT_REASON" ] && USE_GIT=0
 
 # Filter drivers. `.git/info/attributes` or `.gitattributes` can assign a clean,
@@ -136,7 +172,9 @@ nul_paths() {
 }
 git_paths() { local sub="$1"; shift; git_safe "$sub" -z "$@" | nul_paths; }
 find_paths() {
-  find . \( -name .git -o -name node_modules \) -prune -o -type f -print0 2>/dev/null | nul_paths
+  # Only this directory's own .git is skipped: a directory named .git deeper in
+  # the tree is ordinary source as far as a review is concerned.
+  find . \( -path ./.git -o -name node_modules \) -prune -o -type f -print0 2>/dev/null | nul_paths
 }
 
 emit SCOPE_PROTO 1
@@ -149,7 +187,11 @@ fi
 # FILES is the newline-separated list of source files under review.
 if [ "$MODE" = "diff" ] && [ "$USE_GIT" = 0 ]; then
   # Without a trustworthy repository there is no diff to take.
-  [ -z "$GIT_REASON" ] && emit DEGRADED "not a Git repository; falling back to whole-repo mode"
+  if [ "$SUBDIR_OF_REPO" = 1 ]; then
+    emit DEGRADED "this is a subdirectory of a Git repository; run from its top level to review a diff. Falling back to whole-repo mode"
+  elif [ -z "$GIT_REASON" ]; then
+    emit DEGRADED "not a Git repository; falling back to whole-repo mode"
+  fi
   emit MODE repo
   MODE="repo"
 fi
@@ -202,6 +244,10 @@ if [ "$MODE" = "repo" ]; then
     FILES="$(find_paths)"
   fi
   emit DIFF_LINES "n/a"
+fi
+
+if [ -e "$_TIMED_OUT" ] && [ -z "${GIT_REASON:-}" ]; then
+  emit DEGRADED "a Git command timed out after ${GIT_TIMEOUT_SECONDS}s; Git was not asked anything further"
 fi
 
 for _kind in newline outside; do
@@ -542,10 +588,13 @@ else
 fi
 
 # ---------------------------------------------------------------- stack context
+# A regular file that is not a link: a FIFO named package.json hung the grep
+# below forever, and a link to one outside the repository was read.
+own_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
 STACK=""
-[ -f package.json ] && STACK="${STACK}node "
-{ [ -f tsconfig.json ] || paths '\.tsx?$'; } && STACK="${STACK}typescript "
-grep -qE '"next"' package.json 2>/dev/null && STACK="${STACK}next "
+own_file package.json && STACK="${STACK}node "
+{ own_file tsconfig.json || paths '\.tsx?$'; } && STACK="${STACK}typescript "
+own_file package.json && grep -qE '"next"' package.json 2>/dev/null && STACK="${STACK}next "
 [ -f schema.prisma ] || paths 'schema\.prisma$' && STACK="${STACK}prisma "
 [ -f requirements.txt ] || [ -f pyproject.toml ] && STACK="${STACK}python "
 [ -f go.mod ] && STACK="${STACK}go "
