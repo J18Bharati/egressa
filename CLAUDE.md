@@ -231,7 +231,10 @@ not run is not a gate that came back false. A helper's status must be the *searc
 why `declared()` runs its search on its own line — `pipefail` reports the rightmost non-zero, so a
 filter matching nothing (1) masks a real failure (2). And every file list is passed after `--`: the
 reviewed tree is arbitrary third-party source, and a file named `-i.js` otherwise reaches `sed` as
-its in-place flag and this read-only review rewrites what it was asked to read.
+its in-place flag and this read-only review rewrites what it was asked to read. For the same reason
+every `git` call goes through `git_safe`, which disables `core.fsmonitor`, hooks, an external diff
+and the pager: a repository handed over with its `.git` directory carries its own `.git/config`,
+and git runs `core.fsmonitor` on every index refresh. A test asserts no bare `git` call remains.
 
 Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
 line is the one thing the script asserts rather than routes. Everything else matches raw text: a

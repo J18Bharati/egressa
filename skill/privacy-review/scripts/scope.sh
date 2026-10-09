@@ -30,6 +30,17 @@ done
 
 emit() { printf '%s: %s\n' "$1" "$2"; }
 
+# git, run inside the repository under review, with that repository's own
+# configuration unable to execute anything. A repository handed over with its
+# .git directory -- an archive, a shared folder; a clone cannot carry it --
+# brings its own .git/config, and git runs core.fsmonitor on every index
+# refresh: `git ls-files` and every worktree `git diff` below. The other keys
+# close the same door for an external diff, a pager and hooks. Every git call
+# in this script goes through here.
+git_safe() {
+  git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat -c diff.external= "$@"
+}
+
 echo "SCOPE_PROTO: 1"
 emit MODE "$MODE"
 
@@ -38,7 +49,7 @@ emit MODE "$MODE"
 if [ "$MODE" = "diff" ]; then
   if [ -z "$BASE" ]; then
     for cand in main master develop; do
-      if git rev-parse --verify --quiet "refs/heads/$cand" >/dev/null 2>&1; then BASE="$cand"; break; fi
+      if git_safe rev-parse --verify --quiet "refs/heads/$cand" >/dev/null 2>&1; then BASE="$cand"; break; fi
     done
   fi
   if [ -z "$BASE" ]; then
@@ -47,15 +58,15 @@ if [ "$MODE" = "diff" ]; then
     MODE="repo"
   else
     emit BASE "$BASE"
-    DIFF_BASE="$(git merge-base "$BASE" HEAD 2>/dev/null || echo "")"
+    DIFF_BASE="$(git_safe merge-base "$BASE" HEAD 2>/dev/null || echo "")"
     if [ -z "$DIFF_BASE" ]; then
       emit DEGRADED "no merge-base with $BASE; falling back to whole-repo mode"
       MODE="repo"
     else
       emit DIFF_BASE "$DIFF_BASE"
-      FILES="$(git diff --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null; git diff --name-only --diff-filter=d 2>/dev/null)"
+      FILES="$(git_safe diff --no-ext-diff --no-textconv --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null; git_safe diff --no-ext-diff --no-textconv --name-only --diff-filter=d 2>/dev/null)"
       FILES="$(printf '%s\n' "$FILES" | sort -u | sed '/^$/d')"
-      STAT="$(git diff --shortstat "$DIFF_BASE" 2>/dev/null || echo "")"
+      STAT="$(git_safe diff --no-ext-diff --no-textconv --shortstat "$DIFF_BASE" 2>/dev/null || echo "")"
       INS="$(printf '%s' "$STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)"
       DEL="$(printf '%s' "$STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)"
       emit DIFF_LINES "$(( INS + DEL ))"
@@ -64,7 +75,7 @@ if [ "$MODE" = "diff" ]; then
 fi
 
 if [ "$MODE" = "repo" ]; then
-  FILES="$(git ls-files 2>/dev/null || find . -type f -not -path './.git/*' | sed 's|^\./||')"
+  FILES="$(git_safe ls-files 2>/dev/null || find . -type f -not -path './.git/*' | sed 's|^\./||')"
   emit DIFF_LINES "n/a"
 fi
 

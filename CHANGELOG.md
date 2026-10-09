@@ -39,6 +39,14 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Fixed
 
+- **The privacy review could run a command the reviewed repository supplied, through git.**
+  `scope.sh` runs `git ls-files` and `git diff` inside the repository under review, and a
+  repository handed over with its `.git` directory -- an archive, a shared folder -- brings its own
+  `.git/config`, whose `core.fsmonitor` git runs on every index refresh: silently, at step one of a
+  review presented as read-only. Every git call now goes through a wrapper that disables
+  `core.fsmonitor`, hooks, an external diff and the pager, and passes `--no-ext-diff --no-textconv`
+  to `git diff`. A clone cannot carry `.git/config`, which is why no fixture caught it.
+
 - **A concatenation could attribute a host it did not name.** `fetch(B + '.attacker.example/x')`,
   with `B = 'https://api.stripe.com'`, reported Stripe at high confidence: the left operand was read
   as a complete URL without looking at what followed it. Leading static text is now folded across

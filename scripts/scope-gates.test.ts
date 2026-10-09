@@ -481,3 +481,58 @@ describe('every gate is accounted for in SKILL.md', () => {
     });
   }
 });
+
+describe('the reviewed repository cannot run code through its own git config', () => {
+  // scope.sh runs git inside the repository under review. A repository handed
+  // over with its .git directory -- an archive, a shared folder -- carries its
+  // own .git/config, and git runs a core.fsmonitor command on every index
+  // refresh: `git ls-files` in repo mode, the worktree `git diff` calls in diff
+  // mode. A clone cannot carry .git/config, which is why no fixture caught it.
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+
+  const plantedRepo = () => {
+    const root = scratch('fsmonitor');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"planted","private":true}\n');
+    plant(root, 'src/app.ts', "export const go = () => fetch('https://api.example.com/x');\n");
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/more.ts', 'export const more = 1;\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'feature');
+    plant(root, 'src/dirty.ts', 'export const dirty = 2;\n');
+    git(root, 'config', 'core.fsmonitor', `touch '${marker}'; false`);
+    return { root, marker };
+  };
+
+  const run = (cwd: string, args: string[]) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', env: process.env });
+
+  it.each([
+    ['repo mode', ['--repo']],
+    ['diff mode', ['--base', 'main']],
+  ])('does not run a planted core.fsmonitor in %s', (_mode, args) => {
+    const { root, marker } = plantedRepo();
+    const out = run(root, args);
+    expect(existsSync(marker)).toBe(false);
+    // Blocking the hook must not blind the review: the files are still found.
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+});
+
+describe('every git call in scope.sh goes through git_safe', () => {
+  it('has no bare git invocation outside the wrapper', () => {
+    const offending = readFileSync(SCOPE, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .filter((line) => /(^|[\s;&|($`])git\s/.test(line))
+      .filter((line) => !/^\s*git -c core\.fsmonitor= /.test(line));
+    expect(offending).toEqual([]);
+  });
+});
