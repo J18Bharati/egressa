@@ -39,6 +39,42 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
 
 ### Fixed
 
+- **A symlink could make a scan read, and quote, a file outside the repository.** The walk followed
+  links and nothing checked where a file really lived, so a committed
+  `pnpm-lock.yaml -> ~/.aws/credentials` was read and the YAML parser's error -- which quotes the
+  line it failed on -- carried that line into JSON, SARIF and the MCP result; a linked source file
+  outside the root produced findings with its snippets. Links are no longer followed, every reader
+  refuses a path whose real location leaves the root or is not a regular file -- a FIFO committed
+  as `.gitignore` used to hang the scan and the MCP server -- and lockfile parse errors keep only
+  their first line. A read error reports its code rather than a message carrying the reviewer's
+  absolute path. No finding changed across a real backend codebase and every fixture repository.
+
+- **The privacy review could run a command the reviewed repository supplied, through git.**
+  `scope.sh` runs `git ls-files` and `git diff` inside the repository under review, and a
+  repository handed over with its `.git` directory -- an archive, a shared folder -- brings its own
+  `.git/config`, whose `core.fsmonitor` git runs on every index refresh: silently, at step one of a
+  review presented as read-only. Every git call now goes through a wrapper that disables
+  `core.fsmonitor`, hooks, an external diff, the pager and submodule recursion; every clean, smudge
+  and process filter driver is blanked -- git otherwise runs one on each re-dated file an extracted
+  archive leaves; and no git command can reach a transport, which closes a partial clone's lazy
+  fetch running the repository's `core.sshCommand`, credential helper or `ext::` command. Git is believed
+  only about this directory -- not a parent repository, not one a `.git` file points to, not past
+  a `.git` holding a FIFO, not a git older than 2.31 -- and never about a path outside it: a crafted
+  tree made git list `../outside/secret.js`, which was grepped and handed to specialists. A git
+  command that fails or times out (15 seconds, after which git is not asked again), or an index
+  that lists nothing over a populated tree, is now reported as degraded with a `find` fallback, and
+  the skill carries that into the report. A `package.json` that is a FIFO no longer hangs the
+  stack check, nor is one linked from outside the repository read. Untracked files, a partially
+  crafted index, unbounded git calls on macOS and worktree checkouts are documented gaps; a failed diff used to
+  produce an empty file set that read as a clean review. `SKILL.md` no longer tells specialists to run
+  `git ls-files` or `git diff`; they get the file set from `scope.sh --list`. A clone cannot carry
+  `.git/config`, which is why no fixture caught it.
+- **The privacy review read through committed symlinks.** `scope.sh` grepped a linked file outside
+  the repository and could raise `SIGNAL_TRACKERS_NO_CONSENT` from it, and handed it to specialists
+  to read. Links, and paths under linked directories, are now dropped, checked against the
+  filesystem per path; a path whose name holds a newline is reported as not reviewed rather than
+  split, which is how a link named `zz<newline>src` could hide every file under `src/`.
+
 - **A concatenation could attribute a host it did not name.** `fetch(B + '.attacker.example/x')`,
   with `B = 'https://api.stripe.com'`, reported Stripe at high confidence: the left operand was read
   as a complete URL without looking at what followed it. Leading static text is now folded across

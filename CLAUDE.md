@@ -73,6 +73,12 @@ facts → `output/sarif.ts` or the CLI formatters.
 **Never read `node_modules`.** Scans are offline and must work on a fresh clone. Fixture repos ship
 lockfiles only, which enforces this structurally.
 
+**Never read outside the scan root.** The scanned repository is untrusted input, and a symlink is
+part of it. The walk does not follow links, and every reader in core opens files through
+`discovery/read-inside.ts`, which refuses a path whose real location leaves the root. A new reader
+that calls `readFileSync(join(root, …))` directly reopens the leak where a linked lockfile's first
+line reached the MCP result through a YAML parse error.
+
 **`jsonc-parser`, not `JSON.parse`, for manifests.** It yields source offsets (UTF-16 code units,
 not bytes — SARIF distinguishes the two, and `LineIndex` converts them to lines over the same
 string, so the pipeline is self-consistent). Without them every dependency finding degrades to a
@@ -231,7 +237,28 @@ not run is not a gate that came back false. A helper's status must be the *searc
 why `declared()` runs its search on its own line — `pipefail` reports the rightmost non-zero, so a
 filter matching nothing (1) masks a real failure (2). And every file list is passed after `--`: the
 reviewed tree is arbitrary third-party source, and a file named `-i.js` otherwise reaches `sed` as
-its in-place flag and this read-only review rewrites what it was asked to read.
+its in-place flag and this read-only review rewrites what it was asked to read. For the same reason
+`scope.sh` treats the reviewed repository's own `.git` as hostile: a repository handed over with
+its `.git` directory carries its own config, and git will run commands it names. Every `git` call
+goes through `git_safe` (no `core.fsmonitor`, hooks, external diff, pager or submodule recursion);
+every clean, smudge and process filter driver git can see is blanked through `GIT_CONFIG_COUNT`;
+and `GIT_ALLOW_PROTOCOL` names a protocol that does not exist, so no command can reach a transport
+-- which is what a partial clone's lazy fetch, `core.sshCommand`, a credential helper and `ext::`
+all need. Git is believed only about this directory: `.git` must be a plain directory whose control files
+are regular files, git must be 2.31 or later, its top level and git directory must be exactly
+this directory's, it may not search upward (`GIT_CEILING_DIRECTORIES`), and each call runs under
+`timeout` where one exists, the first timeout ending git's part in the run. The reviewer's own
+`GIT_DIR`/`GIT_INDEX_FILE`-style variables are unset. Anything else, a failed listing, or an index that lists nothing over a
+populated tree is reported as `DEGRADED` and the files are listed with `find` -- never presented as
+an empty review, and `SKILL.md` carries every `DEGRADED:` line into the report. Paths travel
+NUL-separated; one that is absolute or has an empty, `.` or `..` component is never reviewed, which
+is how a crafted tree had git list `../outside/secret.js`; and a link, or a path under one, is
+dropped by checking the filesystem, not a parsed listing. Specialists never run git: they get the set from
+`scope.sh --list`. Each of these has a test that plants it. This covers the execution paths
+reviews have found, by class where git allows it; it is not a proof that git can run nothing. Four
+review rounds kept finding ways a hostile `.git` misleads the file set, and the remaining ones --
+untracked files, a partial index, no `timeout` on macOS, worktrees and submodules degrading -- are
+deliberate, documented gaps in `docs/LIMITATIONS.md`, not oversights.
 
 Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
 line is the one thing the script asserts rather than routes. Everything else matches raw text: a

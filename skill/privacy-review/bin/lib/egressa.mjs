@@ -4758,10 +4758,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep4, value } = collItem;
+        const { start, key, sep: sep5, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep4?.[0],
+          next: key ?? sep5?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -4775,7 +4775,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep4) {
+          if (!keyProps.anchor && !keyProps.tag && !sep5) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map.comment)
@@ -4799,7 +4799,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep4 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep5 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4815,7 +4815,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep4, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep5, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4906,7 +4906,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep4 = "";
+        let sep5 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -4920,13 +4920,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep4 + cb;
-              sep4 = "";
+                comment += sep5 + cb;
+              sep5 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep4 += source;
+                sep5 += source;
               hasSpace = true;
               break;
             default:
@@ -4969,18 +4969,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i2 = 0; i2 < fc.items.length; ++i2) {
         const collItem = fc.items[i2];
-        const { start, key, sep: sep4, value } = collItem;
+        const { start, key, sep: sep5, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep4?.[0],
+          next: key ?? sep5?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep4 && !value) {
+          if (!props.anchor && !props.tag && !sep5 && !value) {
             if (i2 === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i2 < fc.items.length - 1)
@@ -5034,8 +5034,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap3 && !sep4 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep4, null, props, onError);
+        if (!isMap3 && !sep5 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep5, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -5047,7 +5047,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep4 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep5 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -5058,8 +5058,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap3 && !props.found && ctx.options.strict) {
-              if (sep4)
-                for (const st of sep4) {
+              if (sep5)
+                for (const st of sep5) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -5076,7 +5076,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep4, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep5, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -5256,7 +5256,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i2 + 1;
       }
       let value = "";
-      let sep4 = "";
+      let sep5 = "";
       let prevMoreIndented = false;
       for (let i2 = 0; i2 < contentStart; ++i2)
         value += lines[i2][0].slice(trimIndent) + "\n";
@@ -5273,24 +5273,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep4 + indent.slice(trimIndent) + content;
-          sep4 = "\n";
+          value += sep5 + indent.slice(trimIndent) + content;
+          sep5 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep4 === " ")
-            sep4 = "\n";
-          else if (!prevMoreIndented && sep4 === "\n")
-            sep4 = "\n\n";
-          value += sep4 + indent.slice(trimIndent) + content;
-          sep4 = "\n";
+          if (sep5 === " ")
+            sep5 = "\n";
+          else if (!prevMoreIndented && sep5 === "\n")
+            sep5 = "\n\n";
+          value += sep5 + indent.slice(trimIndent) + content;
+          sep5 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep4 === "\n")
+          if (sep5 === "\n")
             value += "\n";
           else
-            sep4 = "\n";
+            sep5 = "\n";
         } else {
-          value += sep4 + content;
-          sep4 = " ";
+          value += sep5 + content;
+          sep5 = " ";
           prevMoreIndented = false;
         }
       }
@@ -5472,25 +5472,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep4 = " ";
+      let sep5 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep4 === "\n")
-            res += sep4;
+          if (sep5 === "\n")
+            res += sep5;
           else
-            sep4 = "\n";
+            sep5 = "\n";
         } else {
-          res += sep4 + match[1];
-          sep4 = " ";
+          res += sep5 + match[1];
+          sep5 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep4 + (match?.[1] ?? "");
+      return res + sep5 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -6300,14 +6300,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep4, value }) {
+    function stringifyItem({ start, key, sep: sep5, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep4)
-        for (const st of sep4)
+      if (sep5)
+        for (const st of sep5)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -7474,18 +7474,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep4;
+          let sep5;
           if (scalar.end) {
-            sep4 = scalar.end;
-            sep4.push(this.sourceToken);
+            sep5 = scalar.end;
+            sep5.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep4 = [this.sourceToken];
+            sep5 = [this.sourceToken];
           const map = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep4 }]
+            items: [{ start, key: scalar, sep: sep5 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
@@ -7638,15 +7638,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep4 = it.sep;
-                  sep4.push(this.sourceToken);
+                  const sep5 = it.sep;
+                  sep5.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep4 }]
+                    items: [{ start: start2, key, sep: sep5 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7840,13 +7840,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep4 = fc.end.splice(1, fc.end.length);
-            sep4.push(this.sourceToken);
+            const sep5 = fc.end.splice(1, fc.end.length);
+            sep5.push(this.sourceToken);
             const map = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep4 }]
+              items: [{ start, key: fc, sep: sep5 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
@@ -9533,7 +9533,7 @@ var require_scan = __commonJS({
 var require_parse = __commonJS({
   "../../node_modules/.pnpm/picomatch@4.0.7/node_modules/picomatch/lib/parse.js"(exports, module) {
     "use strict";
-    var constants2 = require_constants();
+    var constants3 = require_constants();
     var utils = require_utils();
     var {
       MAX_LENGTH,
@@ -9541,7 +9541,7 @@ var require_parse = __commonJS({
       REGEX_NON_SPECIAL_CHARS,
       REGEX_SPECIAL_CHARS_BACKREF,
       REPLACEMENTS
-    } = constants2;
+    } = constants3;
     var expandRange = (args, options) => {
       if (typeof options.expandRange === "function") {
         return options.expandRange(...args, options);
@@ -9750,7 +9750,7 @@ var require_parse = __commonJS({
       if (options.maxExtglobRecursion === false) {
         return { risky: false };
       }
-      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants2.DEFAULT_MAX_EXTGLOB_RECURSION;
+      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants3.DEFAULT_MAX_EXTGLOB_RECURSION;
       const branches = splitTopLevel(body).map((branch) => branch.trim());
       if (branches.length > 1) {
         if (branches.some((branch) => branch === "") || branches.some((branch) => /^[*?]+$/.test(branch)) || hasRepeatedCharPrefixOverlap(branches)) {
@@ -9796,8 +9796,8 @@ var require_parse = __commonJS({
       const bos = { type: "bos", value: "", output: opts.prepend || "" };
       const tokens = [bos];
       const capture = opts.capture ? "" : "?:";
-      const PLATFORM_CHARS = constants2.globChars(opts.windows);
-      const EXTGLOB_CHARS = constants2.extglobChars(PLATFORM_CHARS);
+      const PLATFORM_CHARS = constants3.globChars(opts.windows);
+      const EXTGLOB_CHARS = constants3.extglobChars(PLATFORM_CHARS);
       const {
         DOT_LITERAL,
         PLUS_LITERAL,
@@ -10493,7 +10493,7 @@ var require_parse = __commonJS({
         NO_DOTS_SLASH,
         STAR,
         START_ANCHOR
-      } = constants2.globChars(opts.windows);
+      } = constants3.globChars(opts.windows);
       const nodot = opts.dot ? NO_DOTS : NO_DOT;
       const slashDot = opts.dot ? NO_DOTS_SLASH : NO_DOT;
       const capture = opts.capture ? "" : "?:";
@@ -10551,7 +10551,7 @@ var require_picomatch = __commonJS({
     var scan2 = require_scan();
     var parse3 = require_parse();
     var utils = require_utils();
-    var constants2 = require_constants();
+    var constants3 = require_constants();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch2 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
@@ -10679,7 +10679,7 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch2.constants = constants2;
+    picomatch2.constants = constants3;
     module.exports = picomatch2;
   }
 });
@@ -12260,18 +12260,17 @@ async function runMain(cmd, opts = {}) {
 var import_yaml = __toESM(require_dist(), 1);
 var import_ignore = __toESM(require_ignore(), 1);
 import {
-  constants,
-  closeSync,
-  fstatSync,
+  constants as constants2,
+  closeSync as closeSync2,
+  fstatSync as fstatSync2,
   lstatSync,
-  openSync,
+  openSync as openSync2,
   readFileSync as readFileSync2,
   realpathSync as realpathSync2,
   statSync as statSync2
 } from "fs";
-import { isAbsolute as isAbsolute2, join as join2, relative as relative2, sep as sep22 } from "path";
-import { readFileSync as readFileSync3 } from "fs";
-import { relative as relative3, sep as sep3 } from "path";
+import { isAbsolute as isAbsolute2, join as join2, relative as relative3, sep as sep3 } from "path";
+import { relative as relative2, sep as sep22 } from "path";
 
 // ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
 import { readdir, readdirSync, realpath, realpathSync, stat, statSync } from "fs";
@@ -13043,13 +13042,14 @@ function getCrawler(globInput, inputOptions = {}) {
   return patterns.length > 0 ? buildCrawler(options, patterns) : [];
 }
 function globSync(globInput, options) {
-  const [crawler, relative4] = getCrawler(globInput, options);
-  return crawler ? formatPaths(crawler.sync(), relative4) : [];
+  const [crawler, relative5] = getCrawler(globInput, options);
+  return crawler ? formatPaths(crawler.sync(), relative5) : [];
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync32 } from "fs";
-import { basename as basename2, join as join22 } from "path";
+import { constants, closeSync, fstatSync, openSync, readFileSync as readFileSync3, realpathSync as realpathSync3 } from "fs";
+import { isAbsolute as isAbsolute3, join as join3, relative as relative4, sep as sep4 } from "path";
+import { basename as basename2 } from "path";
 
 // ../../node_modules/.pnpm/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
 function createScanner(text, ignoreTrivia = false) {
@@ -13547,11 +13547,11 @@ function parseTree(text, errors = [], options = ParseOptions.DEFAULT) {
       onValue({ type: getNodeType(value), offset, length, parent: currentParent, value });
       ensurePropertyComplete(offset + length);
     },
-    onSeparator: (sep4, offset, length) => {
+    onSeparator: (sep5, offset, length) => {
       if (currentParent.type === "property") {
-        if (sep4 === ":") {
+        if (sep5 === ":") {
           currentParent.colonOffset = offset;
-        } else if (sep4 === ",") {
+        } else if (sep5 === ",") {
           ensurePropertyComplete(offset);
         }
       }
@@ -14123,11 +14123,9 @@ function defaultKbPath() {
 
 // ../core/dist/index.js
 var import_yaml3 = __toESM(require_dist(), 1);
-import { isAbsolute as isAbsolute22 } from "path";
-import { readFileSync as readFileSync5, statSync as statSync22 } from "fs";
-import { join as join4 } from "path";
-import { readFileSync as readFileSync4 } from "fs";
-import { basename as basename22, join as join3 } from "path";
+import { isAbsolute as isAbsolute32 } from "path";
+import { statSync as statSync22 } from "fs";
+import { basename as basename22 } from "path";
 var import_yaml4 = __toESM(require_dist(), 1);
 import { createHash } from "crypto";
 var FINDINGS_SCHEMA_VERSION = "1.1.0";
@@ -14209,6 +14207,29 @@ var RULES = {
 var RULE_IDS = Object.keys(RULES);
 var DISCLAIMER = "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.";
 var DISCLAIMER_SHORT = "Detection only - not a compliance assessment.";
+var MAX_READ_BYTES = 32 * 1048576;
+function readInsideRoot(root, rel) {
+  const real = realpathSync3(join3(root, rel));
+  const inside = relative4(realpathSync3(root), real);
+  if (inside === ".." || inside.startsWith(`..${sep4}`) || isAbsolute3(inside)) {
+    throw new Error("resolves outside the scan root; not read");
+  }
+  const fd = openSync(real, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+  try {
+    const stat2 = fstatSync(fd);
+    if (!stat2.isFile()) throw new Error("is not a regular file; not read");
+    if (stat2.size > MAX_READ_BYTES) {
+      throw new Error(`is larger than ${MAX_READ_BYTES / 1048576} MB; not read`);
+    }
+    return readFileSync3(fd, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+function readErrorMessage(error) {
+  const code = error.code;
+  return code ?? error.message;
+}
 var DEFAULT_EXCLUDES = [
   "**/node_modules/**",
   "**/dist/**",
@@ -14267,13 +14288,24 @@ function walk(options) {
   const virtualenvs = globSync("**/pyvenv.cfg", {
     cwd: root,
     ignore: [...DEFAULT_EXCLUDES, ...exclude],
-    dot: false
+    dot: false,
+    followSymbolicLinks: false
   }).map(
-    (p) => p.split(sep3).join("/").replace(/\/?pyvenv\.cfg$/, "")
+    (p) => p.split(sep22).join("/").replace(/\/?pyvenv\.cfg$/, "")
   ).filter((dir) => dir !== "").map((dir) => `${dir}/**`);
   const ignoreGlobs = [...DEFAULT_EXCLUDES, ...exclude, ...virtualenvs];
   const filter = respectIgnoreFiles ? buildIgnoreFilter(root) : null;
-  const collect = (patterns) => globSync(patterns, { cwd: root, ignore: ignoreGlobs, absolute: false, dot: false }).map((p) => p.split(sep3).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
+  const collect = (patterns) => globSync(patterns, {
+    cwd: root,
+    ignore: ignoreGlobs,
+    absolute: false,
+    dot: false,
+    // No link is listed or descended into, inside the root or out: the
+    // library has no setting between following every link and listing
+    // none, and following them lets `deps -> /` walk the filesystem. See
+    // "Symbolic links are not followed" in docs/LIMITATIONS.md.
+    followSymbolicLinks: false
+  }).map((p) => p.split(sep22).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
   return {
     manifests: collect(MANIFEST_PATTERNS),
     sources: collect(SOURCE_PATTERNS),
@@ -14285,7 +14317,7 @@ function buildIgnoreFilter(root) {
   let found = false;
   for (const name of [".gitignore", ".egressaignore"]) {
     try {
-      matcher.add(readFileSync3(`${root}/${name}`, "utf8"));
+      matcher.add(readInsideRoot(root, name));
       found = true;
     } catch {
     }
@@ -14319,7 +14351,7 @@ function loadConfig(root, explicitPath) {
   if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
   if (!target.isFile()) throw new ConfigError(`${path}: is not a regular file`);
   if (explicitPath === void 0) {
-    const inside = relative2(realpathSync2(root), realpathSync2(path));
+    const inside = relative3(realpathSync2(root), realpathSync2(path));
     if (inside.startsWith("..") || isAbsolute2(inside)) {
       throw new ConfigError(`${path}: resolves outside the repository; not read`);
     }
@@ -14327,8 +14359,8 @@ function loadConfig(root, explicitPath) {
   let bytes;
   let fd;
   try {
-    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
-    const opened = fstatSync(fd);
+    fd = openSync2(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
+    const opened = fstatSync2(fd);
     if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
     if (opened.size > MAX_CONFIG_BYTES) {
       throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1048576} MB; not read`);
@@ -14339,7 +14371,7 @@ function loadConfig(root, explicitPath) {
     const code = error.code ?? "unknown error";
     throw new ConfigError(`${path}: cannot be read (${code})`);
   } finally {
-    if (fd !== void 0) closeSync(fd);
+    if (fd !== void 0) closeSync2(fd);
   }
   let parsed;
   try {
@@ -14349,7 +14381,7 @@ function loadConfig(root, explicitPath) {
     const summary = (error.message.split("\n")[0] ?? "").replace(/:\s*$/, "");
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  const source = relative2(root, path).split(sep22).join("/") || path;
+  const source = relative3(root, path).split(sep3).join("/") || path;
   if (parsed === null || parsed === void 0) return { source };
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new ConfigError(
@@ -14793,7 +14825,13 @@ function parsePnpmLock(text, manifestPath) {
     return {
       dependencies: [],
       errors: [
-        { file: manifestPath, message: doc.errors[0]?.message ?? "YAML parse error", fatal: false }
+        {
+          file: manifestPath,
+          // The parser's message quotes the failing line after its first one;
+          // the position is enough, and the excerpt is file content.
+          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
+          fatal: false
+        }
       ]
     };
   }
@@ -15260,7 +15298,13 @@ function parseYarnBerryLock(text, manifestPath) {
     return {
       dependencies: [],
       errors: [
-        { file: manifestPath, message: doc.errors[0]?.message ?? "YAML parse error", fatal: false }
+        {
+          file: manifestPath,
+          // The parser's message quotes the failing line after its first one;
+          // the position is enough, and the excerpt is file content.
+          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
+          fatal: false
+        }
       ]
     };
   }
@@ -15312,9 +15356,9 @@ function analyzeManifests(options) {
   for (const path of manifestPaths) {
     let text;
     try {
-      text = readFileSync32(join22(root, path), "utf8");
+      text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
     const file = basename2(path);
@@ -15572,7 +15616,7 @@ function toInvocation(result) {
       // Located against the source root, like every result. A path that is the
       // machine's, or that climbs out of the root (an explicit --config), has
       // no location in the checkout to point at.
-      ...isAbsolute22(e2.file) || e2.file.startsWith("..") ? {} : {
+      ...isAbsolute32(e2.file) || e2.file.startsWith("..") ? {} : {
         locations: [
           { physicalLocation: { artifactLocation: { uri: e2.file, uriBaseId: "%SRCROOT%" } } }
         ]
@@ -16341,6 +16385,7 @@ function collectUnstableNames(program) {
         return;
       case "TSEnumDeclaration":
       case "TSImportEqualsDeclaration":
+      case "TSEnumMember":
         declare(node.id);
         return;
       case "TSModuleDeclaration": {
@@ -16353,7 +16398,7 @@ function collectUnstableNames(program) {
         dynamicScope ??= "a with statement";
         return;
       case "CallExpression": {
-        const callee = node.callee;
+        const callee = unwrapExpression(node.callee);
         if (callee?.type === "Identifier" && callee.name === "eval") dynamicScope ??= "direct eval";
         return;
       }
@@ -16404,9 +16449,10 @@ function collectUnstableNames(program) {
   return unstable;
 }
 var GLOBAL_OBJECTS = /* @__PURE__ */ new Set(["globalThis", "window", "self", "global"]);
-function globalPropertyName(node) {
+function globalPropertyName(target) {
+  const node = unwrapExpression(target);
   if (node?.type !== "MemberExpression") return null;
-  const object = node.object;
+  const object = unwrapExpression(node.object);
   if (object?.type !== "Identifier" || !GLOBAL_OBJECTS.has(String(object.name))) return null;
   const property = node.property;
   if (!property) return null;
@@ -16414,9 +16460,31 @@ function globalPropertyName(node) {
   if (node.computed && property.type === "Literal" && typeof property.value === "string") {
     return property.value;
   }
+  if (node.computed && property.type === "TemplateLiteral") {
+    const quasis = property.quasis ?? [];
+    if (quasis.length === 1) {
+      const cooked = quasis[0]?.value?.cooked;
+      if (cooked !== void 0) return cooked;
+    }
+  }
   return null;
 }
-function patternNames(pattern) {
+var TRANSPARENT_WRAPPERS = /* @__PURE__ */ new Set([
+  "ParenthesizedExpression",
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "TSNonNullExpression",
+  "TSTypeAssertion"
+]);
+function unwrapExpression(node) {
+  let current = node;
+  while (current && TRANSPARENT_WRAPPERS.has(current.type)) {
+    current = current.expression;
+  }
+  return current;
+}
+function patternNames(target) {
+  const pattern = unwrapExpression(target ?? void 0);
   if (!pattern) return [];
   switch (pattern.type) {
     case "Identifier":
@@ -16639,9 +16707,9 @@ function analyzeInfrastructure(options) {
   for (const path of configPaths) {
     let text;
     try {
-      text = readFileSync4(join3(root, path), "utf8");
+      text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
     const name = basename22(path);
@@ -16934,9 +17002,9 @@ function scan(options) {
     for (const file of sources) {
       let text;
       try {
-        text = readFileSync5(join4(root, file), "utf8");
+        text = readInsideRoot(root, file);
       } catch (error2) {
-        errors.push({ file, message: `unreadable: ${error2.message}`, fatal: false });
+        errors.push({ file, message: `unreadable: ${readErrorMessage(error2)}`, fatal: false });
         continue;
       }
       const { hits, error } = analyzeFile(text, file, vendorSinks);
@@ -17554,7 +17622,7 @@ function parseConfidence(value) {
 }
 
 // src/commands/schema.ts
-import { readFileSync as readFileSync6 } from "fs";
+import { readFileSync as readFileSync4 } from "fs";
 var schemaCommand = defineCommand({
   meta: { name: "schema", description: "Print a published JSON schema" },
   args: {
@@ -17569,7 +17637,7 @@ var schemaCommand = defineCommand({
     const which = String(args.which);
     const path = which === "vendor" ? "kb/schema/vendor-1.0.0.json" : `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
     try {
-      process.stdout.write(readFileSync6(path, "utf8"));
+      process.stdout.write(readFileSync4(path, "utf8"));
     } catch {
       process.stderr.write(`egressa: schema "${which}" not found
 `);

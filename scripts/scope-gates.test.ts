@@ -5,11 +5,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 /**
  * `scope.sh` decides which specialists the privacy review dispatches. A gate that
@@ -82,7 +85,17 @@ const REAL_GREP = execFileSync('sh', ['-c', 'command -v grep'], { encoding: 'utf
 const grepShim = (flag: string) =>
   `#!/bin/sh\nfor a in "$@"; do case "$a" in ${flag}) exit 2 ;; esac; done\nexec ${REAL_GREP} "$@"\n`;
 
-const scratch = (tag: string) => mkdtempSync(join(tmpdir(), `egressa-scope-${tag}-`));
+// Every scratch tree is removed after the file runs; some hold FIFOs, and
+// leaving them used to accumulate thousands of directories in the temp dir.
+const scratchRoots: string[] = [];
+const scratch = (tag: string) => {
+  const dir = mkdtempSync(join(tmpdir(), `egressa-scope-${tag}-`));
+  scratchRoots.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of scratchRoots) rmSync(dir, { recursive: true, force: true });
+});
 
 const plant = (root: string, rel: string, content: string) => {
   const full = join(root, rel);
@@ -480,4 +493,518 @@ describe('every gate is accounted for in SKILL.md', () => {
       expect({ gate, both: routed && contextOnly }).toEqual({ gate, both: false });
     });
   }
+});
+
+describe('the reviewed repository cannot run code through its own git config', () => {
+  // scope.sh runs git inside the repository under review. A repository handed
+  // over with its .git directory -- an archive, a shared folder -- carries its
+  // own .git/config, and git runs a core.fsmonitor command on every index
+  // refresh: `git ls-files` in repo mode, the worktree `git diff` calls in diff
+  // mode. A clone cannot carry .git/config, which is why no fixture caught it.
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+
+  const plantedRepo = () => {
+    const root = scratch('fsmonitor');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"planted","private":true}\n');
+    plant(root, 'src/app.ts', "export const go = () => fetch('https://api.example.com/x');\n");
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/more.ts', 'export const more = 1;\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'feature');
+    plant(root, 'src/dirty.ts', 'export const dirty = 2;\n');
+    git(root, 'config', 'core.fsmonitor', `touch '${marker}'; false`);
+    return { root, marker };
+  };
+
+  const run = (cwd: string, args: string[]) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', env: process.env });
+
+  it.each([
+    ['repo mode', ['--repo']],
+    ['diff mode', ['--base', 'main']],
+  ])('does not run a planted core.fsmonitor in %s', (_mode, args) => {
+    const { root, marker } = plantedRepo();
+    const out = run(root, args);
+    expect(existsSync(marker)).toBe(false);
+    // Blocking the hook must not blind the review: the files are still found.
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+});
+
+// A git invocation in any spelling a shell accepts: git, "git", 'git', \git.
+const BARE_GIT = /(^|[\s;&|($`])\\?["']?git["']?\s/;
+
+describe('every git call in scope.sh goes through git_safe', () => {
+  it('has no bare git invocation outside the wrapper', () => {
+    const offending = readFileSync(SCOPE, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .filter((line) => BARE_GIT.test(line))
+      // The wrapper's own body is the one line allowed to name git.
+      .filter((line) => !/ git -c core\.fsmonitor= -c core\.hooksPath=/.test(line));
+    expect(offending).toEqual([]);
+  });
+
+  it('tells no specialist or the orchestrator to run git itself', () => {
+    // SKILL.md used to hand specialists `git ls-files` and `git diff`, which
+    // run the reviewed repository's core.fsmonitor and diff drivers.
+    const docs = [
+      'skill/privacy-review/SKILL.md',
+      ...readdirSync('skill/privacy-review/specialists').map(
+        (f) => `skill/privacy-review/specialists/${f}`,
+      ),
+    ];
+    for (const doc of docs) {
+      const lines = readFileSync(doc, 'utf8')
+        .split('\n')
+        .filter((line) => /`[^`]*\bgit (ls-files|diff|status|log|show)\b[^`]*`/.test(line));
+      expect({ doc, lines }).toEqual({ doc, lines: [] });
+    }
+  });
+});
+
+describe('the reviewed repository cannot run a filter driver through git diff', () => {
+  // A clean or process filter assigned by .git/info/attributes runs whenever
+  // git hashes a stat-dirty worktree file -- which every file is after an
+  // archive is extracted, since extraction re-dates them.
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+
+  it.each(['clean', 'process'])('does not run a planted %s filter in diff mode', (kind) => {
+    const root = scratch(`filter-${kind}`);
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"planted","private":true}\n');
+    plant(root, 'src/app.ts', 'export const a = 1;\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/app.ts', 'export const a = 2;\n');
+    git(root, 'commit', '-q', '-am', 'change');
+    plant(root, '.git/info/attributes', '* filter=evil\n');
+    git(root, 'config', `filter.evil.${kind}`, `sh -c 'touch "${marker}"; cat'`);
+    // Re-date every file, as extracting an archive does.
+    execFileSync('touch', [
+      '-d',
+      '2001-01-01',
+      join(root, 'src/app.ts'),
+      join(root, 'package.json'),
+    ]);
+
+    const out = execFileSync('bash', [SCOPE, '--base', 'main'], { cwd: root, encoding: 'utf8' });
+    expect(existsSync(marker)).toBe(false);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+});
+
+describe('a symlink out of the reviewed repository is not reviewed', () => {
+  const linked = () => {
+    const top = scratch('links');
+    const outside = join(top, 'outside');
+    const root = join(top, 'repo');
+    plant(outside, 'tracker.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(outside, 'dir/tracker.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(root, 'package.json', '{"name":"links","private":true}\n');
+    plant(root, 'src/app.js', 'export const app = 1;\n');
+    symlinkSync(join(outside, 'tracker.js'), join(root, 'src/linked.js'));
+    symlinkSync(join(outside, 'dir'), join(root, 'vendor'));
+    // Committed, as a clone delivers them: git ls-files lists a link, where
+    // the find fallback does not.
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: root });
+    git('init', '-q', '-b', 'main');
+    git('add', '.');
+    git('commit', '-q', '-m', 'links');
+    return root;
+  };
+
+  it('does not let a linked file or directory raise a gate', () => {
+    const { lines } = runScope(linked());
+    expect(lines.SCOPE_TRACKER_CODE).toBe('false');
+    expect(lines.SIGNAL_TRACKERS_NO_CONSENT).toBe('false');
+    expect(lines.FILES_UNDER_REVIEW).toBe('2');
+  });
+
+  it('leaves linked paths out of the file list handed to specialists', () => {
+    const out = execFileSync('bash', [SCOPE, '--repo', '--list'], {
+      cwd: linked(),
+      encoding: 'utf8',
+    });
+    expect(out.split('\n').filter(Boolean).sort()).toEqual(['package.json', 'src/app.js']);
+  });
+});
+
+describe('git in the reviewed repository reaches no network, no submodule, and fails loudly', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8' });
+
+  /** main with one commit; feature adds src/t.js carrying a tracker call. */
+  const branched = (tag: string) => {
+    const root = scratch(tag);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"b","private":true}\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/t.js', "gtag('config', 'G-X');\n");
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'feature');
+    return root;
+  };
+
+  /** Deletes the loose tree object for `src` at HEAD, so a diff needs it fetched. */
+  const dropSrcTree = (root: string) => {
+    const tree = git(root, 'rev-parse', 'HEAD:src').trim();
+    rmSync(join(root, '.git', 'objects', tree.slice(0, 2), tree.slice(2)));
+  };
+
+  it('does not lazy-fetch through a promisor remote, and so runs no transport command', () => {
+    const root = branched('promisor');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'config', 'core.repositoryformatversion', '1');
+    git(root, 'config', 'extensions.partialClone', 'origin');
+    git(root, 'config', 'remote.origin.promisor', 'true');
+    git(root, 'config', 'remote.origin.url', 'ssh://evil.invalid/x');
+    git(root, 'config', 'core.sshCommand', `sh -c 'touch "${marker}"; exit 1' --`);
+    git(root, 'config', 'protocol.ext.allow', 'always');
+    dropSrcTree(root);
+    const out = runIn(root);
+    expect(existsSync(marker)).toBe(false);
+    expect(out).toMatch(/^DEGRADED: /m);
+  });
+
+  it('reports a failed diff as degraded and still reviews the files, rather than an empty clean set', () => {
+    const root = branched('broken');
+    dropSrcTree(root);
+    const out = runIn(root);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not run a filter driver defined in a submodule', () => {
+    const lib = scratch('sublib');
+    git(lib, 'init', '-q', '-b', 'main');
+    plant(lib, 'f.txt', 'x\n');
+    git(lib, 'add', '.');
+    git(lib, 'commit', '-q', '-m', 'lib');
+    const root = branched('superproject');
+    git(root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'lib');
+    git(root, 'commit', '-q', '-m', 'submodule');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(join(root, 'lib'), 'config', 'filter.evil.clean', `sh -c 'touch "${marker}"; cat'`);
+    plant(root, '.git/modules/lib/info/attributes', '* filter=evil\n');
+    execFileSync('touch', ['-d', '2001-01-01', join(root, 'lib', 'f.txt')]);
+    runIn(root);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('does not let a link whose name holds a newline hide another path', () => {
+    const root = scratch('newline');
+    plant(root, 'package.json', '{"name":"n","private":true}\n');
+    plant(root, 'src/t.js', "gtag('config', 'G-X');\n");
+    symlinkSync('package.json', join(root, 'zz\nsrc'));
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'n');
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+    const list = runIn(root, ['--repo', '--list']).split('\n').filter(Boolean);
+    expect(list).toContain('src/t.js');
+  });
+});
+
+describe('git is believed only about this directory, and only for paths inside it', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 20000 });
+
+  it('does not review a path outside the repository that a crafted tree lists', () => {
+    const top = scratch('dotdot');
+    const root = join(top, 'repo');
+    plant(top, 'outside/secret.js', "gtag('config', 'G-OUTSIDE');\n");
+    plant(root, 'package.json', '{"name":"d","private":true}\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    // A tree with an entry named `..`, which git mktree accepts and git diff
+    // then reports as ../outside/secret.js.
+    const blob = git(root, 'hash-object', '-w', join(top, 'outside/secret.js')).trim();
+    const mk = (input: string) =>
+      execFileSync('git', ['mktree'], { cwd: root, input, encoding: 'utf8' }).trim();
+    const outsideTree = mk(`100644 blob ${blob}\tsecret.js\n`);
+    const dotdotTree = mk(`040000 tree ${outsideTree}\toutside\n`);
+    const pkg = git(root, 'rev-parse', 'HEAD:package.json').trim();
+    const rootTree = mk(`040000 tree ${dotdotTree}\t..\n100644 blob ${pkg}\tpackage.json\n`);
+    const commit = execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=t@t',
+        '-c',
+        'user.name=t',
+        'commit-tree',
+        rootTree,
+        '-p',
+        'HEAD',
+        '-m',
+        'x',
+      ],
+      { cwd: root, encoding: 'utf8' },
+    ).trim();
+    git(root, 'reset', '-q', '--soft', commit);
+
+    const out = runIn(root);
+    expect(out).toMatch(/^SIGNAL_TRACKERS_NO_CONSENT: false$/m);
+    expect(out).toMatch(/^DEGRADED: .*outside/m);
+    const list = runIn(root, ['--list']);
+    expect(list).not.toContain('outside');
+  });
+
+  it('does not take a parent repository as the reviewed one', () => {
+    const parent = scratch('ancestor');
+    git(parent, 'init', '-q', '-b', 'main');
+    plant(parent, 'README.md', 'parent\n');
+    git(parent, 'add', '.');
+    git(parent, 'commit', '-q', '-m', 'p');
+    const drop = join(parent, 'vendor-drop');
+    plant(drop, 'package.json', '{"name":"drop","private":true}\n');
+    plant(drop, 'src/a.js', "gtag('config', 'G-X');\n");
+    const out = runIn(drop, ['--repo']);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+  });
+
+  it('does not follow a .git file to another repository', () => {
+    const top = scratch('gitfile');
+    const other = join(top, 'other');
+    mkdirSync(other, { recursive: true });
+    git(other, 'init', '-q', '-b', 'main');
+    const root = join(top, 'repo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    plant(root, '.git', `gitdir: ${join(other, '.git')}\n`);
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('reports an empty index over a populated tree instead of an empty review', () => {
+    const root = scratch('emptyindex');
+    plant(root, 'package.json', '{"name":"e","private":true}\n');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not hang on a FIFO inside .git', () => {
+    const root = scratch('gitfifo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    rmSync(join(root, '.git', 'config'));
+    execFileSync('mkfifo', [join(root, '.git', 'config')]);
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+});
+
+describe('SKILL.md carries every DEGRADED line into the report', () => {
+  it('names DEGRADED as a coverage gap the report must state', () => {
+    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    expect(skill).toMatch(/`DEGRADED:`[\s\S]{0,400}NOT CHECKED/);
+  });
+});
+
+describe('plain bugs from the fourth hardening review', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = [], env: NodeJS.ProcessEnv = process.env) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 45000, env });
+
+  it('does not hang on a package.json that is a FIFO', () => {
+    const root = scratch('pkgfifo');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    execFileSync('mkfifo', [join(root, 'package.json')]);
+    expect(runIn(root, ['--repo'])).toMatch(/^SCOPE_END: ok$/m);
+  });
+
+  it('does not read a package.json linked from outside the repository', () => {
+    const top = scratch('pkglink');
+    plant(top, 'outside/package.json', '{"dependencies":{"next":"14.0.0"}}\n');
+    const root = join(top, 'repo');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    symlinkSync(join(top, 'outside/package.json'), join(root, 'package.json'));
+    expect(runIn(root, ['--repo'])).not.toMatch(/^STACK: .*\bnext\b/m);
+  });
+
+  it('stops asking git after the first timeout, and says it timed out', () => {
+    const root = scratch('reffifo');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    git(root, 'init', '-q', '-b', 'main');
+    for (const ref of ['main', 'master', 'develop']) {
+      execFileSync('mkfifo', [join(root, '.git', 'refs', 'heads', ref)]);
+    }
+    const started = Date.now();
+    const out = runIn(root);
+    expect(Date.now() - started).toBeLessThan(40000);
+    expect(out).toMatch(/^DEGRADED: .*timed out/m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  }, 60000);
+
+  it("ignores a GIT_INDEX_FILE in the reviewer's environment", () => {
+    const other = scratch('otherindex');
+    plant(other, 'elsewhere.js', 'export const e = 1;\n');
+    git(other, 'init', '-q', '-b', 'main');
+    git(other, 'add', '.');
+    const root = scratch('ownindex');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    const list = runIn(root, ['--repo', '--list'], {
+      ...process.env,
+      GIT_INDEX_FILE: join(other, '.git', 'index'),
+    });
+    expect(list).toContain('src/a.js');
+    expect(list).not.toContain('elsewhere.js');
+  });
+
+  it('says a subdirectory of a repository is one, rather than "not a Git repository"', () => {
+    const root = scratch('subdir');
+    plant(root, 'pkg/src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'x');
+    expect(runIn(join(root, 'pkg'))).toMatch(/^DEGRADED: .*subdirectory/m);
+  });
+
+  it('reviews source under a nested directory named .git that git cannot track', () => {
+    const root = scratch('nestedgit');
+    plant(root, 'package.json', '{"name":"n","private":true}\n');
+    plant(root, 'lib/.git/t.js', "gtag('config', 'G-X');\n");
+    expect(runIn(root, ['--repo'])).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not believe git when objects/info/alternates points elsewhere', () => {
+    const root = scratch('alternates');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, '.git/objects/info/alternates', '/elsewhere/objects\n');
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*alternates/m);
+  });
+});
+
+describe('portability and the last borrowed-repository forms', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 45000 });
+
+  it('writes every case pattern in the (pattern) form bash 3.2 parses inside $(...)', () => {
+    // macOS ships bash 3.2, which cannot parse `pattern)` inside a command
+    // substitution: scope.sh died before printing a gate, and --list printed
+    // nothing at all. CI has no bash 3.2, so the form is pinned here.
+    const offending = readFileSync(SCOPE, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .flatMap((line) => {
+        const m = /\bcase\b.*\bin\b(.*)$/.exec(line);
+        return m?.[1] && /[^(\s][^;]*\)/.test(m[1]) && !/^\s*\(/.test(m[1]) ? [line] : [];
+      });
+    expect(offending).toEqual([]);
+  });
+
+  it('does not believe git when .git/commondir names another repository', () => {
+    const other = scratch('commondir-other');
+    git(other, 'init', '-q', '-b', 'main');
+    const root = scratch('commondir');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, '.git/commondir', `${join(other, '.git')}\n`);
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*commondir/m);
+  });
+
+  it('does not believe git when .git/objects is a link', () => {
+    const other = scratch('objects-other');
+    git(other, 'init', '-q', '-b', 'main');
+    const root = scratch('objectslink');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    rmSync(join(root, '.git', 'objects'), { recursive: true });
+    symlinkSync(join(other, '.git', 'objects'), join(root, '.git', 'objects'));
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*objects/m);
+  });
+
+  it('tells the orchestrator a run without SCOPE_END is a stop, not an empty review', () => {
+    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    expect(skill).toMatch(/`SCOPE_END: ok`[\s\S]{0,300}(stop|not run)/i);
+  });
+});
+
+// A real bash 3.2 run, where the image is available locally; CI has no 3.2.
+const hasBash32 = (() => {
+  try {
+    execFileSync('docker', ['image', 'inspect', 'bash:3.2'], { stdio: 'ignore', timeout: 10000 });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe.skipIf(!hasBash32)('scope.sh under bash 3.2', () => {
+  it('prints the whole gate block and a non-empty --list', () => {
+    const root = scratch('bash32');
+    plant(root, 'package.json', '{"name":"b","private":true}\n');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    const script = readFileSync(SCOPE, 'utf8');
+    const run = (args: string) =>
+      execFileSync(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '-i',
+          '-v',
+          `${root}:/repo`,
+          '-w',
+          '/repo',
+          'bash:3.2',
+          'bash',
+          '-s',
+          '--',
+          ...args.split(' ').filter(Boolean),
+        ],
+        { input: script, encoding: 'utf8', timeout: 60000 },
+      );
+    expect(run('--repo')).toMatch(/^SCOPE_END: ok$/m);
+    expect(run('--repo --list')).toContain('src/a.js');
+  }, 120000);
 });

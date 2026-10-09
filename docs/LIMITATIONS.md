@@ -204,6 +204,21 @@ The distinction is carried by the type, not by the wording.
 
 Bounded at `MAX_DEPTH = 3`. Deeper chains report as unresolved rather than being followed.
 
+### Symbolic links are not followed
+
+A linked file or directory is not scanned, wherever it points. The scanned repository is untrusted
+input and a link is part of it: `pnpm-lock.yaml -> ~/.aws/credentials` used to be read, and the YAML
+parser's error quoted its first line into JSON, SARIF and the MCP result; `deps -> /` would walk the
+whole filesystem. The glob library offers no middle setting -- it either follows every link or
+lists none -- so none are followed, including links that stay inside the repository. Those are
+normally a second path to a file that is scanned under its real name; a repository that keeps a
+real manifest or source file *only* behind a link is the case this misses.
+
+Every reader also refuses a path whose real location leaves the scan root, or that is not a regular
+file (`discovery/read-inside.ts`), which covers `.gitignore` and `.egressaignore`, read outside the
+walk. Hard links cannot be told apart from ordinary files and are read; making one to a file outside
+the repository needs write access on the scanning machine's filesystem.
+
 ### Minified, bundled and vendored code
 
 Skipped entirely: `*.min.js`, `*.bundle.js`, `dist/`, `build/`, `.next/`, `vendor/`. Matching
@@ -265,6 +280,37 @@ add one.
 Even a high-confidence, resolved call site only shows that code *references* a vendor. It does not
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
+
+## The privacy review's file set
+
+`skill/privacy-review/scripts/scope.sh` decides which files the privacy review reads, and in a git
+repository it asks git. The repository under review is untrusted, and so is its `.git`, which an
+archive or shared folder carries. The script blocks the execution and outside-read paths reviews
+have found, and reports `DEGRADED` -- which the skill must carry into its report -- whenever it
+cannot believe git. What it does not do:
+
+- **Untracked files are not reviewed** while git supplies the file set, in diff mode or
+  whole-repository mode. A tracker in a file nobody committed is outside the review, exactly as it
+  is outside the repository's history. When the script falls back to `find` -- every `DEGRADED`
+  case -- untracked files are reviewed like any other.
+- **In whole-repository mode the repository's own index decides the set.** An index that lists
+  nothing over a populated tree is caught and the script falls back to `find`; an index that lists
+  *some* files is believed, so a `.git` delivered with a crafted index can leave a committed-looking
+  file out. Reviewing an archive you do not trust is safest from a fresh clone of its source, or
+  from the extracted tree with its `.git` removed, which makes the script list every file.
+- **On a machine with no `timeout` command -- stock macOS -- git calls are not bounded.** A `.git`
+  holding a FIFO in a place the script does not pre-check (an `include.path` target, a ref, a
+  split-index file) can hang the review there. Elsewhere each call is limited to 15 seconds and the
+  first timeout ends git's part in the run.
+- **A `git worktree` checkout or a submodule checkout always degrades** to whole-repository mode
+  over `find`, because its `.git` is a file naming a repository elsewhere, and the script believes
+  git only about a directory whose `.git` is its own. So does a clone made with `--shared` or
+  `--reference`, which borrows objects through `objects/info/alternates`. Review a diff from a
+  plain clone.
+- **A run that dies prints no `SCOPE_END: ok` line**, and the skill treats that as a stop. On
+  macOS this depends on the script parsing under bash 3.2, which `/bin/bash` is there; a test pins
+  the syntax that version needs, and a bash 3.2 run is tested where Docker has the image.
+- **A diff is taken only from a repository's top level**, and needs git 2.31 or later.
 
 ## The review skills have no golden table
 

@@ -49,6 +49,12 @@ echo "SCOPE_SCRIPT: ${SCOPE:-not found}"
 Shell state does not survive between commands, so carry `SKILL_DIR` and `SCOPE` forward as the
 literal paths printed here.
 
+**A run that did not finish did not run.** The block ends `SCOPE_END: ok`. If that line is
+missing, or the script exits non-zero -- the same goes for the `--list` call in Step 3 -- stop and
+say the scope step failed, with its output. Never dispatch specialists on an empty or partial file
+list: a script that died before printing its gates reads, line for line, like a repository with
+nothing to review.
+
 If it resolves to nothing, do not fall back to running the review without gates — say the skill is
 installed incompletely and stop. The gates are what keep the review from dispatching every
 specialist at every repository and reporting on things it was never asked about.
@@ -111,6 +117,14 @@ If the user passes `--all`, dispatch every specialist regardless of gates. If th
 (`--consent`, `--retention`, `--logs`, `--session-replay`, `--opt-out`, `--transfers`), dispatch
 only that one.
 
+**A `DEGRADED:` line is a coverage gap, and the report must say so.** `scope.sh` emits one when
+it could not establish the file set the normal way: no base branch, a failed diff, a `.git` that is
+not this directory's own or not safe to read, an index that lists nothing over a populated tree,
+paths with a newline in the name, or paths outside the repository that git listed. Its fallback
+still produces a reviewed set, but not necessarily the one asked for. Carry every `DEGRADED:` line,
+verbatim, into NOT CHECKED in Step 5; a run that degraded and says nothing reads as a complete
+review of the change the user asked about.
+
 **A degraded gate is not a false gate.** `scope.sh` can emit a second line for a gate it failed to
 evaluate — a crash, a missing dependency, a timeout — in addition to that gate's ordinary
 `SCOPE_*: false`:
@@ -148,8 +162,12 @@ Each specialist prompt contains, in this order:
 5. The scope lines from Step 1, verbatim, and the stack from `STACK`.
 5a. The absolute `SKILL_DIR`, stated as such, so a specialist that runs a script runs this copy of it
    and not one the reviewed repository supplies.
-6. The file list under review, and the command that produced it, so the specialist reads the same
-   set you did: in diff mode `git diff $DIFF_BASE HEAD`, in repo mode `git ls-files`.
+6. The file list under review, exactly as `bash "$SCOPE" <same mode flags> --list` prints it, so
+   the specialist reads the same set the gates did. Never have a specialist run `git` in the
+   reviewed repository to build its own list: the repository's own `.git/config` can make git run
+   commands (`core.fsmonitor`, filter drivers), and `scope.sh` is the one place that neutralises
+   that. Tell specialists the list excludes symbolic links, and that they must not follow a link or
+   read anything outside the repository root.
 7. This instruction:
 
 > You are a privacy review specialist. Apply the checklist below to the files under review. Open
@@ -250,6 +268,12 @@ skipped:
 - Specialists that were gated off, by name, and any dispatched specialist that returned no block.
 - From the transfers specialist's `_scanner` line: a degraded engine, the `unmatched` counts, the
   scanner's own errors, the blind spots it names, and whether its counts added up.
+- Every `DEGRADED:` line `scope.sh` printed, verbatim: the file set was not established the normal
+  way, and the reader needs to know which set was reviewed instead.
+- Untracked files, which are not reviewed unless `scope.sh` fell back to listing files with `find`
+  (a `DEGRADED:` line says when); and, in whole-repository mode, any file the repository's own
+  index leaves out. If the repository arrived as an archive rather than a clone, say that its
+  `.git` decided the file set (`docs/LIMITATIONS.md`, "The privacy review's file set").
 - Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
   a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two
   runs needs to know the selection was made defensively rather than on a real signal.

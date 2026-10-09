@@ -5,6 +5,8 @@
 #   scope.sh                 # review the working tree against the default base branch
 #   scope.sh --base main     # review the diff against an explicit base
 #   scope.sh --repo          # review the whole repository, ignoring git history
+#   scope.sh ... --list      # print only the reviewed file set, one path per line,
+#                            # for specialists -- never have them run git themselves
 #
 # Every signal is a gate, not a finding. The orchestrator decides which specialists
 # to dispatch from these lines; the specialists decide what is actually wrong.
@@ -13,10 +15,12 @@ set -uo pipefail
 
 MODE="diff"
 BASE=""
+LIST=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) MODE="repo"; shift ;;
+    --list) LIST=1; shift ;;
     # `shift; shift` rather than `shift 2`: with `--base` as the last argument
     # there is nothing to shift twice, and bash's `shift 2` then shifts nothing
     # at all rather than failing. With no `set -e` the loop never advances and
@@ -28,17 +32,183 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-emit() { printf '%s: %s\n' "$1" "$2"; }
+emit() { [ "$LIST" = 1 ] || printf '%s: %s\n' "$1" "$2"; }
 
-echo "SCOPE_PROTO: 1"
+# ------------------------------------------------- git, treated as hostile
+# The repository under review is untrusted input, and so is its .git: an
+# archive or a shared folder carries its own config, index and objects, and
+# git will run commands that config names and report paths that index holds.
+# Each rule below exists because a review found a way through without it.
+# This covers the paths reviews have found, by class where git allows it; it
+# is not a proof that git can run nothing.
+
+REPO_ROOT="$(pwd -P)"
+# The reviewer's environment must not point git at another repository, index
+# or object store either.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG GIT_PREFIX
+# Never search upward: an untracked folder inside some parent repository is
+# not that repository, and git would otherwise answer about the parent.
+export GIT_CEILING_DIRECTORIES="${REPO_ROOT%/*}"
+
+# A FIFO in .git, or an include git follows, would block git forever. Each
+# call is bounded, and the first call to time out ends git's part in the run:
+# a marker file rather than a variable, because git_safe often runs inside a
+# `$(...)` subshell. Stock macOS has no `timeout`, and there calls are not
+# bounded -- see "The privacy review's file set" in docs/LIMITATIONS.md.
+GIT_TIMEOUT_SECONDS=15
+if command -v timeout >/dev/null 2>&1; then _limit=(timeout "$GIT_TIMEOUT_SECONDS"); else _limit=(); fi
+_TIMED_OUT="$(mktemp -u "${TMPDIR:-/tmp}/egressa-scope-timeout.XXXXXX")"
+trap 'rm -f "$_TIMED_OUT"' EXIT
+
+# Every git call goes through here: no core.fsmonitor, hooks, external diff,
+# pager or submodule recursion -- each of those runs a command the
+# repository's config names.
+git_safe() {
+  [ -e "$_TIMED_OUT" ] && return 124
+  local rc=0
+  ${_limit[@]+"${_limit[@]}"} git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat \
+    -c diff.external= -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@" || rc=$?
+  [ "$rc" = 124 ] && : >"$_TIMED_OUT"
+  return "$rc"
+}
+
+# No git command may reach a transport. A partial clone lazy-fetches a missing
+# object, and the fetch runs core.sshCommand, a credential helper, remote
+# upload-pack or an ext:: command. GIT_ALLOW_PROTOCOL overrides every
+# protocol.*.allow in config, so naming a protocol that does not exist allows
+# none; GIT_NO_LAZY_FETCH does the same on git 2.44 and later.
+export GIT_ALLOW_PROTOCOL=egressa-none GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0
+
+# Whether git may be asked anything about this directory at all. GIT_REASON
+# says why not; empty with USE_GIT=0 means there is simply no repository.
+USE_GIT=1
+GIT_REASON=""
+SUBDIR_OF_REPO=0
+if [ ! -e .git ] && [ ! -L .git ]; then
+  USE_GIT=0
+  # Said only when a diff is asked for: reviewing a subdirectory as a whole is
+  # an ordinary request, but there is no diff to take from inside one.
+  _d="${REPO_ROOT%/*}"
+  while [ -n "$_d" ]; do
+    if [ -e "$_d/.git" ]; then SUBDIR_OF_REPO=1; break; fi
+    _d="${_d%/*}"
+  done
+elif [ -L .git ] || [ ! -d .git ]; then
+  # A .git file (gitdir:) or link names a repository somewhere else.
+  GIT_REASON=".git is not this directory's own repository"
+else
+  for _f in config HEAD index packed-refs commondir objects/info/alternates info/attributes; do
+    if { [ -e ".git/$_f" ] || [ -L ".git/$_f" ]; } && { [ -L ".git/$_f" ] || [ ! -f ".git/$_f" ]; }; then
+      GIT_REASON=".git/$_f is not a regular file"
+      break
+    fi
+  done
+  # Alternates lend this repository objects stored somewhere else; commondir,
+  # or a linked objects or refs directory, makes another repository's refs and
+  # objects this one's.
+  if [ -z "$GIT_REASON" ] && [ -s .git/objects/info/alternates ]; then
+    GIT_REASON=".git/objects/info/alternates points at objects outside this repository"
+  fi
+  if [ -z "$GIT_REASON" ] && { [ -e .git/commondir ] || [ -L .git/commondir ]; }; then
+    GIT_REASON=".git/commondir names another repository's directory"
+  fi
+  for _d in objects refs; do
+    if [ -z "$GIT_REASON" ] && { [ -L ".git/$_d" ] || { [ -e ".git/$_d" ] && [ ! -d ".git/$_d" ]; }; }; then
+      GIT_REASON=".git/$_d is not this repository's own directory"
+    fi
+  done
+  if [ -z "$GIT_REASON" ]; then
+    # GIT_CONFIG_COUNT, which the filter blanking below relies on, is 2.31+.
+    _ver="$(git_safe --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+    if [ -z "$_ver" ]; then
+      GIT_REASON="Git could not be run to read its version"
+    elif [ "${_ver%%.*}" -lt 2 ] || { [ "${_ver%%.*}" = 2 ] && [ "${_ver#*.}" -lt 31 ]; }; then
+      GIT_REASON="the installed Git $_ver is older than 2.31"
+    else
+      _top="$(git_safe rev-parse --show-toplevel 2>/dev/null)"
+      if [ -z "$_top" ]; then
+        GIT_REASON="Git could not read this repository (it may refuse one owned by another user)"
+      elif [ "$_top" != "$REPO_ROOT" ] \
+        || [ "$(git_safe rev-parse --absolute-git-dir 2>/dev/null)" != "$REPO_ROOT/.git" ]; then
+        # core.worktree, or anything else that points git's view elsewhere.
+        GIT_REASON="Git's repository is not this directory"
+      fi
+    fi
+  fi
+fi
+# A timeout says why, whatever the check that hit it.
+[ -e "$_TIMED_OUT" ] && GIT_REASON="a Git command timed out after ${GIT_TIMEOUT_SECONDS}s"
+[ -n "$GIT_REASON" ] && USE_GIT=0
+
+# Filter drivers. `.git/info/attributes` or `.gitattributes` can assign a clean,
+# smudge or process filter that the repository's config defines, and git runs
+# it to hash every stat-dirty worktree file -- which every file is after an
+# archive is extracted. Every driver git can see is blanked and marked not
+# required, through GIT_CONFIG_COUNT rather than `-c`, because `-c` splits at
+# the first `=` and a driver name may contain one. Appended after any entries
+# the reviewer already has.
+if [ "$USE_GIT" = 1 ]; then
+  _n="${GIT_CONFIG_COUNT:-0}"
+  while IFS= read -r -d '' _key; do
+    export "GIT_CONFIG_KEY_$_n=$_key" "GIT_CONFIG_VALUE_$_n="
+    _n=$((_n + 1))
+    export "GIT_CONFIG_KEY_$_n=${_key%.*}.required" "GIT_CONFIG_VALUE_$_n=false"
+    _n=$((_n + 1))
+  done < <(git_safe config -z --name-only --get-regexp '^filter\..*\.(clean|smudge|process)$' 2>/dev/null)
+  export GIT_CONFIG_COUNT="$_n"
+fi
+
+# NUL-separated paths as one path per line. Two kinds are never passed on,
+# and are replaced by a marker line counted and reported below -- a marker
+# starts with `/`, which no passed-on path can:
+# - a name holding a newline, which a line-based list would split (a link
+#   named `zz<newline>src` used to hide all of src/);
+# - a path that is not plainly inside this directory: absolute, or with an
+#   empty, `.` or `..` component. A crafted tree or index makes git report
+#   `../outside/secret.js`, and it used to be grepped and handed on.
+# The status is the producer's, through pipefail.
+nul_paths() {
+  local p
+  while IFS= read -r -d '' p; do
+    p="${p#./}"
+    case "$p" in
+      *$'\n'*) printf '%s\n' '//newline' ;;
+      '' | /* | . | .. | ../* | */.. | */../* | ./* | */. | */./* | *//*)
+        printf '%s\n' '//outside' ;;
+      *) printf '%s\n' "$p" ;;
+    esac
+  done
+}
+git_paths() { local sub="$1"; shift; git_safe "$sub" -z "$@" | nul_paths; }
+find_paths() {
+  # Only this directory's own .git is skipped: a directory named .git deeper in
+  # the tree is ordinary source as far as a review is concerned.
+  find . \( -path ./.git -o -name node_modules \) -prune -o -type f -print0 2>/dev/null | nul_paths
+}
+
+emit SCOPE_PROTO 1
 emit MODE "$MODE"
+if [ -n "$GIT_REASON" ]; then
+  emit DEGRADED "$GIT_REASON; Git is not used and files are listed with find"
+fi
 
 # ---------------------------------------------------------------- file set
 # FILES is the newline-separated list of source files under review.
+if [ "$MODE" = "diff" ] && [ "$USE_GIT" = 0 ]; then
+  # Without a trustworthy repository there is no diff to take.
+  if [ "$SUBDIR_OF_REPO" = 1 ]; then
+    emit DEGRADED "this is a subdirectory of a Git repository; run from its top level to review a diff. Falling back to whole-repo mode"
+  elif [ -z "$GIT_REASON" ]; then
+    emit DEGRADED "not a Git repository; falling back to whole-repo mode"
+  fi
+  emit MODE repo
+  MODE="repo"
+fi
 if [ "$MODE" = "diff" ]; then
   if [ -z "$BASE" ]; then
     for cand in main master develop; do
-      if git rev-parse --verify --quiet "refs/heads/$cand" >/dev/null 2>&1; then BASE="$cand"; break; fi
+      if git_safe rev-parse --verify --quiet "refs/heads/$cand" >/dev/null 2>&1; then BASE="$cand"; break; fi
     done
   fi
   if [ -z "$BASE" ]; then
@@ -47,26 +217,59 @@ if [ "$MODE" = "diff" ]; then
     MODE="repo"
   else
     emit BASE "$BASE"
-    DIFF_BASE="$(git merge-base "$BASE" HEAD 2>/dev/null || echo "")"
+    DIFF_BASE="$(git_safe merge-base "$BASE" HEAD 2>/dev/null || echo "")"
     if [ -z "$DIFF_BASE" ]; then
       emit DEGRADED "no merge-base with $BASE; falling back to whole-repo mode"
       MODE="repo"
     else
       emit DIFF_BASE "$DIFF_BASE"
-      FILES="$(git diff --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null; git diff --name-only --diff-filter=d 2>/dev/null)"
-      FILES="$(printf '%s\n' "$FILES" | sort -u | sed '/^$/d')"
-      STAT="$(git diff --shortstat "$DIFF_BASE" 2>/dev/null || echo "")"
-      INS="$(printf '%s' "$STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)"
-      DEL="$(printf '%s' "$STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)"
-      emit DIFF_LINES "$(( INS + DEL ))"
+      _diff=(diff --no-ext-diff --no-textconv --ignore-submodules=all)
+      # A diff that fails -- an object git cannot read, and now cannot fetch --
+      # used to leave an empty list that read exactly like a clean review.
+      if _committed="$(git_paths "${_diff[@]}" --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null)" \
+        && _worktree="$(git_paths "${_diff[@]}" --name-only --diff-filter=d 2>/dev/null)" \
+        && STAT="$(git_safe "${_diff[@]}" --shortstat "$DIFF_BASE" 2>/dev/null)"; then
+        FILES="$(printf '%s\n%s\n' "$_committed" "$_worktree" | sort -u | sed '/^$/d')"
+        INS="$(printf '%s' "$STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)"
+        DEL="$(printf '%s' "$STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)"
+        emit DIFF_LINES "$(( INS + DEL ))"
+      else
+        emit MODE repo
+        emit DEGRADED "the diff against $BASE failed; falling back to whole-repo mode"
+        MODE="repo"
+      fi
     fi
   fi
 fi
 
 if [ "$MODE" = "repo" ]; then
-  FILES="$(git ls-files 2>/dev/null || find . -type f -not -path './.git/*' | sed 's|^\./||')"
+  if [ "$USE_GIT" = 0 ]; then
+    FILES="$(find_paths)"
+  elif ! FILES="$(git_paths ls-files 2>/dev/null)"; then
+    emit DEGRADED "listing tracked files failed; listing files with find"
+    FILES="$(find_paths)"
+  elif [ -z "$FILES" ] && [ -n "$(find_paths | head -1)" ]; then
+    # An index that lists nothing over a populated tree is not an empty repository.
+    emit DEGRADED "the index lists no files although files are present; listing files with find"
+    FILES="$(find_paths)"
+  fi
   emit DIFF_LINES "n/a"
 fi
+
+if [ -e "$_TIMED_OUT" ] && [ -z "${GIT_REASON:-}" ]; then
+  emit DEGRADED "a Git command timed out after ${GIT_TIMEOUT_SECONDS}s; Git was not asked anything further"
+fi
+
+for _kind in newline outside; do
+  _count="$(printf '%s\n' "${FILES:-}" | grep -cx "//$_kind" || true)"
+  if [ "${_count:-0}" -gt 0 ]; then
+    case "$_kind" in
+      newline) emit DEGRADED "$_count path(s) with a newline in the name were not reviewed" ;;
+      outside) emit DEGRADED "$_count path(s) outside the repository were listed by Git and not reviewed" ;;
+    esac
+  fi
+done
+FILES="$(printf '%s\n' "${FILES:-}" | grep -vx -e '//newline' -e '//outside' || true)"
 
 # Source files we can reason about. node_modules is never read -- same rule as the engine.
 #
@@ -96,6 +299,27 @@ GENERATED_EXCLUDE_RE="${_gen_re}|\\.min\\.js\$|\\.map\$"
 SRC="$(printf '%s\n' "${FILES:-}" \
   | grep -Ev "$GENERATED_EXCLUDE_RE" \
   | sed '/^$/d')"
+
+# Symbolic links are not reviewed, matching the engine. `git ls-files` lists a
+# committed link, and `[ -f ]` follows it, so a link to a file outside the
+# repository used to be grepped -- and could raise SIGNAL_TRACKERS_NO_CONSENT,
+# the one line this script asserts, from a file that is not the repository's.
+# A path is dropped when it is a link or sits under a linked directory.
+# Each path is checked against the filesystem, component by component, rather
+# than against a parsed listing of links: a listing split on newlines is how a
+# link named `zz<newline>src` dropped every file under src/.
+# The case below is written `(pattern)`, and no comment sits inside this
+# $(...): bash 3.2, the /bin/bash on macOS, cannot parse `pattern)` there, and
+# reads a quote inside a comment there as the start of a string.
+SRC="$(printf '%s\n' "$SRC" | while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  p="$f"
+  while :; do
+    [ -L "$p" ] && continue 2
+    case "$p" in (*/*) p="${p%/*}" ;; (*) break ;; esac
+  done
+  printf '%s\n' "$f"
+done)"
 emit FILES_UNDER_REVIEW "$(printf '%s\n' "$SRC" | sed '/^$/d' | wc -l | tr -d ' ')"
 
 # Existing files only -- a deleted path cannot be grepped.
@@ -108,7 +332,6 @@ EXISTING="$(printf '%s\n' "$SRC" | while IFS= read -r f; do [ -n "$f" ] && [ -f 
 # scan would otherwise read, so a repository that merely *contains* the reviewer
 # trips every gate. Same failure as a secret scanner flagging its own fixtures.
 SELF_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd -P || true)"
-REPO_ROOT="$(pwd -P)"
 case "$SELF_DIR" in
   "$REPO_ROOT"/*)
     SELF_REL="${SELF_DIR#"$REPO_ROOT"/}"
@@ -116,6 +339,13 @@ case "$SELF_DIR" in
     emit SELF_EXCLUDED "$SELF_REL"
     ;;
 esac
+
+# `--list`: the reviewed file set and nothing else, so specialists read exactly
+# what the gates read without running git in the repository themselves.
+if [ "$LIST" = 1 ]; then
+  printf '%s\n' "$EXISTING" | sed '/^$/d'
+  exit 0
+fi
 
 # Code files only, for the content gates.
 #
@@ -371,10 +601,13 @@ else
 fi
 
 # ---------------------------------------------------------------- stack context
+# A regular file that is not a link: a FIFO named package.json hung the grep
+# below forever, and a link to one outside the repository was read.
+own_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
 STACK=""
-[ -f package.json ] && STACK="${STACK}node "
-{ [ -f tsconfig.json ] || paths '\.tsx?$'; } && STACK="${STACK}typescript "
-grep -qE '"next"' package.json 2>/dev/null && STACK="${STACK}next "
+own_file package.json && STACK="${STACK}node "
+{ own_file tsconfig.json || paths '\.tsx?$'; } && STACK="${STACK}typescript "
+own_file package.json && grep -qE '"next"' package.json 2>/dev/null && STACK="${STACK}next "
 [ -f schema.prisma ] || paths 'schema\.prisma$' && STACK="${STACK}prisma "
 [ -f requirements.txt ] || [ -f pyproject.toml ] && STACK="${STACK}python "
 [ -f go.mod ] && STACK="${STACK}go "
