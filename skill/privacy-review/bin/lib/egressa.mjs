@@ -9533,7 +9533,7 @@ var require_scan = __commonJS({
 var require_parse = __commonJS({
   "../../node_modules/.pnpm/picomatch@4.0.7/node_modules/picomatch/lib/parse.js"(exports, module) {
     "use strict";
-    var constants2 = require_constants();
+    var constants3 = require_constants();
     var utils = require_utils();
     var {
       MAX_LENGTH,
@@ -9541,7 +9541,7 @@ var require_parse = __commonJS({
       REGEX_NON_SPECIAL_CHARS,
       REGEX_SPECIAL_CHARS_BACKREF,
       REPLACEMENTS
-    } = constants2;
+    } = constants3;
     var expandRange = (args, options) => {
       if (typeof options.expandRange === "function") {
         return options.expandRange(...args, options);
@@ -9750,7 +9750,7 @@ var require_parse = __commonJS({
       if (options.maxExtglobRecursion === false) {
         return { risky: false };
       }
-      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants2.DEFAULT_MAX_EXTGLOB_RECURSION;
+      const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants3.DEFAULT_MAX_EXTGLOB_RECURSION;
       const branches = splitTopLevel(body).map((branch) => branch.trim());
       if (branches.length > 1) {
         if (branches.some((branch) => branch === "") || branches.some((branch) => /^[*?]+$/.test(branch)) || hasRepeatedCharPrefixOverlap(branches)) {
@@ -9796,8 +9796,8 @@ var require_parse = __commonJS({
       const bos = { type: "bos", value: "", output: opts.prepend || "" };
       const tokens = [bos];
       const capture = opts.capture ? "" : "?:";
-      const PLATFORM_CHARS = constants2.globChars(opts.windows);
-      const EXTGLOB_CHARS = constants2.extglobChars(PLATFORM_CHARS);
+      const PLATFORM_CHARS = constants3.globChars(opts.windows);
+      const EXTGLOB_CHARS = constants3.extglobChars(PLATFORM_CHARS);
       const {
         DOT_LITERAL,
         PLUS_LITERAL,
@@ -10493,7 +10493,7 @@ var require_parse = __commonJS({
         NO_DOTS_SLASH,
         STAR,
         START_ANCHOR
-      } = constants2.globChars(opts.windows);
+      } = constants3.globChars(opts.windows);
       const nodot = opts.dot ? NO_DOTS : NO_DOT;
       const slashDot = opts.dot ? NO_DOTS_SLASH : NO_DOT;
       const capture = opts.capture ? "" : "?:";
@@ -10551,7 +10551,7 @@ var require_picomatch = __commonJS({
     var scan2 = require_scan();
     var parse3 = require_parse();
     var utils = require_utils();
-    var constants2 = require_constants();
+    var constants3 = require_constants();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch2 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
@@ -10679,7 +10679,7 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch2.constants = constants2;
+    picomatch2.constants = constants3;
     module.exports = picomatch2;
   }
 });
@@ -12260,11 +12260,11 @@ async function runMain(cmd, opts = {}) {
 var import_yaml = __toESM(require_dist(), 1);
 var import_ignore = __toESM(require_ignore(), 1);
 import {
-  constants,
-  closeSync,
-  fstatSync,
+  constants as constants2,
+  closeSync as closeSync2,
+  fstatSync as fstatSync2,
   lstatSync,
-  openSync,
+  openSync as openSync2,
   readFileSync as readFileSync2,
   realpathSync as realpathSync2,
   statSync as statSync2
@@ -13047,7 +13047,7 @@ function globSync(globInput, options) {
 }
 
 // ../core/dist/index.js
-import { readFileSync as readFileSync3, realpathSync as realpathSync3 } from "fs";
+import { constants, closeSync, fstatSync, openSync, readFileSync as readFileSync3, realpathSync as realpathSync3 } from "fs";
 import { isAbsolute as isAbsolute3, join as join3, relative as relative4, sep as sep4 } from "path";
 import { basename as basename2 } from "path";
 
@@ -14207,13 +14207,28 @@ var RULES = {
 var RULE_IDS = Object.keys(RULES);
 var DISCLAIMER = "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.";
 var DISCLAIMER_SHORT = "Detection only - not a compliance assessment.";
+var MAX_READ_BYTES = 32 * 1048576;
 function readInsideRoot(root, rel) {
   const real = realpathSync3(join3(root, rel));
   const inside = relative4(realpathSync3(root), real);
   if (inside === ".." || inside.startsWith(`..${sep4}`) || isAbsolute3(inside)) {
     throw new Error("resolves outside the scan root; not read");
   }
-  return readFileSync3(real, "utf8");
+  const fd = openSync(real, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+  try {
+    const stat2 = fstatSync(fd);
+    if (!stat2.isFile()) throw new Error("is not a regular file; not read");
+    if (stat2.size > MAX_READ_BYTES) {
+      throw new Error(`is larger than ${MAX_READ_BYTES / 1048576} MB; not read`);
+    }
+    return readFileSync3(fd, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+function readErrorMessage(error) {
+  const code = error.code;
+  return code ?? error.message;
 }
 var DEFAULT_EXCLUDES = [
   "**/node_modules/**",
@@ -14285,9 +14300,10 @@ function walk(options) {
     ignore: ignoreGlobs,
     absolute: false,
     dot: false,
-    // A linked directory is not descended into: `deps -> /` would walk the
-    // whole filesystem. Linked files are still listed, and every reader
-    // refuses one whose real path leaves the root (read-inside.ts).
+    // No link is listed or descended into, inside the root or out: the
+    // library has no setting between following every link and listing
+    // none, and following them lets `deps -> /` walk the filesystem. See
+    // "Symbolic links are not followed" in docs/LIMITATIONS.md.
     followSymbolicLinks: false
   }).map((p) => p.split(sep22).join("/")).filter((p) => filter ? !filter.ignores(p) : true).sort();
   return {
@@ -14343,8 +14359,8 @@ function loadConfig(root, explicitPath) {
   let bytes;
   let fd;
   try {
-    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
-    const opened = fstatSync(fd);
+    fd = openSync2(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
+    const opened = fstatSync2(fd);
     if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
     if (opened.size > MAX_CONFIG_BYTES) {
       throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1048576} MB; not read`);
@@ -14355,7 +14371,7 @@ function loadConfig(root, explicitPath) {
     const code = error.code ?? "unknown error";
     throw new ConfigError(`${path}: cannot be read (${code})`);
   } finally {
-    if (fd !== void 0) closeSync(fd);
+    if (fd !== void 0) closeSync2(fd);
   }
   let parsed;
   try {
@@ -15342,7 +15358,7 @@ function analyzeManifests(options) {
     try {
       text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
     const file = basename2(path);
@@ -16693,7 +16709,7 @@ function analyzeInfrastructure(options) {
     try {
       text = readInsideRoot(root, path);
     } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${error.message}`, fatal: false });
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
     const name = basename22(path);
@@ -16988,7 +17004,7 @@ function scan(options) {
       try {
         text = readInsideRoot(root, file);
       } catch (error2) {
-        errors.push({ file, message: `unreadable: ${error2.message}`, fatal: false });
+        errors.push({ file, message: `unreadable: ${readErrorMessage(error2)}`, fatal: false });
         continue;
       }
       const { hits, error } = analyzeFile(text, file, vendorSinks);

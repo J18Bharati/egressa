@@ -42,8 +42,19 @@ emit() { [ "$LIST" = 1 ] || printf '%s: %s\n' "$1" "$2"; }
 # close the same door for an external diff, a pager and hooks. Every git call
 # in this script goes through here.
 git_safe() {
-  git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat -c diff.external= "$@"
+  git -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager=cat -c diff.external= \
+    -c submodule.recurse=false -c diff.ignoreSubmodules=all "$@"
 }
+
+# No git command here may reach a transport. A partial clone whose objects are
+# missing lazy-fetches them, and the fetch runs whatever the repository names:
+# core.sshCommand, a credential helper, remote upload-pack, an ext:: command.
+# GIT_ALLOW_PROTOCOL overrides every protocol.*.allow in config, so naming a
+# protocol that does not exist allows none; GIT_NO_LAZY_FETCH does the same on
+# git 2.44 and later. A diff that then cannot read an object fails, and fails
+# loudly below. Submodules are not recursed into for the same reason: their
+# own config is not the one the filter blanking below reads.
+export GIT_ALLOW_PROTOCOL=egressa-none GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0
 
 # Filter drivers. `.git/info/attributes` or `.gitattributes` can assign a clean,
 # smudge or process filter that the repository's config defines, and git runs
@@ -52,7 +63,8 @@ git_safe() {
 # required, through GIT_CONFIG_COUNT rather than `-c`, because `-c` splits at
 # the first `=` and a driver name may contain one. `git config` itself runs
 # nothing.
-_n=0
+# Appended after any GIT_CONFIG_COUNT entries the reviewer already has.
+_n="${GIT_CONFIG_COUNT:-0}"
 while IFS= read -r -d '' _key; do
   export "GIT_CONFIG_KEY_$_n=$_key" "GIT_CONFIG_VALUE_$_n="
   _n=$((_n + 1))
@@ -60,6 +72,22 @@ while IFS= read -r -d '' _key; do
   _n=$((_n + 1))
 done < <(git_safe config -z --name-only --get-regexp '^filter\..*\.(clean|smudge|process)$' 2>/dev/null)
 export GIT_CONFIG_COUNT="$_n"
+
+# git's paths, NUL-separated, as one path per line. A name holding a newline
+# cannot be carried in this script's line-based lists -- parsing such a name as
+# two lines is how a link named `zz<newline>src` used to hide all of src/ -- so
+# it is replaced by a line holding only \001, counted and reported below. The
+# status is git's, through pipefail.
+nul_paths() {
+  local p
+  while IFS= read -r -d '' p; do
+    case "$p" in
+      *$'\n'*) printf '\001\n' ;;
+      *) printf '%s\n' "$p" ;;
+    esac
+  done
+}
+git_paths() { local sub="$1"; shift; git_safe "$sub" -z "$@" | nul_paths; }
 
 emit SCOPE_PROTO 1
 emit MODE "$MODE"
@@ -84,19 +112,40 @@ if [ "$MODE" = "diff" ]; then
       MODE="repo"
     else
       emit DIFF_BASE "$DIFF_BASE"
-      FILES="$(git_safe diff --no-ext-diff --no-textconv --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null; git_safe diff --no-ext-diff --no-textconv --name-only --diff-filter=d 2>/dev/null)"
-      FILES="$(printf '%s\n' "$FILES" | sort -u | sed '/^$/d')"
-      STAT="$(git_safe diff --no-ext-diff --no-textconv --shortstat "$DIFF_BASE" 2>/dev/null || echo "")"
-      INS="$(printf '%s' "$STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)"
-      DEL="$(printf '%s' "$STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)"
-      emit DIFF_LINES "$(( INS + DEL ))"
+      _diff=(diff --no-ext-diff --no-textconv --ignore-submodules=all)
+      # A diff that fails -- an object git cannot read, and now cannot fetch --
+      # used to leave an empty list that read exactly like a clean review.
+      if _committed="$(git_paths "${_diff[@]}" --name-only --diff-filter=d "$DIFF_BASE" HEAD 2>/dev/null)" \
+        && _worktree="$(git_paths "${_diff[@]}" --name-only --diff-filter=d 2>/dev/null)" \
+        && STAT="$(git_safe "${_diff[@]}" --shortstat "$DIFF_BASE" 2>/dev/null)"; then
+        FILES="$(printf '%s\n%s\n' "$_committed" "$_worktree" | sort -u | sed '/^$/d')"
+        INS="$(printf '%s' "$STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)"
+        DEL="$(printf '%s' "$STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)"
+        emit DIFF_LINES "$(( INS + DEL ))"
+      else
+        emit MODE repo
+        emit DEGRADED "the diff against $BASE failed; falling back to whole-repo mode"
+        MODE="repo"
+      fi
     fi
   fi
 fi
 
 if [ "$MODE" = "repo" ]; then
-  FILES="$(git_safe ls-files 2>/dev/null || find . -type f -not -path './.git/*' | sed 's|^\./||')"
+  # Not being a git repository is ordinary; being one whose listing fails is not.
+  if ! git_safe rev-parse --git-dir >/dev/null 2>&1; then
+    FILES="$(find . -path ./.git -prune -o -type f -print0 | nul_paths | sed 's|^\./||')"
+  elif ! FILES="$(git_paths ls-files 2>/dev/null)"; then
+    emit DEGRADED "listing tracked files failed; listing files with find"
+    FILES="$(find . -path ./.git -prune -o -type f -print0 | nul_paths | sed 's|^\./||')"
+  fi
   emit DIFF_LINES "n/a"
+fi
+
+_unusual="$(printf '%s\n' "${FILES:-}" | grep -c $'^\001$' || true)"
+if [ "${_unusual:-0}" -gt 0 ]; then
+  emit DEGRADED "$_unusual path(s) with a newline in the name were not reviewed"
+  FILES="$(printf '%s\n' "$FILES" | grep -v $'^\001$' || true)"
 fi
 
 # Source files we can reason about. node_modules is never read -- same rule as the engine.
@@ -132,14 +181,19 @@ SRC="$(printf '%s\n' "${FILES:-}" \
 # committed link, and `[ -f ]` follows it, so a link to a file outside the
 # repository used to be grepped -- and could raise SIGNAL_TRACKERS_NO_CONSENT,
 # the one line this script asserts, from a file that is not the repository's.
-# A path is dropped when it is a link or sits under a linked directory. Paths
-# are passed through the environment, not `awk -v`, which rewrites backslashes.
-LINKED="$(find . \( -name .git -o -name node_modules \) -prune -o -type l -print 2>/dev/null | sed 's|^\./||')"
-if [ -n "$LINKED" ]; then
-  SRC="$(printf '%s\n' "$SRC" | LINKED="$LINKED" awk '
-    BEGIN { n = split(ENVIRON["LINKED"], link, "\n") }
-    { for (i = 1; i <= n; i++) if (link[i] != "" && ($0 == link[i] || index($0, link[i] "/") == 1)) next; print }')"
-fi
+# A path is dropped when it is a link or sits under a linked directory.
+# Each path is checked against the filesystem, component by component, rather
+# than against a parsed listing of links: a listing split on newlines is how a
+# link named `zz<newline>src` dropped every file under src/.
+SRC="$(printf '%s\n' "$SRC" | while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  p="$f"
+  while :; do
+    [ -L "$p" ] && continue 2
+    case "$p" in */*) p="${p%/*}" ;; *) break ;; esac
+  done
+  printf '%s\n' "$f"
+done)"
 emit FILES_UNDER_REVIEW "$(printf '%s\n' "$SRC" | sed '/^$/d' | wc -l | tr -d ' ')"
 
 # Existing files only -- a deleted path cannot be grepped.

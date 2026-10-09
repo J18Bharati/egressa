@@ -238,15 +238,17 @@ why `declared()` runs its search on its own line — `pipefail` reports the righ
 filter matching nothing (1) masks a real failure (2). And every file list is passed after `--`: the
 reviewed tree is arbitrary third-party source, and a file named `-i.js` otherwise reaches `sed` as
 its in-place flag and this read-only review rewrites what it was asked to read. For the same reason
-every `git` call goes through `git_safe`, which disables `core.fsmonitor`, hooks, an external diff
-and the pager, and the script blanks every clean, smudge and process filter driver git can see
-(through `GIT_CONFIG_COUNT`, since a driver name may contain `=`): a repository handed over with
-its `.git` directory carries its own `.git/config`, and git runs `core.fsmonitor` on every index
-refresh and a filter driver on every stat-dirty file. Specialists never run git themselves: they
-get the reviewed set from `scope.sh --list`. Symbolic links are dropped from that set, as the
-engine drops them. Tests plant each of these, and a text check rejects a bare `git` call in the
-script or a git command in `SKILL.md` or a checklist. That covers what these git commands are
-known to execute, not every key git could ever add.
+`scope.sh` treats the reviewed repository's own `.git` as hostile: a repository handed over with
+its `.git` directory carries its own config, and git will run commands it names. Every `git` call
+goes through `git_safe` (no `core.fsmonitor`, hooks, external diff, pager or submodule recursion);
+every clean, smudge and process filter driver git can see is blanked through `GIT_CONFIG_COUNT`;
+and `GIT_ALLOW_PROTOCOL` names a protocol that does not exist, so no command can reach a transport
+-- which is what a partial clone's lazy fetch, `core.sshCommand`, a credential helper and `ext::`
+all need. A git command that fails is reported as `DEGRADED` with a fallback, never as an empty
+review. Paths travel NUL-separated, and a link -- or a path under one -- is dropped by checking the
+filesystem, not a parsed listing. Specialists never run git: they get the set from
+`scope.sh --list`. Each of these has a test that plants it. This covers the execution paths
+reviews have found, by class where git allows it; it is not a proof that git can run nothing.
 
 Only the three inputs to `SIGNAL_TRACKERS_NO_CONSENT` strip comments before matching, because that
 line is the one thing the script asserts rather than routes. Everything else matches raw text: a

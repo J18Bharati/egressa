@@ -54,14 +54,19 @@ Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
   repository handed over with its `.git` directory -- an archive, a shared folder -- brings its own
   `.git/config`, whose `core.fsmonitor` git runs on every index refresh: silently, at step one of a
   review presented as read-only. Every git call now goes through a wrapper that disables
-  `core.fsmonitor`, hooks, an external diff and the pager, passes `--no-ext-diff --no-textconv` to
-  `git diff`, and blanks every clean, smudge and process filter driver -- which git otherwise runs
-  on each re-dated file an extracted archive leaves. `SKILL.md` no longer tells specialists to run
+  `core.fsmonitor`, hooks, an external diff, the pager and submodule recursion; every clean, smudge
+  and process filter driver is blanked -- git otherwise runs one on each re-dated file an extracted
+  archive leaves; and no git command can reach a transport, which closes a partial clone's lazy
+  fetch running the repository's `core.sshCommand`, credential helper or `ext::` command. A git
+  command that fails is now reported as degraded with a fallback; a failed diff used to produce an
+  empty file set that read as a clean review. `SKILL.md` no longer tells specialists to run
   `git ls-files` or `git diff`; they get the file set from `scope.sh --list`. A clone cannot carry
   `.git/config`, which is why no fixture caught it.
 - **The privacy review read through committed symlinks.** `scope.sh` grepped a linked file outside
   the repository and could raise `SIGNAL_TRACKERS_NO_CONSENT` from it, and handed it to specialists
-  to read. Links are now dropped from the reviewed set, as the engine drops them.
+  to read. Links, and paths under linked directories, are now dropped, checked against the
+  filesystem per path; a path whose name holds a newline is reported as not reviewed rather than
+  split, which is how a link named `zz<newline>src` could hide every file under `src/`.
 
 - **A concatenation could attribute a host it did not name.** `fetch(B + '.attacker.example/x')`,
   with `B = 'https://api.stripe.com'`, reported Stripe at high confidence: the left operand was read

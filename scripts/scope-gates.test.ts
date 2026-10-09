@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -631,5 +632,90 @@ describe('a symlink out of the reviewed repository is not reviewed', () => {
       encoding: 'utf8',
     });
     expect(out.split('\n').filter(Boolean).sort()).toEqual(['package.json', 'src/app.js']);
+  });
+});
+
+describe('git in the reviewed repository reaches no network, no submodule, and fails loudly', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8' });
+
+  /** main with one commit; feature adds src/t.js carrying a tracker call. */
+  const branched = (tag: string) => {
+    const root = scratch(tag);
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, 'package.json', '{"name":"b","private":true}\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'init');
+    git(root, 'switch', '-q', '-c', 'feature');
+    plant(root, 'src/t.js', "gtag('config', 'G-X');\n");
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'feature');
+    return root;
+  };
+
+  /** Deletes the loose tree object for `src` at HEAD, so a diff needs it fetched. */
+  const dropSrcTree = (root: string) => {
+    const tree = git(root, 'rev-parse', 'HEAD:src').trim();
+    rmSync(join(root, '.git', 'objects', tree.slice(0, 2), tree.slice(2)));
+  };
+
+  it('does not lazy-fetch through a promisor remote, and so runs no transport command', () => {
+    const root = branched('promisor');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(root, 'config', 'core.repositoryformatversion', '1');
+    git(root, 'config', 'extensions.partialClone', 'origin');
+    git(root, 'config', 'remote.origin.promisor', 'true');
+    git(root, 'config', 'remote.origin.url', 'ssh://evil.invalid/x');
+    git(root, 'config', 'core.sshCommand', `sh -c 'touch "${marker}"; exit 1' --`);
+    git(root, 'config', 'protocol.ext.allow', 'always');
+    dropSrcTree(root);
+    const out = runIn(root);
+    expect(existsSync(marker)).toBe(false);
+    expect(out).toMatch(/^DEGRADED: /m);
+  });
+
+  it('reports a failed diff as degraded and still reviews the files, rather than an empty clean set', () => {
+    const root = branched('broken');
+    dropSrcTree(root);
+    const out = runIn(root);
+    expect(out).toMatch(/^DEGRADED: /m);
+    expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+  });
+
+  it('does not run a filter driver defined in a submodule', () => {
+    const lib = scratch('sublib');
+    git(lib, 'init', '-q', '-b', 'main');
+    plant(lib, 'f.txt', 'x\n');
+    git(lib, 'add', '.');
+    git(lib, 'commit', '-q', '-m', 'lib');
+    const root = branched('superproject');
+    git(root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'lib');
+    git(root, 'commit', '-q', '-m', 'submodule');
+    const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
+    git(join(root, 'lib'), 'config', 'filter.evil.clean', `sh -c 'touch "${marker}"; cat'`);
+    plant(root, '.git/modules/lib/info/attributes', '* filter=evil\n');
+    execFileSync('touch', ['-d', '2001-01-01', join(root, 'lib', 'f.txt')]);
+    runIn(root);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('does not let a link whose name holds a newline hide another path', () => {
+    const root = scratch('newline');
+    plant(root, 'package.json', '{"name":"n","private":true}\n');
+    plant(root, 'src/t.js', "gtag('config', 'G-X');\n");
+    symlinkSync('package.json', join(root, 'zz\nsrc'));
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'add', '.');
+    git(root, 'commit', '-q', '-m', 'n');
+    const out = runIn(root, ['--repo']);
+    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+    const list = runIn(root, ['--repo', '--list']).split('\n').filter(Boolean);
+    expect(list).toContain('src/t.js');
   });
 });
