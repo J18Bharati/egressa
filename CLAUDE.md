@@ -206,7 +206,7 @@ ship outside the contract just by nobody remembering to add it. Adding a file un
 entry under `kb/vendors/`, therefore opts it in automatically, and the `language-rules.md` exemption
 is itself asserted, so a file stops being exempt if it stops being the vocabulary table.
 
-**`packages/core/src/callsites/golden.test.ts`** is a table of ~55 snippets → `{host|null, reason}`.
+**`packages/core/src/callsites/golden.test.ts`** is a table of ~110 snippets → `{host|null, reason}`.
 The `null` half is the important half: every entry in `docs/LIMITATIONS.md` has a corresponding
 failing-by-design case. **A limitation starting to resolve is a test failure, not a win** — lift it
 deliberately in both places or fix the regression.

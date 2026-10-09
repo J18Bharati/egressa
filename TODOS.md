@@ -49,7 +49,7 @@ open decision in `docs/ROADMAP.md`; update both files together.
 
 ## Knowledge base
 
-### Grow the seed set from 15 vendors toward ~34
+### Grow the seed set from 17 vendors toward ~34
 
 **What:** Author the remaining entries in batches of five or fewer, so review stays real.
 
@@ -57,11 +57,14 @@ open decision in `docs/ROADMAP.md`; update both files together.
 `transfer/unknown-vendor-egress`, and the `unmatched` block is the only recall signal there is,
 since the project has no telemetry.
 
-**Context:** `kb/vendors/` holds anthropic, auth0, clerk, datadog, google-analytics, mailgun,
-openai, posthog, resend, segment, sentry, stripe, supabase, twilio and vercel. The v1 plan's M6
+**Context:** `kb/vendors/` holds anthropic, auth0, aws, clerk, datadog, google-analytics,
+google-gmail-api, mailgun, openai, posthog, resend, segment, sentry, stripe, supabase, twilio and
+vercel. The v1 plan's M6
 specified roughly 34. Named gaps a real repository hits immediately: SendGrid (already unmatched in
-a fixture), Amplitude, Mixpanel, Intercom, Algolia, Cloudflare, AWS, Google Cloud, Firebase,
-LaunchDarkly, Slack, HubSpot.
+a fixture), Amplitude, Mixpanel, Intercom, Algolia, Cloudflare, Google Cloud, Firebase,
+LaunchDarkly, Slack, HubSpot -- and Google's shared API endpoints (`oauth2.googleapis.com`,
+`www.googleapis.com`), which `google-gmail-api` deliberately leaves unmatched because they are not
+specific to one product; they need an entry whose terms fit every Google API, or stay unmatched.
 
 Entries are clean-room authored from vendor and regulator primary sources only; `kb/PROVENANCE.md`
 lists the sources that must never be incorporated. `pnpm kb:validate` gates schema, sourcing and
@@ -220,6 +223,62 @@ record. Only the join key changes.
 
 **Effort:** S
 **Priority:** P2
+**Depends on:** None
+
+### Tidy `scope.sh`'s timeout handling
+
+**What:** Three small defects in the git timeout added by `untrusted-input-hardening`:
+- Treat any exit status a `timeout` implementation uses as a timeout, not only GNU's 124. BusyBox
+  exits 143, so the marker is never set, every later call waits its full 15 seconds, and the
+  "timed out" reason is never printed (it still degrades; it is slower and misattributed).
+- Create the marker as a file inside a `mktemp -d` directory rather than writing to a `mktemp -u`
+  name, which is the insecure-tempfile pattern even though the random name is hard to race. An
+  unwritable `TMPDIR` should degrade to "git calls unbounded" rather than silently losing the marker.
+- When the timeout hit during base-branch detection, say so instead of first printing "no base
+  branch found".
+
+**Why:** Each turns a bounded, explained failure back into a slow or mislabelled one, which is the
+shape the timeout exists to remove: the orchestrator's shell has its own limit, often 120 seconds.
+
+**Context:** Final review of `untrusted-input-hardening` (2026-10-09), follow-ups 2, 3 and 5.
+`scripts/scope-gates.test.ts` has a FIFO-ref fixture that times out; extend it with a `timeout`
+shim that exits 143.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Include staged files in `scope.sh`'s diff mode
+
+**What:** Diff mode builds its file set from `base..HEAD` plus the worktree-versus-index diff, so a
+file that is staged but not committed is in neither and is not reviewed, while `DIFF_LINES` --
+taken against the worktree -- counts it. Add the index-versus-HEAD diff (`git diff --cached`),
+through `git_paths` like the others.
+
+**Why:** "Review this branch" before committing is the commonest way to ask for a diff review, and
+staged work is exactly what is about to land. The counts disagreeing with the file set is the tell.
+
+**Context:** Pre-existing; noted by the final review of `untrusted-input-hardening` (follow-up 6).
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Skip nested `.git` internals in the `find` fallback
+
+**What:** Since `untrusted-input-hardening`, the fallback prunes only `./.git`, so a vendored
+repository's `lib/.git/objects/*` is listed in `--list` and grepped. Prune a nested `.git` directory
+that looks like a git directory (has `HEAD` and `objects/`), while still reviewing a directory merely
+*named* `.git` that holds source.
+
+**Why:** Noise only -- the code filter drops object files and grep skips binaries -- but it bloats
+the list specialists read.
+
+**Context:** Final review of `untrusted-input-hardening`, follow-up 6. The prune was narrowed
+deliberately: `-name .git` hid source under a directory named `.git`.
+
+**Effort:** S
+**Priority:** P3
 **Depends on:** None
 
 ## Engine
@@ -496,21 +555,6 @@ pip-tools itself is installed.
 **Priority:** P2
 **Depends on:** None
 
-### Refuse a manifest reached through a symlink out of the scan root
-
-**What:** Skip any discovered manifest whose real path is outside the root.
-
-**Why:** `manifests/index.ts` reads whatever path discovery returns, and a symlink in a reviewed
-repository can point anywhere on the machine. The problem predates the Python reader, but the new
-patterns widen it. The security pass reproduced it.
-
-**Context:** Branch review of `cli-and-routing-fixes`. `egressa schema` also resolves `schemas/`
-against the working directory rather than the package, which is the same class of assumption.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
 ### Validate a knowledge base passed with `--kb`
 
 **What:** Run the `kb:validate` checks at load time for a user-supplied `--kb`. At minimum, run the
@@ -629,37 +673,11 @@ claim scope.
 **Priority:** P1
 **Depends on:** None
 
-### Carry the reviewed file list NUL-delimited end to end
+### Test `reconcile-aws.sh`, the one shell script that still has none
 
-**What:** Build the file list in `skill/privacy-review/scripts/scope.sh` with `git ls-files -z` /
-`find -print0` and filter it NUL-aware (`grep -z`, `read -r -d ''`), instead of joining it with
-newlines and converting with `tr '\n' '\0'` just before `xargs -0`.
-
-**Why:** The `-0` is only nominally end to end. The list is newline-separated from line 61 and is
-filtered by newline-oriented `grep`, `sed` and `while IFS= read -r f` before being re-delimited, so
-a filename containing a newline is already split into two fragments by the time NUL delimiting
-starts. Both halves then fail the `[ -f "$f" ]` existence check and are dropped. The result is
-silent under-review: a file can remove itself from the scan by its own name. Not injection — the
-`--` terminators added alongside this item close that — but it defeats the coverage the gates claim,
-and silence is the failure mode this script has already been bitten by twice.
-
-**Context:** Pre-existing; identical on `v1-build`, so not a regression from the gate work. Raised
-by the security specialist during the `/review` pass on `gate-layer-fixes` and deliberately deferred
-there: it touches the whole front half of the script, including the `SELF_EXCLUDED` and `EXISTING`
-derivations, and risks regressing the gates that pass now. `scripts/scope-gates.test.ts` gives it a
-harness that did not exist before, including hostile-filename cases to extend. Minimum bar for
-calling it done: a fixture whose filename contains a newline is either reviewed or reported, never
-dropped in silence.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** None
-
-### Test the three shell scripts that still have none
-
-**What:** Add vitest-driven tests for `skill/privacy-review/scripts/scan-transfers.sh`,
-`skill/egressa/scripts/scan.sh` and `skill/egressa/scripts/reconcile-aws.sh`, reusing the
-`execFileSync` pattern from `scripts/tracker-hook.test.ts:26`.
+**What:** Add a vitest-driven test for `skill/egressa/scripts/reconcile-aws.sh`, reusing the
+`execFileSync` pattern from `scripts/tracker-hook.test.ts:26`. `scan-transfers.sh` and `scan.sh`
+are now covered by `scripts/untrusted-target.test.ts`.
 
 **Why:** T0.1 — every content gate reading false on any repository larger than a pipe buffer —
 survived 18 test files because the only untested surface in the repository is bash. Fixing
@@ -675,10 +693,11 @@ failure there reproduces T0.1's exact shape in the one specialist nothing else g
 value single assertion: `reconcile-aws.sh` makes no network call without `EGRESSA_ALLOW_AWS=1`.
 Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage.md`.
 
-While there, make `scan-transfers.sh` print which binary tier it resolved. The binaries are the
-target's build, the repository the skill lives in, and the degraded bundle. On 2026-09-25 it
-resolved through the skill's own checkout, a tier that an installed copy does not have, and nothing
-in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
+While there, make `scan-transfers.sh` print which binary tier it resolved. The tiers are now the
+checkout the skill lives in, the degraded bundle, `PATH`, and opt-in `npx` -- never the scan target,
+since `untrusted-input-hardening`. On 2026-09-25 it resolved through the skill's own checkout, a
+tier that an installed copy does not have, and nothing in the output said so (F3 in
+`docs/reviews/2026-09-25-live-run-triage.md`).
 
 **Effort:** M
 **Priority:** P2
@@ -686,6 +705,33 @@ in the output said so (F3 in `docs/reviews/2026-09-25-live-run-triage.md`).
 the fixture and helper shape these reuse.
 
 ## Completed
+
+### Never execute or read anything the reviewed repository supplies
+**Completed:** untrusted-input-hardening (2026-10-09) -- covers the former "Refuse a manifest
+reached through a symlink out of the scan root" and "Carry the reviewed file list NUL-delimited end
+to end". The engine no longer follows links and every reader goes through
+`discovery/read-inside.ts`, which refuses a path whose real location leaves the root or is not a
+regular file. `scope.sh` reads git's output NUL-separated and reports a newline-named path as not
+reviewed instead of splitting it, drops links per path, runs git with the reviewed repository's
+execution paths closed (fsmonitor, hooks, filter drivers, transports, submodules), believes git only
+about a `.git` that is this directory's own, and says `DEGRADED` rather than presenting a failed or
+empty listing as a clean review. Five review rounds; four remaining gaps are documented in
+`docs/LIMITATIONS.md` ("The privacy review's file set") by decision. Not addressed: the item's note
+that `egressa schema` resolves `schemas/` against the working directory rather than the package.
+
+### Stop the skills running code from the reviewed repository
+**Completed:** untrusted-target-exec-fixes (2026-10-06) -- both scan scripts walked up from the scan
+target and ran the first `packages/cli/dist/cli.js` they found, and the skills ran scripts by paths
+relative to the working directory. Binaries now resolve only from the script's own location, the
+scripts leave the target before `exec`, and every script, checklist and reference resolves from
+`SKILL_DIR`. `scripts/untrusted-target.test.ts` plants each.
+
+### Fold static text before reading a host
+**Completed:** host-resolution-fold (2026-10-09) -- `B + '.attacker.example/x'` reported the vendor
+`B` named at high confidence, and `` `${BASE}/path` `` never resolved. Leading static text is folded
+across literals, templates, `+` and stable module-scope strings, the authority of the special schemes
+is read by the WHATWG URL parser, and every binding form counts toward the shadowing refusal. Three
+review rounds, 54 golden rows; no resolution lost across a real backend and every fixture.
 
 ### Assert one structured block per dispatched specialist
 **Completed:** field-test-4-fixes (2026-09-28) -- Step 4 of the privacy-review `SKILL.md` names any

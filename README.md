@@ -37,7 +37,7 @@ Read this before trusting a clean scan.
 - **Runtime-configured destinations.** A host that arrives from an environment variable is reported
   as `transfer/unresolved-egress`, naming the variable. Egressa never guesses a host.
 - **Vendors not in the knowledge base**, reported as `transfer/unknown-vendor-egress`. The knowledge
-  base is a curated seed set of 15 vendors, not a census. The transfer triage skill will research an
+  base is a curated seed set of 17 vendors, not a census. The transfer triage skill will research an
   unknown vendor from primary sources and draft a knowledge base request; it will not research an
   unresolved *host*, because that answer is in your deployment configuration rather than on the web.
 - **Non-JavaScript surfaces** — tag managers, CSP headers, native mobile, infrastructure config.
