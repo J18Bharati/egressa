@@ -104,10 +104,20 @@ else
       break
     fi
   done
-  # Alternates lend this repository objects stored somewhere else.
+  # Alternates lend this repository objects stored somewhere else; commondir,
+  # or a linked objects or refs directory, makes another repository's refs and
+  # objects this one's.
   if [ -z "$GIT_REASON" ] && [ -s .git/objects/info/alternates ]; then
     GIT_REASON=".git/objects/info/alternates points at objects outside this repository"
   fi
+  if [ -z "$GIT_REASON" ] && { [ -e .git/commondir ] || [ -L .git/commondir ]; }; then
+    GIT_REASON=".git/commondir names another repository's directory"
+  fi
+  for _d in objects refs; do
+    if [ -z "$GIT_REASON" ] && { [ -L ".git/$_d" ] || { [ -e ".git/$_d" ] && [ ! -d ".git/$_d" ]; }; }; then
+      GIT_REASON=".git/$_d is not this repository's own directory"
+    fi
+  done
   if [ -z "$GIT_REASON" ]; then
     # GIT_CONFIG_COUNT, which the filter blanking below relies on, is 2.31+.
     _ver="$(git_safe --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
@@ -298,12 +308,15 @@ SRC="$(printf '%s\n' "${FILES:-}" \
 # Each path is checked against the filesystem, component by component, rather
 # than against a parsed listing of links: a listing split on newlines is how a
 # link named `zz<newline>src` dropped every file under src/.
+# The case below is written `(pattern)`, and no comment sits inside this
+# $(...): bash 3.2, the /bin/bash on macOS, cannot parse `pattern)` there, and
+# reads a quote inside a comment there as the start of a string.
 SRC="$(printf '%s\n' "$SRC" | while IFS= read -r f; do
   [ -n "$f" ] || continue
   p="$f"
   while :; do
     [ -L "$p" ] && continue 2
-    case "$p" in */*) p="${p%/*}" ;; *) break ;; esac
+    case "$p" in (*/*) p="${p%/*}" ;; (*) break ;; esac
   done
   printf '%s\n' "$f"
 done)"

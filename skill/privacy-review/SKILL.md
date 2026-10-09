@@ -49,6 +49,12 @@ echo "SCOPE_SCRIPT: ${SCOPE:-not found}"
 Shell state does not survive between commands, so carry `SKILL_DIR` and `SCOPE` forward as the
 literal paths printed here.
 
+**A run that did not finish did not run.** The block ends `SCOPE_END: ok`. If that line is
+missing, or the script exits non-zero -- the same goes for the `--list` call in Step 3 -- stop and
+say the scope step failed, with its output. Never dispatch specialists on an empty or partial file
+list: a script that died before printing its gates reads, line for line, like a repository with
+nothing to review.
+
 If it resolves to nothing, do not fall back to running the review without gates — say the skill is
 installed incompletely and stop. The gates are what keep the review from dispatching every
 specialist at every repository and reporting on things it was never asked about.
@@ -264,8 +270,9 @@ skipped:
   scanner's own errors, the blind spots it names, and whether its counts added up.
 - Every `DEGRADED:` line `scope.sh` printed, verbatim: the file set was not established the normal
   way, and the reader needs to know which set was reviewed instead.
-- Untracked files, which no mode reviews; and, in whole-repository mode, any file the repository's
-  own index leaves out. If the repository arrived as an archive rather than a clone, say that its
+- Untracked files, which are not reviewed unless `scope.sh` fell back to listing files with `find`
+  (a `DEGRADED:` line says when); and, in whole-repository mode, any file the repository's own
+  index leaves out. If the repository arrived as an archive rather than a clone, say that its
   `.git` decided the file set (`docs/LIMITATIONS.md`, "The privacy review's file set").
 - Any gate that came back degraded, by name. Its specialist was dispatched anyway, so this is not
   a gap in what ran — it is a gap in what is known about *why* it ran, and a reader comparing two

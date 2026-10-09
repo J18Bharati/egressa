@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 /**
  * `scope.sh` decides which specialists the privacy review dispatches. A gate that
@@ -85,7 +85,17 @@ const REAL_GREP = execFileSync('sh', ['-c', 'command -v grep'], { encoding: 'utf
 const grepShim = (flag: string) =>
   `#!/bin/sh\nfor a in "$@"; do case "$a" in ${flag}) exit 2 ;; esac; done\nexec ${REAL_GREP} "$@"\n`;
 
-const scratch = (tag: string) => mkdtempSync(join(tmpdir(), `egressa-scope-${tag}-`));
+// Every scratch tree is removed after the file runs; some hold FIFOs, and
+// leaving them used to accumulate thousands of directories in the temp dir.
+const scratchRoots: string[] = [];
+const scratch = (tag: string) => {
+  const dir = mkdtempSync(join(tmpdir(), `egressa-scope-${tag}-`));
+  scratchRoots.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of scratchRoots) rmSync(dir, { recursive: true, force: true });
+});
 
 const plant = (root: string, rel: string, content: string) => {
   const full = join(root, rel);
@@ -907,4 +917,94 @@ describe('plain bugs from the fourth hardening review', () => {
     plant(root, '.git/objects/info/alternates', '/elsewhere/objects\n');
     expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*alternates/m);
   });
+});
+
+describe('portability and the last borrowed-repository forms', () => {
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+  const runIn = (cwd: string, args: string[] = []) =>
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: 45000 });
+
+  it('writes every case pattern in the (pattern) form bash 3.2 parses inside $(...)', () => {
+    // macOS ships bash 3.2, which cannot parse `pattern)` inside a command
+    // substitution: scope.sh died before printing a gate, and --list printed
+    // nothing at all. CI has no bash 3.2, so the form is pinned here.
+    const offending = readFileSync(SCOPE, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .flatMap((line) => {
+        const m = /\bcase\b.*\bin\b(.*)$/.exec(line);
+        return m?.[1] && /[^(\s][^;]*\)/.test(m[1]) && !/^\s*\(/.test(m[1]) ? [line] : [];
+      });
+    expect(offending).toEqual([]);
+  });
+
+  it('does not believe git when .git/commondir names another repository', () => {
+    const other = scratch('commondir-other');
+    git(other, 'init', '-q', '-b', 'main');
+    const root = scratch('commondir');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    plant(root, '.git/commondir', `${join(other, '.git')}\n`);
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*commondir/m);
+  });
+
+  it('does not believe git when .git/objects is a link', () => {
+    const other = scratch('objects-other');
+    git(other, 'init', '-q', '-b', 'main');
+    const root = scratch('objectslink');
+    plant(root, 'src/a.js', 'export const a = 1;\n');
+    git(root, 'init', '-q', '-b', 'main');
+    rmSync(join(root, '.git', 'objects'), { recursive: true });
+    symlinkSync(join(other, '.git', 'objects'), join(root, '.git', 'objects'));
+    expect(runIn(root, ['--repo'])).toMatch(/^DEGRADED: .*objects/m);
+  });
+
+  it('tells the orchestrator a run without SCOPE_END is a stop, not an empty review', () => {
+    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    expect(skill).toMatch(/`SCOPE_END: ok`[\s\S]{0,300}(stop|not run)/i);
+  });
+});
+
+// A real bash 3.2 run, where the image is available locally; CI has no 3.2.
+const hasBash32 = (() => {
+  try {
+    execFileSync('docker', ['image', 'inspect', 'bash:3.2'], { stdio: 'ignore', timeout: 10000 });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe.skipIf(!hasBash32)('scope.sh under bash 3.2', () => {
+  it('prints the whole gate block and a non-empty --list', () => {
+    const root = scratch('bash32');
+    plant(root, 'package.json', '{"name":"b","private":true}\n');
+    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+    const script = readFileSync(SCOPE, 'utf8');
+    const run = (args: string) =>
+      execFileSync(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '-i',
+          '-v',
+          `${root}:/repo`,
+          '-w',
+          '/repo',
+          'bash:3.2',
+          'bash',
+          '-s',
+          '--',
+          ...args.split(' ').filter(Boolean),
+        ],
+        { input: script, encoding: 'utf8', timeout: 60000 },
+      );
+    expect(run('--repo')).toMatch(/^SCOPE_END: ok$/m);
+    expect(run('--repo --list')).toContain('src/a.js');
+  }, 120000);
 });

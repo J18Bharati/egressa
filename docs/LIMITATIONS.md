@@ -289,8 +289,10 @@ archive or shared folder carries. The script blocks the execution and outside-re
 have found, and reports `DEGRADED` -- which the skill must carry into its report -- whenever it
 cannot believe git. What it does not do:
 
-- **Untracked files are not reviewed**, in diff mode or whole-repository mode. A tracker in a file
-  nobody committed is outside the review, exactly as it is outside the repository's history.
+- **Untracked files are not reviewed** while git supplies the file set, in diff mode or
+  whole-repository mode. A tracker in a file nobody committed is outside the review, exactly as it
+  is outside the repository's history. When the script falls back to `find` -- every `DEGRADED`
+  case -- untracked files are reviewed like any other.
 - **In whole-repository mode the repository's own index decides the set.** An index that lists
   nothing over a populated tree is caught and the script falls back to `find`; an index that lists
   *some* files is believed, so a `.git` delivered with a crafted index can leave a committed-looking
@@ -302,7 +304,12 @@ cannot believe git. What it does not do:
   first timeout ends git's part in the run.
 - **A `git worktree` checkout or a submodule checkout always degrades** to whole-repository mode
   over `find`, because its `.git` is a file naming a repository elsewhere, and the script believes
-  git only about a directory whose `.git` is its own. Review a diff from the main checkout.
+  git only about a directory whose `.git` is its own. So does a clone made with `--shared` or
+  `--reference`, which borrows objects through `objects/info/alternates`. Review a diff from a
+  plain clone.
+- **A run that dies prints no `SCOPE_END: ok` line**, and the skill treats that as a stop. On
+  macOS this depends on the script parsing under bash 3.2, which `/bin/bash` is there; a test pins
+  the syntax that version needs, and a bash 3.2 run is tested where Docker has the image.
 - **A diff is taken only from a repository's top level**, and needs git 2.31 or later.
 
 ## The review skills have no golden table
