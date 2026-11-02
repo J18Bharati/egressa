@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://egressa.dev/schemas/vendor-1.0.0.json",
   "title": "Egressa vendor knowledge base entry",
-  "description": "Factual, sourced record of one vendor. Entries state facts and cite them. Anything evaluative belongs in ratings/exposure-overrides.json, not here.",
+  "description": "Factual, sourced record of one vendor. Entries state facts and cite them. Nothing evaluative belongs here: exposure is computed by the engine (docs/METHODOLOGY.md).",
   "type": "object",
   "additionalProperties": false,
   "required": [

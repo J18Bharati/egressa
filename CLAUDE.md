@@ -419,7 +419,8 @@ verdict over every single-edit mutation of the shipped data. A failure is a `Kno
 and only that is exit 4; anything else `scan()` throws is exit 3.
 
 Exposure is **computed, not authored** — `packages/core/src/exposure/rules.ts` is a versioned rule
-table, and `kb/ratings/exposure-overrides.json` holds only overrides with mandatory rationale.
+table, and there is no authored-override layer: a per-vendor override file existed, was read by
+nothing at run time, and was removed rather than wired up.
 `kb/adequacy-status.json` is separate and EC-sourced, which is what makes
 `--assume-adequacy-lapsed US:DPF` a one-line data change rather than a schema migration.
 
