@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "github-api",
+  "name": "GitHub, Inc.",
+  "product": "GitHub REST and GraphQL APIs",
+  "category": "other",
+  "homepage": "https://docs.github.com/en/rest",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "octokit", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@octokit/rest", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@octokit/core", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@octokit/*", "kind": "scope", "detectTransitive": false }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.github.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "REST API base URL for GitHub.com; the GraphQL endpoint is https://api.github.com/graphql."
+      },
+      {
+        "pattern": "uploads.github.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Named in the REST reference for uploading release assets: https://uploads.github.com/repos/OWNER/REPO/releases/RELEASE_ID/assets."
+      },
+      {
+        "pattern": "ghe.com",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "GitHub Enterprise Cloud with data residency hosts each enterprise on its own subdomain of GHE.com, and GitHub documents that API integrators send requests to the enterprise's dedicated URL, e.g. https://api.octocorp.ghe.com for the subdomain octocorp. Suffix match covers that per-enterprise scheme. The hostname does not state which data residency region the enterprise selected."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "The GitHub Data Protection Agreement is between the customer and GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, and its section 7 appoints GitHub to transfer Customer Personal Data to the United States or any other country in which GitHub or its Subprocessors operate. GitHub's data residency documentation states that by default GitHub stores data for GitHub.com in the USA."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-github-enterprise-cloud-with-data-residency",
+      "notes": "Available only as GitHub Enterprise Cloud with data residency, where an enterprise chooses a region and is hosted on a dedicated subdomain of GHE.com; it does not apply to traffic to api.github.com. The listed regions are EU (stated to include Azure regions in EFTA countries, currently Norway and Switzerland), Australia, US and Japan. It is also partial within that product: GitHub's storage page lists customer content, repositories, Actions data and logs, and data identifying a person as stored in the chosen region, and lists data GitHub may store outside it, including telemetry with consistent identifiers, billing and support data, GitHub Copilot data by default (kept in-region only when an enterprise policy restricting Copilot to data-residency models is enabled) and secret scanning validity-check data. GitHub states it will document reasons for transfers out of the region but does not notify the customer when they occur."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://github.com/customer-terms/github-data-protection-agreement",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-11-02"
+    },
+    "subprocessors": {
+      "url": "https://docs.github.com/en/site-policy/privacy-policies/github-subprocessors",
+      "listType": "page",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/6174",
+        "lastChecked": "2026-11-02"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://github.com/customer-terms/github-data-protection-agreement",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Repository contents, issues, pull requests, comments and release assets sent to or read from the API."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "GitHub usernames and account identifiers appear in most API resources."
+    },
+    {
+      "category": "name",
+      "typical": false,
+      "note": "Profile names and commit author names, where the account holder has set them."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Commit author and committer email addresses, and account email addresses where exposed to the caller."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://docs.github.com/en/rest/about-the-rest-api/about-the-rest-api",
+      "title": "GitHub Docs: About the REST API",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/graphql/guides/forming-calls-with-graphql",
+      "title": "GitHub Docs: Forming calls with GraphQL (endpoint https://api.github.com/graphql)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/rest/releases/assets",
+      "title": "GitHub Docs: REST API endpoints for release assets (uploads.github.com)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/rest/using-the-rest-api/libraries-for-the-rest-api",
+      "title": "GitHub Docs: Libraries for the REST API (official Octokit libraries)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/rest/guides/scripting-with-the-rest-api-and-javascript",
+      "title": "GitHub Docs: Scripting with the REST API and JavaScript (Octokit.js is maintained by GitHub)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-github-enterprise-cloud-with-data-residency",
+      "title": "GitHub Docs: About GitHub Enterprise Cloud with data residency",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-storage-of-your-data-with-data-residency",
+      "title": "GitHub Docs: About storage of your data with data residency",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/customer-terms/github-data-protection-agreement",
+      "title": "GitHub Data Protection Agreement",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/customer-terms",
+      "title": "GitHub customer agreements (scope of the GitHub DPA)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "title": "GitHub General Privacy Statement (effective 27 April 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://docs.github.com/en/site-policy/privacy-policies/github-subprocessors",
+      "title": "GitHub Subprocessors",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/6174",
+      "title": "Data Privacy Framework participant record: GitHub",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@octokit/rest",
+      "title": "npm registry metadata for @octokit/rest (maintainers, repository github.com/octokit/rest.js)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "Contracting entity: the GitHub Data Protection Agreement names GitHub, Inc. (San Francisco) as the party, and GitHub's customer-terms page states the DPA applies to GitHub Enterprise Cloud, GitHub Enterprise (Unified), GitHub Teams and GitHub Copilot. The pages checked did not extend it to other plans; for those, the GitHub General Privacy Statement describes GitHub, Inc. or GitHub B.V. (Amsterdam) processing personal data as data controller. The DPA also states that GitHub processes some Customer Personal Data as an independent controller. GitHub, Inc. is a Microsoft subsidiary; this entry relies on GitHub's own DPA and DPF record rather than Microsoft's. DPF: the participant record for GitHub (organization 6174, legal name 'GitHub', 88 Colin P Kelly Jr Street, San Francisco) shows EU-US, Swiss-US and UK Extension certifications each with PublicStatus 'Active' and UsageEndDate 2027-08-03, non-HR data, Verification Method 'Self-Assessment', ICDR-AAA as dispute resolution provider and the Federal Trade Commission as statutory body; the CoveredEntities field is empty. The DPA section 7.B states that restricted transfers are made subject to GitHub's DPF self-certification and/or the Standard Contractual Clauses, which is why both are listed; the Privacy Statement says GitHub generally relies on SCCs under Decision 2021/914 and also describes its DPF certification. Packages: GitHub Docs state GitHub maintains the official Octokit libraries and that Octokit.js is maintained by GitHub. The npm packages octokit, @octokit/rest and @octokit/core are published from repositories under github.com/octokit; @octokit/rest lists the maintainer octokitbot with a security+octokitbot@github.com address. The @octokit/* namespace is recorded as a scope because every @octokit package returned by an npm registry search on the checked date (76) links to a github.com/octokit repository; npm does not publish organisation ownership, so this rests on that repository linkage and GitHub's statement. No PyPI package is listed: GitHub Docs list Python libraries (PyGithub, github3.py, githubkit and others) only as third-party libraries not maintained by GitHub. Not listed as hosts: github.com, raw.githubusercontent.com and other web hosts, which the API documentation checked does not name as API endpoints. Subprocessor notifications are recorded as unknown: the list page says new subprocessors are published at least 30 days in advance and refers to GitHub's 'About notifications' instructions without naming the delivery channel."
+}

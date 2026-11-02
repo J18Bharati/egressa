@@ -45,6 +45,42 @@
         "note": "The Google API Discovery Service lists seven preferred APIs whose rootUrl is https://www.googleapis.com/: Calendar, Discovery, Drive, Groups Settings, Identity Toolkit, OAuth2 and Site Verification. Host matching cannot see the path, so a request here is attributed to Google without naming the API."
       },
       {
+        "pattern": "docs.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the Google Docs API in its Discovery Service document, and the service endpoint named in its REST reference. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists no additional terms for this API."
+      },
+      {
+        "pattern": "sheets.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the Google Sheets API in its Discovery Service document, and the service endpoint named in its REST reference. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists no additional terms for this API."
+      },
+      {
+        "pattern": "slides.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the Google Slides API in its Discovery Service document, and the service endpoint named in its REST reference. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists no additional terms for this API."
+      },
+      {
+        "pattern": "forms.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the Google Forms API in its Discovery Service document, and the service endpoint named in its REST reference. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists no additional terms for this API."
+      },
+      {
+        "pattern": "tasks.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the Google Tasks API in its Discovery Service document, and the service endpoint named in its REST reference. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists no additional terms for this API."
+      },
+      {
+        "pattern": "people.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "rootUrl of the People API in its Discovery Service document, and the service endpoint named in its REST reference. The People API pages link the Google API Services User Data Policy as their terms, which states that it and the Google APIs Terms of Service govern the use of Google API Services; no additional terms for the People API were found."
+      },
+      {
         "pattern": "oauth2.googleapis.com",
         "match": "exact",
         "purpose": "auth",
@@ -158,8 +194,62 @@
       "title": "Repository of google-auth and google-auth-oauthlib, as named in their PyPI metadata",
       "publisher": "vendor",
       "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/terms",
+      "title": "Google Workspace for Developers: Terms of Service (last modified 15 December 2021), applying the Google APIs Terms of Service and listing additional terms",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/terms/api-services-user-data-policy",
+      "title": "Google API Services User Data Policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/docs/api/reference/rest",
+      "title": "Google Docs API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/sheets/api/reference/rest",
+      "title": "Google Sheets API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/slides/api/reference/rest",
+      "title": "Google Slides API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/forms/api/reference/rest",
+      "title": "Google Forms API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/tasks/reference/rest",
+      "title": "Google Tasks API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/people/api/rest",
+      "title": "People API REST reference: service endpoint",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/workspace/drive/api/reference/rest/v3",
+      "title": "Google Drive API v3 REST reference: service endpoint www.googleapis.com",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
     }
   ],
   "lastVerified": "2026-11-02",
-  "notes": "This entry covers Google endpoints and client libraries shared by many Google APIs, so a finding against it names Google but not which API. Its legal facts are those of the Google APIs Terms of Service, under which Google and the API caller are independent controllers; no processor terms under GDPR Art 28 were found for that relationship, which is why dpa is recorded as unavailable. Those terms yield to additional terms for a given API: Identity Toolkit, one of the APIs served from www.googleapis.com, is offered as part of Google Cloud Identity Platform and Firebase Authentication, whose own terms apply instead. Gmail's dedicated endpoint gmail.googleapis.com and package @googleapis/gmail stay with the google-gmail-api entry, which carries the Gmail-specific facts. The client libraries listed here also authenticate Google Cloud services, so a dependency on them shows that Google is called, not under which terms."
+  "notes": "This entry covers Google endpoints and client libraries shared by many Google APIs, so a finding against it names Google but not which API. Its legal facts are those of the Google APIs Terms of Service, under which Google and the API caller are independent controllers; no processor terms under GDPR Art 28 were found for that relationship, which is why dpa is recorded as unavailable. Those terms yield to additional terms for a given API: Identity Toolkit, one of the APIs served from www.googleapis.com, is offered as part of Google Cloud Identity Platform and Firebase Authentication, whose own terms apply instead. Gmail's dedicated endpoint gmail.googleapis.com and package @googleapis/gmail stay with the google-gmail-api entry, which carries the Gmail-specific facts. The client libraries listed here also authenticate Google Cloud services, so a dependency on them shows that Google is called, not under which terms. Host list derivation (2026-11-02): each API's discoveryRestUrl was taken from the Discovery Service directory and its discovery document read for rootUrl. Docs, Sheets, Slides, Forms, People and Tasks each have a dedicated rootUrl, matching the service endpoint in their REST reference, and are listed as exact hosts. Drive (v2 and v3) and Calendar v3 have rootUrl https://www.googleapis.com/, which is already listed; drive.googleapis.com and calendar-json.googleapis.com were not added, because no rootUrl or service endpoint names them (calendar-json.googleapis.com serves only Calendar's discovery document). The mTLS variants (for example docs.mtls.googleapis.com) were not added. The Google Workspace developer Terms of Service page applies the Google APIs Terms of Service to Google Workspace APIs and lists additional terms only for Cloud Identity, Apps Script, the Drive API (Drive API Policies), the Admin SDK and the Marketplace, none of which covers the hosts added here. Google Cloud service endpoints under googleapis.com, such as storage.googleapis.com, and the YouTube APIs are deliberately outside this entry; the terms they are offered under were not reviewed for it, so they are left unmatched rather than given these facts."
 }

@@ -32,8 +32,8 @@ describe('scan: express-stripe-sendgrid fixture', () => {
     expect(findForbiddenClaims(JSON.stringify(result))).toEqual([]);
   });
 
-  it('finds the vendor it has an entry for', () => {
-    expect(result.findings.map((f) => f.vendor?.id)).toEqual(['stripe']);
+  it('finds the vendors it has entries for', () => {
+    expect(result.findings.map((f) => f.vendor?.id).sort()).toEqual(['sendgrid', 'stripe']);
   });
 
   it('classifies Stripe as adequate-country egress while the framework stands', () => {
@@ -46,13 +46,15 @@ describe('scan: express-stripe-sendgrid fixture', () => {
   });
 
   it('keeps every location as evidence on one finding, not one finding per line', () => {
-    expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]?.evidence.length).toBeGreaterThan(1);
+    const ids = result.findings.map((f) => f.vendor?.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const stripe = result.findings.find((f) => f.vendor?.id === 'stripe');
+    expect(stripe?.evidence.length).toBeGreaterThan(1);
   });
 
   it('reports declared packages it does not recognise, as the recall signal', () => {
-    expect(result.unmatched.packages).toContain('@sendgrid/mail');
     expect(result.unmatched.packages).toContain('express');
+    expect(result.unmatched.packages).not.toContain('@sendgrid/mail');
   });
 
   it('does not report transitive packages as coverage gaps', () => {
@@ -111,7 +113,8 @@ describe('scan: options', () => {
   it('honours minConfidence', () => {
     const kb = loadKnowledgeBase({ kbPath: 'kb' });
     const high = scan({ ...base, root, kb, minConfidence: 'high' });
-    expect(high.findings).toHaveLength(1);
+    expect(high.findings.length).toBeGreaterThan(0);
+    expect(high.findings.every((f) => f.confidence === 'high')).toBe(true);
   });
 
   it('reports the knowledge base version and adequacy date for auditability', () => {

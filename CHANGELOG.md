@@ -14,7 +14,7 @@ describes the state of the repository rather than an artifact anyone can install
 
 ## [Unreleased]
 
-Knowledge base `2026.11.02`. Findings schema `1.1.0`, edited in place.
+Knowledge base `2026.11.03`. Findings schema `1.1.0`, edited in place.
 
 This section will become the first published release. The entries under **Fixed** and **Changed**,
 here and in the versions below, record defects and decisions in the repository before anything was
@@ -267,6 +267,24 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
   specialist for EU and adequate-country transfers, and a `_scanner` line in which that specialist
   accounts for every scanner finding. Step 4 checks the counts and names any specialist that returned
   no block.
+
+### Knowledge base — `2026.11.02` → `2026.11.03`
+
+Nine vendors, from gaps a sample of 21 public repositories showed. Every fact cites a vendor or
+regulator page fetched on 2026-11-02 or 2026-11-03.
+
+- **New entries:** `sendgrid`, `vonage`, `meta-graph-api` (Graph API, Instagram, WhatsApp Cloud
+  API), `telegram-bot-api`, `github-api`, `notion`, `algolia`, `huggingface`, `ipinfo`.
+- **`google-apis` covers the Workspace APIs with their own hosts:** Docs, Sheets, Slides, Forms,
+  Tasks and People, each the `rootUrl` in its Discovery Service document. Drive and Calendar are
+  already served from `www.googleapis.com`.
+- **Recorded as unknown, not guessed.** Vonage's legal pages could not be fetched, so its
+  contracting entity, DPA and transfer mechanism are left empty, and Vonage is not treated as DPF
+  certified. Telegram publishes no client SDK, so the common libraries are `wrapper` aliases.
+  Notion's DPF record reads "Active - Re-certification under Review", and its note says so.
+- **Not added:** `ip-api` and `ipify`. ip-api serves requests from servers it does not locate, so an
+  entry naming only its Romanian operator would have read as EU-only processing. ipify's pages name
+  no legal entity. Both stay unknown vendors, which a reviewer sees.
 
 ### Knowledge base — `2026.10.09` → `2026.11.02`
 

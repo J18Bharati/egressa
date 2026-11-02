@@ -1,0 +1,293 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "vonage",
+  "name": "Vonage (contracting entity not confirmed)",
+  "product": "Vonage Communications APIs (formerly Nexmo)",
+  "category": "sms",
+  "homepage": "https://developer.vonage.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "@vonage/server-sdk",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/messages",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/sms",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/voice",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/verify2",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/video",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/server-client",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "nexmo",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "@vonage/*",
+          "kind": "scope",
+          "detectTransitive": false
+        }
+      ],
+      "pypi": [
+        {
+          "name": "vonage",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "nexmo",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "rest.nexmo.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "SMS API (legacy): the SMS getting-started page sends to https://rest.nexmo.com/sms/json, and @vonage/server-client defaults restHost to https://rest.nexmo.com."
+      },
+      {
+        "pattern": "api.nexmo.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Messages API (https://api.nexmo.com/v1/messages) and other APIs; @vonage/server-client defaults apiHost to https://api.nexmo.com. The Voice regions page states that a call created through api.nexmo.com is established in Virginia by default."
+      },
+      {
+        "pattern": "video.api.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "@vonage/server-client defaults videoHost to https://video.api.vonage.com."
+      },
+      {
+        "pattern": "api-us.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL: Virginia, or Oregon in case of fallback."
+      },
+      {
+        "pattern": "api-us-3.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Virginia."
+      },
+      {
+        "pattern": "api-us-4.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Oregon."
+      },
+      {
+        "pattern": "api-eu.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL: Dublin, or Frankfurt in case of fallback. @vonage/server-client also defaults meetingsHost and identityInsightsHost to https://api-eu.vonage.com."
+      },
+      {
+        "pattern": "api-eu-3.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Dublin."
+      },
+      {
+        "pattern": "api-eu-4.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Frankfurt."
+      },
+      {
+        "pattern": "api-ap.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL: Singapore, or Sydney in case of fallback."
+      },
+      {
+        "pattern": "api-ap-3.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Singapore."
+      },
+      {
+        "pattern": "api-ap-4.vonage.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Voice regional URL and Client SDK data center URL: Sydney."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Vonage Holdings Corp., 101 Crawfords Corner Rd Ste 2416, Holmdel, NJ 07733, per its Data Privacy Framework participant record, whose purpose statement describes a service that 'enables companies to integrate communications capabilities such as voice, video and messaging into their software applications'. Whether it is the entity an API customer contracts with was not confirmed (see notes). The Voice regions page places the default api.nexmo.com call leg in Virginia and lists Virginia and Oregon data centers; the Client SDK connects to a US data center by default."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "Dublin data center (api-eu.vonage.com, api-eu-3.vonage.com), documented for the Voice API and the Client SDK.",
+        "regionSelected": true
+      },
+      {
+        "country": "DE",
+        "role": "primary",
+        "note": "Frankfurt data center (api-eu-4.vonage.com, and the fallback for api-eu.vonage.com), documented for the Voice API and the Client SDK.",
+        "regionSelected": true
+      },
+      {
+        "country": "SG",
+        "role": "primary",
+        "note": "Singapore data center (api-ap.vonage.com, api-ap-3.vonage.com), documented for the Voice API and the Client SDK.",
+        "regionSelected": true
+      },
+      {
+        "country": "AU",
+        "role": "primary",
+        "note": "Sydney data center (api-ap-4.vonage.com, and the fallback for api-ap.vonage.com), documented for the Voice API and the Client SDK.",
+        "regionSelected": true
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://developer.vonage.com/en/voice/voice-api/concepts/regions",
+      "notes": "Documented for the Voice API and the Client SDK only. Vonage offers three geo locations, US, EU and APAC, each with two regional endpoints; the EU endpoints are Dublin (api-eu-3.vonage.com) and Frankfurt (api-eu-4.vonage.com), with api-eu.vonage.com resolving to Dublin and falling back to Frankfurt. Inbound calls are handled in the region set on the Vonage application; outbound calls are handled in the region of the endpoint used, and api.nexmo.com establishes the call leg in Virginia by default. Vonage states that 'user data from one geo-location is not accessible in another due to compliance requirements'. No region selection was found on the Messages API or SMS API pages checked, both of which send to api.nexmo.com or rest.nexmo.com, so this is not recorded as covering messaging. The pages checked describe where calls are processed, not where call detail records or logs are stored."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": []
+  },
+  "dataCategories": [
+    {
+      "category": "phone",
+      "typical": true,
+      "note": "Vonage's message redaction page states that sending an SMS through the SMS API records the sender's and receiver's phone numbers, in server logs and in Call Detail Records retained for 13 months."
+    },
+    {
+      "category": "content",
+      "typical": true,
+      "note": "The same page states that the SMS message body is recorded; Messages API payloads carry text, media and files across SMS, MMS, RCS, WhatsApp, Messenger, Viber and email."
+    },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "The Advanced Auto-redact feature is described as redacting the IP address before it is written to server logs and CDRs, which shows the IP address is otherwise recorded."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Call Detail Records of each message and call."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Only when the Messages API email channel is used."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://developer.vonage.com/en/voice/voice-api/concepts/regions",
+      "title": "Vonage Voice API: Regions",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developer.vonage.com/en/vonage-client-sdk/configure-data-center",
+      "title": "Vonage Client SDK: Configure your Data Center",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developer.vonage.com/en/messages/technical-details",
+      "title": "Vonage Messages API technical details",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developer.vonage.com/en/messaging/sms/technical-details",
+      "title": "Getting Started with the Vonage SMS API",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developer.vonage.com/en/messaging/sms/message-privacy",
+      "title": "Vonage SMS Message Redaction",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@vonage/server-client/latest",
+      "title": "npm registry metadata and published source of @vonage/server-client 1.23.1 (default hosts)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@vonage/server-sdk/latest",
+      "title": "npm registry metadata for @vonage/server-sdk",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/nexmo",
+      "title": "npm registry metadata for nexmo",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/pypi/vonage/json",
+      "title": "PyPI metadata for vonage",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/pypi/nexmo/json",
+      "title": "PyPI metadata for nexmo",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5785",
+      "title": "Data Privacy Framework participant record: Vonage Holdings Corp.",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/1762",
+      "title": "Data Privacy Framework participant record: Nexmo Inc. (inactive)",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "This entry is incomplete on its legal side, and the gaps are recorded rather than filled. Every page under www.vonage.com, including /legal/, /legal/privacy-policy/ and /legal/communications-apis/terms-of-use/, returned HTTP 403 to every fetch made for this entry, so the Vonage API terms of service, the Data Processing Addendum and any sub-processor list were not read. As a result: the entity an API customer contracts with is not confirmed, and `name` says so; dpa is recorded as unavailable meaning not verified, not as a finding that Vonage offers none; no sub-processor page is recorded; and transferMechanisms is left empty. Ericsson's ownership of Vonage was also not confirmed from a primary source (ericsson.com also returned HTTP 403) and is not relied on anywhere here. What the Data Privacy Framework list shows, read from the JSON API the dataprivacyframework.gov site calls (GET https://dpfapi.azurewebsites.net/api/participants/5785 and /1762): Vonage Holdings Corp. (participant 5785), Holmdel, NJ, holds EU-US, Swiss-US and UK Extension certifications, each PublicStatus 'Active', installed 2024-01-19 with a UsageEndDate of 2027-01-16, Verification Method 'Self-Assessment', with covered entities Vonage Worldwide Inc., Vonage America, LLC and Vonage Business Inc.; its purpose statement describes the communications API business. Nexmo Inc. (participant 1762), the former name under which the APIs were sold, has EU-US and Swiss-US certifications with PublicStatus 'Inactive - Lapse' and a UsageEndDate of 2021-06-29. DPF is not recorded as a mechanism because the brief for this knowledge base requires confirming that the contracting entity, or a parent whose covered entities include it, is certified, and the contracting entity could not be read; if the API terms name Vonage Holdings Corp. or one of its three covered entities, a DPF entry with dpfCertified true and the participant 5785 URL should be added. A search of the DPF list for 'Ericsson' returned only Ericsson Enterprise Wireless Solutions, Inc., with no covered entities. Hosts come from Vonage's developer documentation and from the default hosts in the published source of @vonage/server-client, which @vonage/server-sdk builds on; api.vonage.com appears in that package only in a support email address and is not listed. The Client SDK also uses websocket hosts of the form ws-eu-3.vonage.com, which are not listed because they carry a wss scheme. Packages: the @vonage packages listed are published by the npm user nexmo-devrel from the repository github.com/Vonage/vonage-node-sdk. The @vonage/* namespace alias rests on that publisher and repository; the namespace also carries non-API packages such as the Vivid design system components (@vonage/vivid, @vonage/vwc-*), which is why it is kind scope. The npm package nexmo (latest 2.9.1, publisher nexmo-devrel, repository github.com/nexmo/nexmo-node) is the legacy SDK; its registry description begins 'Package no longer supported'. The unscoped npm name vonage does not exist. On PyPI, vonage gives author 'Vonage <devrel@vonage.com>' and repository github.com/Vonage/vonage-python-sdk, and nexmo gives author email devrel@nexmo.com and repository github.com/Nexmo/nexmo-python."
+}

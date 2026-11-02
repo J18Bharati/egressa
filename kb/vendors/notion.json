@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "notion",
+  "name": "Notion Labs, Inc.",
+  "product": "Notion API",
+  "category": "other",
+  "homepage": "https://developers.notion.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "@notionhq/client",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.notion.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The API reference states: send requests over HTTPS to https://api.notion.com."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "The Notion DPA forms part of the Master Subscription Agreement between the customer and Notion Labs, Inc. (685 Market St., San Francisco per its Privacy Policy), and section 4.1 authorises Notion and its Subprocessors to transfer Customer Personal Data from the EEA, Switzerland and the United Kingdom to the United States. Notion's data residency page states that workspace data remains hosted in the United States unless migrated."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://www.notion.com/help/data-residency",
+      "notes": "Enterprise Plan only, per workspace, on request to Notion (existing workspaces are migrated; an organisation can set a default region for new workspaces). Notion lists the data regions it hosts on AWS with their backup regions, including EU-Central-1 (Frankfurt) with backup EU-West-1 (Ireland), alongside US, Japan and Korea regions. Partial: only page content, uploaded files, the search index and third-party or bot-generated messages and files are stored at rest in the selected region; Account Information, Usage Data and data processed by subprocessors (including LLM providers) may be stored elsewhere, and Notion Calendar, Notion Mail and Beta Services are excluded. Notion states that the feature changes only the at-rest storage location and that it continues to store and process all categories of data in the United States and other locations under its Privacy Policy and DPA. The pages checked do not say whether api.notion.com requests for a data-residency workspace are processed in that region, and document no region-specific API host."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.notion.so/Data-Processing-Addendum-361b540101274b1fa7e16b90402b0d99",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-11-02"
+    },
+    "subprocessors": {
+      "url": "https://www.notion.so/notion/Notion-s-List-of-Subprocessors-268fa5bcfa0f46b6bc29436b21676734",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "url": "https://www.notion.so/Data-Processing-Addendum-361b540101274b1fa7e16b90402b0d99",
+        "lastChecked": "2026-11-02"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/6134",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Page, block, database and comment content read or written through the API."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "Notion user IDs on created_by, last_edited_by and people properties."
+    },
+    {
+      "category": "name",
+      "typical": true,
+      "note": "User objects carry a name."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Person user objects carry an email address when the integration has the capability to read user information including email."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://developers.notion.com/reference/intro",
+      "title": "Notion API reference: Introduction (base URL)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.notion.com/reference/user",
+      "title": "Notion API reference: User object (name, person.email)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.notion.com/docs/getting-started",
+      "title": "Notion developer docs: overview, linking Notion SDK for JavaScript (github.com/makenotion/notion-sdk-js)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@notionhq/client/latest",
+      "title": "npm registry metadata for @notionhq/client (repository github.com/makenotion/notion-sdk-js)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.notion.com/help/gdpr-at-notion",
+      "title": "Notion Help: GDPR at Notion",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.notion.so/Data-Processing-Addendum-361b540101274b1fa7e16b90402b0d99",
+      "title": "Notion Data Processing Addendum (effective 14 August 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.notion.so/notion/Notion-s-List-of-Subprocessors-268fa5bcfa0f46b6bc29436b21676734",
+      "title": "Notion's List of Subprocessors",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.notion.com/help/data-residency",
+      "title": "Notion Help: Data residency for Notion",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.notion.com/trust/privacy-policy",
+      "title": "Notion Privacy Policy (last updated 29 September 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/6134",
+      "title": "Data Privacy Framework participant record: Notion Labs, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "Contracting entity: Notion Labs, Inc., named as the party in the Data Processing Addendum, which forms part of the Master Subscription Agreement; Notion's 'GDPR at Notion' help page states the DPA is incorporated by reference and applies to the extent Notion processes GDPR-covered personal data on the customer's behalf. Under the DPA Notion acts as processor (or sub-processor). Transfer mechanism in the DPA: section 4.2 applies the EU SCCs (Module Two where the customer is controller, Module Three where it is processor; Clause 17 governed by the laws of Ireland), the UK IDTA for UK transfers and the EU SCCs with Swiss modifications for Swiss transfers. The DPA text checked does not mention the Data Privacy Framework, and the help page states Notion relies on SCCs for transfers from the EU. DPF: the participant record for Notion Labs, Inc. (organization 6134, 685 Market Street, San Francisco) appears under the list's Active filter, with EU-US, Swiss-US and UK Extension certifications each showing PublicStatus 'Active - Re-certification under Review', HR and non-HR data, Verification Method 'Self-Assessment', and a UsageEndDate of 2025-10-08 that precedes the checked date; the CoveredEntities field is empty. dpfCertified is recorded as true on the strength of the 'Active' public status, and the re-certification qualifier is recorded here so a reviewer can re-check it. Packages: @notionhq/client is published from github.com/makenotion/notion-sdk-js, which Notion's developer docs link as the Notion SDK for JavaScript. No PyPI package is listed: notion-client is published by an individual author from github.com/ramnes/notion-sdk-py, and no Notion-published Python SDK was found."
+}

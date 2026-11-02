@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "meta-graph-api",
+  "name": "Meta Platforms, Inc.",
+  "product": "Meta Graph API (WhatsApp Business Platform Cloud API, Messenger Platform, Instagram Platform)",
+  "category": "other",
+  "homepage": "https://developers.facebook.com/docs/graph-api/overview",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "facebook-nodejs-business-sdk",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "whatsapp",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ],
+      "pypi": [
+        {
+          "name": "facebook-business",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "graph.facebook.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The Graph API overview states that all requests are passed to the graph.facebook.com host. The WhatsApp Cloud API overview states that the platform is built on Graph API and shows requests to https://graph.facebook.com/<version>/<phone-number-id>/messages; the Messenger Platform send example posts to https://graph.facebook.com/<version>/<page-id>/messages; the Instagram Platform overview names it as the host for Instagram API with Facebook Login. Host matching cannot see the path, so a request here is attributed to Meta without naming the product."
+      },
+      {
+        "pattern": "graph.instagram.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The Instagram Platform overview states that for apps using Business Login for Instagram (Instagram API with Instagram Login) all endpoints are accessed via the graph.instagram.com host."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "Meta Platforms Ireland Limited. The Meta Terms for WhatsApp Business Platform (last updated 23 September 2026), section 1.2, make it the contracting party unless the business is located in the United States or Canada. The WhatsApp Terms for WhatsApp Business Platform (effective 23 September 2026) make WhatsApp Ireland Limited the contracting party for companies in the European Region. The Meta Platform Terms (last updated 3 February 2026), which govern Messenger and Instagram API use, do not name a contracting party in their main text; section 10A names Meta Platforms Ireland Limited as data exporter for personal data it controls."
+      },
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Meta Platforms, Inc. and WhatsApp LLC, both of Menlo Park, California, per their Data Privacy Framework participant records. Meta Platforms, Inc. is the contracting party under the Meta Terms for WhatsApp Business Platform for businesses in the United States or Canada, and section 10C of the Meta Platform Terms describes the developer and Meta Platforms, Inc. as independent controllers. The WhatsApp Business Data Transfer Addendum names WhatsApp LLC and Meta Platforms Inc. as importers of European Data from WhatsApp Ireland Limited, and the WhatsApp Terms for WhatsApp Business Platform state that information may be transferred and processed in the United States and other countries globally. None of the pages checked names a processing location for Messenger or Instagram API requests."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://developers.facebook.com/docs/whatsapp/cloud-api/overview/local-storage",
+      "notes": "Only the WhatsApp Cloud API has a documented storage-location setting, and it covers data at rest. Local storage is enabled per business phone number through the Settings and Register APIs with a data_localization_region value; the registration reference lists DE (EU, Germany), CH, GB and eleven non-European values. Meta states that message content may be stored on Meta data centers internationally while being processed, for up to 60 minutes on Cloud API, before being kept only in the selected region. The setting is a request body parameter, not a host, so it is not visible to host matching. No equivalent setting was found for the Messenger Platform or the Instagram Platform, which is why the scope is product-specific."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/4452",
+        "lastChecked": "2026-11-02"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/7735",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Message text and media sent through the Cloud API or the Messenger Platform send endpoint; the local storage page describes message content (text and media) as what it covers."
+    },
+    {
+      "category": "phone",
+      "typical": false,
+      "note": "WhatsApp Cloud API calls are addressed to a registered business phone number ID. Not applicable to Messenger or Instagram API traffic."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://developers.facebook.com/docs/graph-api/overview",
+      "title": "Graph API overview: host URL",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/documentation/instagram-platform/overview",
+      "title": "Instagram Platform overview: base URLs per login type",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/documentation/business-messaging/messenger-platform/send-messages",
+      "title": "Messenger Platform: send messages (request URL)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/docs/whatsapp/cloud-api/overview",
+      "title": "WhatsApp Cloud API overview",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/docs/whatsapp/cloud-api/overview/local-storage",
+      "title": "WhatsApp Cloud API: local storage",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/docs/whatsapp/cloud-api/reference/registration",
+      "title": "WhatsApp Cloud API registration reference: data_localization_region values",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.facebook.com/terms/dfc_platform_terms/",
+      "title": "Meta Platform Terms (last updated 3 February 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.facebook.com/legal/Meta-Terms-for-WhatsApp-Business-Platform",
+      "title": "Meta Terms for WhatsApp Business Platform (last updated 23 September 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.whatsapp.com/legal/WhatsApp-Terms-for-WhatsApp-Business-Platform",
+      "title": "WhatsApp Terms for WhatsApp Business Platform (effective 23 September 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.facebook.com/legal/terms/Meta-Global-Processor-Terms",
+      "title": "Meta Global Processor Terms (last updated 20 March 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.whatsapp.com/legal/business-data-processing-terms/",
+      "title": "WhatsApp Business Data Processing Terms (last updated 22 August 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.whatsapp.com/legal/business-data-transfer-addendum",
+      "title": "WhatsApp Business Data Transfer Addendum (last updated 16 February 2024)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/4452",
+      "title": "Data Privacy Framework participant record: Meta Platforms, Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/7735",
+      "title": "Data Privacy Framework participant record: WhatsApp LLC",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.facebook.com/privacy/policies/data_privacy_framework",
+      "title": "EU-U.S. and Swiss-U.S. Data Privacy Frameworks Disclosure for Meta Platforms, Inc. (effective 30 July 2024)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.whatsapp.com/legal/data-privacy-framework",
+      "title": "EU-U.S. and Swiss-U.S. Data Privacy Frameworks Disclosure for WhatsApp LLC (effective 3 December 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/meta/facebook-nodejs-business-sdk",
+      "title": "Repository of facebook-nodejs-business-sdk (Node.js SDK for Meta Marketing APIs), as named in its npm metadata",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/meta/facebook-python-business-sdk",
+      "title": "Repository of facebook-business (Python SDK for Meta Marketing APIs), as named in its PyPI metadata",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/WhatsApp/WhatsApp-Nodejs-SDK",
+      "title": "Repository of the npm package whatsapp (WhatsApp Cloud API Node.js SDK, archived)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "This entry covers the Graph API hosts that several Meta products share, so a finding against it names Meta but not which product, and its fields record only what holds for all traffic to those hosts. Product terms differ. (1) WhatsApp Business Platform, including the Cloud API: since 23 September 2026 use is governed by the Meta Terms for WhatsApp Business Platform, the Meta Platform Terms and the WhatsApp Terms for WhatsApp Business Platform. Section 1.4 of the Meta terms applies the Meta Global Processor Terms where Meta acts as a processor of personal data the business controls, and separate privacy terms where the parties are independent controllers. The earlier WhatsApp Business Data Processing Terms (22 August 2025) and WhatsApp Business Data Transfer Addendum (16 February 2024) remain published; the addendum has WhatsApp Ireland Limited, as processor, relying on the EU-U.S. Data Privacy Framework for transfers to WhatsApp LLC and Meta Platforms Inc. and defines processor-to-processor SCCs (Module 3) as another mechanism. None of the pages checked states how the two sets of WhatsApp terms relate. (2) Messenger Platform and Instagram Platform APIs: the Meta Platform Terms never describe Meta as a processor; section 10C makes the developer and Meta Platforms, Inc. independent controllers, and section 10A applies Module One SCCs where Meta Platforms Ireland Limited exports personal data it controls to the developer, which is the opposite direction to a request sent from code. Because processor terms exist for WhatsApp traffic but not for Messenger or Instagram traffic, dpa is recorded as unavailable for the shared hosts; for a WhatsApp-only integration the Meta Global Processor Terms are the processor terms. DPF status was read from the participant JSON API the dataprivacyframework.gov site calls (GET https://dpfapi.azurewebsites.net/api/participants/4452 and /7735). Meta Platforms, Inc.: EU-US Certification installed 2016-09-30 and Swiss-US 2017-11-03, both with PublicStatus 'Active - Re-certification under Review' and UsageEndDate 2027-07-23. WhatsApp LLC: EU-US and Swiss-US installed 2022-01-24, PublicStatus 'Active', UsageEndDate 2027-01-23. Neither record has a UK Extension, and neither lists covered entities. Meta's DPF disclosure names only Meta Platforms, Inc. and its wholly owned U.S. subsidiaries. Packages: facebook-nodejs-business-sdk and facebook-business are published from repositories under the meta GitHub organisation and describe themselves as SDKs for the Meta Marketing APIs, which are also served from graph.facebook.com. The npm package whatsapp is published from the WhatsApp/WhatsApp-Nodejs-SDK repository, which describes itself as the official WhatsApp Cloud API Node.js SDK and is archived (last push 2023-06-07, latest version 0.0.5-Alpha). No community wrappers are listed."
+}

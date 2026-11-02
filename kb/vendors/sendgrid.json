@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "sendgrid",
+  "name": "Twilio Inc.",
+  "product": "Twilio SendGrid Email API",
+  "category": "email",
+  "homepage": "https://sendgrid.com/",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@sendgrid/mail", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@sendgrid/client", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "sendgrid", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@sendgrid/*", "kind": "scope", "detectTransitive": false }
+      ],
+      "pypi": [{ "name": "sendgrid", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      {
+        "pattern": "api.sendgrid.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base URL https://api.sendgrid.com, documented on the Mail Send reference as the base URL 'for global users and subusers'."
+      },
+      {
+        "pattern": "api.eu.sendgrid.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Base URL https://api.eu.sendgrid.com, documented on the Mail Send reference as the base URL 'for EU regional subusers'. The Data Residency FAQ names it as the EU-specific API endpoint."
+      },
+      {
+        "pattern": "smtp.sendgrid.net",
+        "match": "exact",
+        "purpose": "other",
+        "note": "SMTP relay host. SendGrid's SMTP integration page instructs setting the server host to smtp.sendgrid.net. No EU-specific SMTP host was found on the pages checked."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Twilio Inc., 101 Spear St FL 5, San Francisco, CA 94105, per its Data Privacy Framework participant record; it is the Data Importer named in the Standard Contractual Clauses of the Twilio Data Protection Addendum. The Data Residency FAQ states that sending through a parent account or a global subuser defaults to the global endpoint api.sendgrid.com and 'routes data outside the EU'. The Twilio sub-processor page lists DataBank, Lumen and Digital Realty for hosting and storage of Sendgrid Services in North America."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "EU Data Processing Locations lists EU-West-1 and DUB1, both Dublin, Ireland, as locations for EU Data Resident Subusers."
+      },
+      {
+        "country": "DE",
+        "role": "primary",
+        "note": "EU Data Processing Locations lists EU-Central-1, Frankfurt, Germany."
+      },
+      {
+        "country": "NL",
+        "role": "primary",
+        "note": "EU Data Processing Locations lists AMS1, Amsterdam, Netherlands."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://www.twilio.com/docs/sendgrid/data-residency",
+      "notes": "Email Data Residency is selected per subuser, not per account. Per the FAQ it requires a subuser created with region eu, a dedicated IP provisioned in the EU (shared-IP customers must upgrade to a Pro or Premier package) and the endpoint https://api.eu.sendgrid.com; existing subusers cannot be moved and a new EU subuser must be created. Twilio states that EU subusers cannot use Marketing Campaigns, Activity, Validation or Geostats. The EU Data Processing Locations page states that storage stays in EU-West-1, EU-Central-1, DUB1 and AMS1, but lists retrieval, consultation, use and restriction as 'Global access to' those locations, states that engineering and support teams may retrieve EU recipient personal information, that anonymized data with recipient personal information removed transfers outside the EU, and that a Point Delete Service request takes data out of the region for up to 24 hours. The FAQ adds that processing outside the EU occurs for support requests and for the Point Delete Service and Whitelist mail settings, and that misconfigured accounts may have data stored or processed outside the EU. Data Residency is offered only for the EU."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-11-02"
+    },
+    "subprocessors": {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "listType": "page",
+      "notifications": "email-subscribe"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://www.dataprivacyframework.gov/participant/5394",
+        "lastChecked": "2026-11-02"
+      },
+      {
+        "mechanism": "SCC",
+        "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "email",
+      "typical": true,
+      "note": "Recipient, sender and reply-to addresses in the Mail Send request."
+    },
+    {
+      "category": "name",
+      "typical": true,
+      "note": "The Mail Send request carries an optional display name beside each address."
+    },
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Subject, body and attachments of each message."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "Email event data such as opens, clicks and unsubscribes, which the EU Data Processing Locations page describes as recipient personal information."
+    },
+    {
+      "category": "ip_address",
+      "typical": false,
+      "note": "Twilio's Data Privacy Framework participant record lists 'Device Information and IP Address' for Twilio as a whole; no SendGrid page checked enumerates it for the email API."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send",
+      "title": "SendGrid Mail Send API reference - global and EU base URLs",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/for-developers/sending-email/integrating-with-the-smtp-api",
+      "title": "Integrating with the SendGrid SMTP API",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/data-residency",
+      "title": "SendGrid Data Residency Email (EU)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/data-residency/faq",
+      "title": "FAQ on Data Residency for EU",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/data-residency/locations-eu",
+      "title": "EU Data Processing Locations",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/docs/sendgrid/api-reference/subusers-api/how-to-create-a-eu-regional-subuser-with-the-twilio-sendgrid-api",
+      "title": "How to Create a EU Regional Subuser with the Twilio SendGrid API",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/data-protection-addendum",
+      "title": "Twilio Data Protection Addendum (last updated April 9, 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.twilio.com/en-us/legal/sub-processors",
+      "title": "Twilio Sub-Processors",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5394",
+      "title": "Data Privacy Framework participant record: Twilio Inc.",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@sendgrid/mail/latest",
+      "title": "npm registry metadata for @sendgrid/mail",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/pypi/sendgrid/json",
+      "title": "PyPI metadata for sendgrid",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "SendGrid is a Twilio product contracted under the same Twilio Data Protection Addendum as the `twilio` entry; it is recorded separately because its hosts, packages and EU data residency model differ. The Addendum names 'SendGrid Services' (services and APIs branded SendGrid or Twilio SendGrid) and gives them their own termination clause (Schedule 1, section 6.2). Transfer mechanisms: Schedule 3 sets an order of precedence of DPF, then Twilio BCRs, then EU Standard Contractual Clauses, then the UK International Data Transfer Agreement. It defines BCR Services as all Services except the SendGrid Services and Private Beta Offerings and states that 'the Twilio BCRs do not serve as a transfer mechanism for the SendGrid Services', so BCR is deliberately not listed here although it is listed on the `twilio` entry. Section 2.2 states that Twilio Inc. is self-certified under the Data Privacy Framework, and section 2.4 applies the EU Standard Contractual Clauses to personal data transferred via the Services from the EEA, Switzerland, Guernsey or Jersey, with Twilio Inc. as Data Importer. DPF status comes from participant record 5394 for Twilio Inc., read from the JSON API the dataprivacyframework.gov site calls (GET https://dpfapi.azurewebsites.net/api/participants/5394): EU-US, Swiss-US and UK Extension certifications all PublicStatus 'Active' with a UsageEndDate of 2027-04-20, Verification Method 'Self-Assessment'. The record does not name SendGrid; dpfCertified rests on Twilio Inc. being both the certified organisation and the party the Addendum names. A search of the DPF list for 'SendGrid' returned no participant. The Twilio sub-processor page names Twilio Ireland Ltd as an example of a Twilio party other than Twilio Inc. that a customer may contract with, in which case Twilio Inc. acts as a sub-processor; which Twilio entity contracts depends on the customer's agreement and is not settled by the pages checked. Packages: @sendgrid/mail and @sendgrid/client are published by the npm user twilio-dx with author 'Twilio SendGrid <help@twilio.com>' and repository github.com/sendgrid/sendgrid-nodejs. The unscoped npm package `sendgrid` (latest 5.2.3) is the earlier SendGrid-published library; its description points to 'v6.X+ at https://www.npmjs.com/org/sendgrid', which is the vendor's own statement that the @sendgrid npm organisation carries its packages, and is the basis for the @sendgrid/* namespace alias. The namespace also holds non-SDK packages, for example @sendgrid/design-primitives (repository github.com/sendgrid/design-primitives), which is why it is kind scope. The PyPI package sendgrid gives author email help@twilio.com and repository github.com/sendgrid/sendgrid-python. Not found: an EU-specific SMTP host, and a SendGrid-only sub-processor list; the Twilio sub-processor page lists SendGrid rows within the Twilio list, including AWS for Email (SendGrid) in 'USA, EU' and Snowflake and AWS for Marketing Campaigns (SendGrid) in 'USA'."
+}

@@ -102,14 +102,23 @@ i Stripe, LLC
     Stripe, LLC data processing agreement: https://stripe.com/legal/dpa
     Stripe, LLC sub-processors: https://stripe.com/legal/service-providers
 
+i Twilio Inc.
+    processing: US, IE, DE, NL
+    EU region:  available (partial)
+    relies on an adequacy decision that could be withdrawn
+    verified:   2026-11-02
+    package-lock.json:9  @sendgrid/mail [dependency]
+    package.json:8  @sendgrid/mail [dependency]
+    Twilio Inc. data processing agreement: https://www.twilio.com/en-us/legal/data-protection-addendum
+    Twilio Inc. sub-processors: https://www.twilio.com/en-us/legal/sub-processors
+
 Not in the knowledge base
-  @sendgrid/mail
   express
   vitest
   No entry exists for these, so no jurisdiction can be reported.
 
-1 finding across 1 vendor (1 file, 2 manifests, 34ms)
-knowledge base 2026.11.02 (18 vendors, adequacy status as of 2026-09-06)
+2 findings across 2 vendors (1 file, 2 manifests, 22ms)
+knowledge base 2026.11.03 (27 vendors, adequacy status as of 2026-09-06)
 Detection only - not a compliance assessment.
 ```
 

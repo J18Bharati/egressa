@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "telegram-bot-api",
+  "name": "Telegram Messenger Inc.",
+  "product": "Telegram Bot API",
+  "category": "other",
+  "homepage": "https://core.telegram.org/bots/api",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "node-telegram-bot-api",
+          "kind": "wrapper",
+          "detectTransitive": false
+        },
+        {
+          "name": "telegraf",
+          "kind": "wrapper",
+          "detectTransitive": false
+        },
+        {
+          "name": "grammy",
+          "kind": "wrapper",
+          "detectTransitive": false
+        }
+      ],
+      "pypi": [
+        {
+          "name": "python-telegram-bot",
+          "kind": "wrapper",
+          "detectTransitive": false
+        },
+        {
+          "name": "aiogram",
+          "kind": "wrapper",
+          "detectTransitive": false
+        },
+        {
+          "name": "pytelegrambotapi",
+          "kind": "wrapper",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "api.telegram.org",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The Bot API documentation states that all queries must be presented in the form https://api.telegram.org/bot<token>/METHOD_NAME, and that files are downloaded from https://api.telegram.org/file/bot<token>/<file_path>. It also documents a Local Bot API Server that a developer can run and send requests to instead; requests to such a server are not matched by this host."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "NL",
+        "role": "primary",
+        "note": "Telegram Privacy Policy section 4.1: if a user signed up for Telegram from the UK or the EEA, their data is stored in data centers in the Netherlands, in space Telegram rents, on servers Telegram owns. The location follows where each Telegram user signed up, not a setting of the bot developer; the policy does not state where data of users who signed up elsewhere is stored, and the Telegram FAQ describes cloud chat data as stored in multiple data centers around the globe controlled by different legal entities in different jurisdictions."
+      },
+      {
+        "country": "VG",
+        "role": "support",
+        "note": "Telegram Privacy Policy section 8.2: personal data may be shared, to provide, improve and support the Services, with the parent company Telegram Group Inc and with Telegraph Inc., both located in the British Virgin Islands."
+      },
+      {
+        "country": "AE",
+        "role": "support",
+        "note": "The same section names Telegram FZ-LLC, a group member located in Dubai."
+      }
+    ],
+    "euRegion": {
+      "available": false,
+      "docUrl": "https://telegram.org/privacy",
+      "notes": "No region a bot developer can select was found. The Bot API documents a single endpoint, api.telegram.org. Storage in the Netherlands applies to users who signed up from the UK or the EEA, by the Privacy Policy's own terms, and is not chosen by the API caller."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "none",
+        "url": "https://www.dataprivacyframework.gov/list",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Messages sent to and by the bot, and files downloaded through the file endpoint."
+    },
+    {
+      "category": "name",
+      "typical": true,
+      "note": "Telegram Privacy Policy section 6.3: bot developers can get a user's public account data, namely screen name, username and profile pictures."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://core.telegram.org/bots/api",
+      "title": "Telegram Bot API: making requests, Local Bot API Server, file downloads",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://telegram.org/privacy",
+      "title": "Telegram Privacy Policy (latest change listed 21 August 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://telegram.org/tos/bot-developers",
+      "title": "Telegram Bot Platform Developer Terms of Service",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://telegram.org/privacy-tpa",
+      "title": "Standard Bot Privacy Policy",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://telegram.org/faq",
+      "title": "Telegram FAQ",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/list",
+      "title": "Data Privacy Framework List (searched for Telegram, active and inactive)",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/yagop/node-telegram-bot-api",
+      "title": "node-telegram-bot-api repository (third party), as named in its npm metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/telegraf/telegraf",
+      "title": "telegraf repository (third party), as named in its npm metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/grammyjs/grammY",
+      "title": "grammY repository (third party), as named in its npm metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/python-telegram-bot/python-telegram-bot",
+      "title": "python-telegram-bot repository (third party), as named in its PyPI metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/aiogram/aiogram",
+      "title": "aiogram repository (third party), as named in its PyPI metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/eternnoir/pyTelegramBotAPI",
+      "title": "pyTelegramBotAPI repository (third party), as named in its PyPI metadata",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "The Bot Developer Terms state that they constitute an agreement between the developer and Telegram Messenger Inc. The Telegram Privacy Policy names Telegram Messenger Inc. as the data controller for users in the EEA, states that it is located outside the EEA and names the European Data Protection Office as its Art 27 representative; none of the pages checked states the country in which Telegram Messenger Inc. is established, so no jurisdiction is recorded for the contracting entity itself. No data processing terms for bot developers were found: the Bot Developer Terms place GDPR obligations on the developer, state that Telegram has no affiliation with bots it does not operate, and the Standard Bot Privacy Policy governs only the relationship between a developer and its users. dpa is therefore recorded as unavailable. The Privacy Policy states that transfers from Telegram to its group companies in the British Virgin Islands and Dubai use standard contractual clauses approved by the European Commission; that is an intra-group arrangement and not a mechanism offered to a bot developer, so it is not listed. A search of the Data Privacy Framework participant API (POST https://dpfapi.azurewebsites.net/api/participants, the call the dataprivacyframework.gov site makes) for 'Telegram' returned no active or inactive record, and the mechanism is recorded as none. Packages: Telegram publishes the Bot API server source (telegram-bot-api) but no client SDK was found in the Bot API documentation. The six packages listed are third-party libraries and are recorded as wrapper, not official-sdk. Each was checked to default to api.telegram.org in its own published source (DEFAULT_API_ROOT in node-telegram-bot-api 2.1.0, apiRoot in telegraf 4.16.3 and grammy 1.46.0, the base URL in python-telegram-bot, aiogram and pyTelegramBotAPI), and each describes itself as a Telegram Bot API client or framework, so a dependency on one implies Bot API traffic unless the developer has pointed it at a Local Bot API Server."
+}

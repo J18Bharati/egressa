@@ -168,8 +168,10 @@ describe('markdown output', () => {
   });
 
   it('says how many findings it withheld when truncating', () => {
-    const md = formatMarkdown(result(), { maxFindings: 0 });
-    expect(md).toContain('1 further finding(s) not shown');
+    const full = result();
+    expect(full.findings.length).toBeGreaterThan(0);
+    const md = formatMarkdown(full, { maxFindings: 0 });
+    expect(md).toContain(`${full.findings.length} further finding(s) not shown`);
   });
 
   it('keeps the unresolved reason out of the Vendor column but visible in its own column', () => {

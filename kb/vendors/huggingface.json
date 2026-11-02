@@ -1,0 +1,199 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "huggingface",
+  "name": "Hugging Face, Inc.",
+  "product": "Hugging Face Hub, Inference Providers and Inference Endpoints",
+  "category": "ai",
+  "homepage": "https://huggingface.co",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "@huggingface/inference", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@huggingface/hub", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@huggingface/*", "kind": "scope", "detectTransitive": false }
+      ],
+      "pypi": [{ "name": "huggingface-hub", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      {
+        "pattern": "huggingface.co",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The Hub: model, dataset and Space repositories, the Hub API and file downloads."
+      },
+      {
+        "pattern": "router.huggingface.co",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Inference Providers base URL (https://router.huggingface.co/v1) in Hugging Face's documentation. Requests are routed to third-party inference providers."
+      },
+      {
+        "pattern": "api-inference.huggingface.co",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Documented by huggingface_hub as the default value of HF_INFERENCE_ENDPOINT."
+      },
+      {
+        "pattern": "endpoints.huggingface.cloud",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Suffix match because each dedicated Inference Endpoint gets its own host. The scheme is shown by Hugging Face's own examples rather than a formal specification: https://<id>.us-east-1.aws.endpoints.huggingface.cloud and https://<id>.eu-west-1.aws.endpoints.huggingface.cloud. The cloud region of an endpoint appears in its host, but no region is resolved from it here."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Hugging Face, Inc., a Delaware corporation, is the party to the Terms of Service and Supplemental Terms; New York law governs the Terms. The Privacy Policy states that 'The Company and its servers are located in the United States.' The Storage Regions page states that for non-Team or Enterprise users, repositories are always stored in the US. Most sub-processors in the Privacy Policy list carry a United States location, including Amazon Web Services and MongoDB Atlas (hosting) and Google Cloud Platform (United States/EMEA)."
+      },
+      {
+        "country": "FR",
+        "role": "support",
+        "note": "Hugging Face SAS (Paris) is named in the Privacy Policy as the main establishment in the European Union, with the CNIL as lead authority, and is listed as a sub-processor for 'All of the above'. OVHCloud is listed for hosting and infrastructure with a France location."
+      },
+      {
+        "country": "EEA",
+        "role": "primary",
+        "regionSelected": true,
+        "note": "Team and Enterprise organizations can select the EU storage region for new repositories; per Hugging Face, Spaces storage and runtime then use that region, and its page states that datasets, models, buckets and inference endpoints can all be stored in EU data centers. The region is a per-organization setting on those plans only."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "product-specific",
+      "docUrl": "https://huggingface.co/docs/hub/storage-regions",
+      "notes": "EU storage is a Team and Enterprise feature; other repositories are stored in the US. Dedicated Inference Endpoints take a cloud provider and deployment region chosen when the endpoint is configured. Inference Providers (router.huggingface.co) forwards requests to third-party providers such as Cerebras, Groq, Together AI and Replicate, and Hugging Face directs users to each provider's own data security policy; no page read for this entry states where those providers process requests, and no EU option was found for that routing."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "none",
+        "url": "https://huggingface.co/privacy",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "prompt_content",
+      "typical": true,
+      "note": "Inputs sent to Inference Providers and Inference Endpoints. Hugging Face states it does not store request or response bodies for either, and keeps logs for up to 30 days."
+    },
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Models, datasets and Space files uploaded to the Hub."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "huggingface_hub documents that 'By default, some data is collected by HF libraries (transformers, datasets, gradio, ...) to monitor usage'; HF_HUB_DISABLE_TELEMETRY or DO_NOT_TRACK turns it off."
+    },
+    {
+      "category": "ip_address",
+      "typical": false,
+      "note": "Not enumerated for API traffic on the pages read for this entry; recorded as not typical rather than as absent."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://huggingface.co/terms-of-service",
+      "title": "Hugging Face Terms of Service: contracting party and governing law",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Supplemental+Terms.pdf",
+      "title": "Hugging Face Supplemental Terms (effective April 28, 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/privacy",
+      "title": "Hugging Face Privacy Policy (effective March 28, 2023): location of processing, EU main establishment, sub-processor list",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/hub/security",
+      "title": "Hugging Face Hub security: GDPR data processing agreements through an Enterprise Plan",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/inference-endpoints/guides/security",
+      "title": "Inference Endpoints Security & Compliance: payload storage, log retention, DPA through Enterprise Hub",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/inference-endpoints/guides/configuration",
+      "title": "Inference Endpoints configuration: cloud provider and deployment region",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/inference-providers/index",
+      "title": "Inference Providers: router.huggingface.co base URL and provider routing",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/inference-providers/security",
+      "title": "Inference Providers Security & Compliance",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/hub/storage-regions",
+      "title": "Storage Regions on the Hub",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/huggingface_hub/guides/inference_endpoints",
+      "title": "huggingface_hub guide: Inference Endpoints (example endpoint URLs)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/huggingface_hub/guides/inference",
+      "title": "huggingface_hub guide: run inference (example endpoint URLs)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables",
+      "title": "huggingface_hub environment variables: HF_INFERENCE_ENDPOINT default, HF_HUB_OFFLINE, telemetry",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/list",
+      "title": "Data Privacy Framework participant list (searched for Hugging Face; no record found)",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/pypi/huggingface-hub/json",
+      "title": "PyPI metadata: huggingface-hub (author Hugging Face, Inc.)",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/@huggingface/inference/latest",
+      "title": "npm registry metadata: @huggingface/inference (repository github.com/huggingface/huggingface.js)",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "verifiedBy": "egressa-kb",
+  "notes": "Common case first: huggingface-hub (and libraries built on it, such as transformers and @huggingface/transformers) is very often used only to download open model weights or datasets from huggingface.co to run locally. In that case the request carries the repository name, an access token if one is set, and library telemetry unless HF_HUB_DISABLE_TELEMETRY or DO_NOT_TRACK is set, but no application data; HF_HUB_OFFLINE stops the calls altogether. A dependency on huggingface-hub is therefore not by itself evidence that application data reaches Hugging Face; a call to router.huggingface.co, api-inference.huggingface.co or an endpoints.huggingface.cloud host is. DPA: Hugging Face's Hub security page and Inference Endpoints security page each state that a GDPR data processing agreement is offered through an Enterprise plan or Enterprise Hub subscription. No published DPA document was found (huggingface.co/DPA is a user profile, not an agreement), so dpa is recorded as unavailable to a caller without that subscription rather than as nonexistent. Transfers: the Privacy Policy states that personal information may be transferred to and processed in the U.S. and other countries and relies on the user's consent to that transfer; it names no SCCs or other Art 46 instrument, and no other page read for this entry does, so mechanism is recorded as none. DPF: the Privacy Policy and Terms do not mention the Data Privacy Framework, and a search of the participant list for 'Hugging Face', 'Hugging' and 'huggingface' returned no record, active or inactive, through the JSON API the list's own site calls (POST https://dpfapi.azurewebsites.net/api/participants); Stripe, LLC was returned by the same query as a control. Inference Providers: Hugging Face states it does not store request or response bodies when routing and that external providers are responsible for their own security; the downstream provider is a further recipient not described by this entry. Packages: huggingface-hub lists Hugging Face, Inc. as author; @huggingface/inference and @huggingface/hub are published from github.com/huggingface/huggingface.js. @huggingface/* is recorded as a scope, which also covers @huggingface/transformers, a library that runs models locally after downloading weights."
+}

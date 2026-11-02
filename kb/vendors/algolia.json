@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "algolia",
+  "name": "Algolia SAS / Algolia, Inc.",
+  "product": "Algolia",
+  "category": "search",
+  "homepage": "https://www.algolia.com",
+  "aliases": {
+    "packages": {
+      "npm": [
+        { "name": "algoliasearch", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@algolia/client-search", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "search-insights", "kind": "official-sdk", "detectTransitive": false },
+        { "name": "@algolia/*", "kind": "scope", "detectTransitive": false }
+      ],
+      "pypi": [{ "name": "algoliasearch", "kind": "official-sdk", "detectTransitive": false }]
+    },
+    "hosts": [
+      {
+        "pattern": "algolia.net",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Suffix match because Algolia documents a per-application host scheme: the Search API base URLs are https://{APPLICATION_ID}.algolia.net and https://{APPLICATION_ID}-dsn.algolia.net, the latter routing to the closest server when the subscription includes the Distributed Search Network."
+      },
+      {
+        "pattern": "algolianet.com",
+        "match": "suffix",
+        "purpose": "api",
+        "note": "Suffix match because Algolia documents a per-application host scheme: the retry hosts are https://{APPLICATION_ID}-1.algolianet.com, -2 and -3, served through a different DNS provider than the primary hosts. All Algolia API clients use them as fallbacks."
+      },
+      {
+        "pattern": "insights.algolia.io",
+        "match": "exact",
+        "purpose": "ingest",
+        "note": "Insights API base URL that, per Algolia, routes requests to the closest of insights.us.algolia.io and insights.de.algolia.io based on the caller's geographical location."
+      },
+      { "pattern": "insights.us.algolia.io", "match": "exact", "purpose": "ingest" },
+      { "pattern": "insights.de.algolia.io", "match": "exact", "purpose": "ingest" },
+      {
+        "pattern": "analytics.algolia.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Documented as an alias of analytics.us.algolia.com."
+      },
+      { "pattern": "analytics.us.algolia.com", "match": "exact", "purpose": "api" },
+      {
+        "pattern": "analytics.de.algolia.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "Algolia instructs callers to use the Analytics API base URL matching the application's analytics region, which its documentation names as us (United States) or eu (Europe). The page does not state the country of this host, and none is inferred from its label."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "FR",
+        "role": "primary",
+        "note": "Algolia SAS, 55 Rue d'Amsterdam, 75008 Paris, is the contracting entity and the data processor under the Terms of Service and DPA when the subscriber is domiciled in a country in Europe. French law then governs the Terms."
+      },
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "Algolia, Inc., a Delaware corporation at 3790 El Camino Real, Palo Alto, CA, is the contracting entity and data processor when the subscriber is domiciled outside Europe. When Algolia SAS contracts, Algolia, Inc. is listed as a group sub-processor. Service-specific sub-processors listed with a United States location include Cloudflare (CDN, security and DNS, with access to end-user IP addresses), Datadog (log management, with access to indexing operations, end-user queries and end-user IP addresses), and OpenAI, Anthropic and Google for generative AI features. US-East, US-West and US-Central are selectable hosting regions."
+      },
+      {
+        "country": "EEA",
+        "role": "primary",
+        "regionSelected": true,
+        "note": "On classic infrastructure the hosting region is chosen when an application is created. EEA regions listed: Europe (France), with data centers in Roubaix, Strasbourg and Gravelines; Europe (Germany), Falkenstein and Frankfurt; and Europe (Netherlands), Amsterdam, which is DSN only. Infrastructure providers listed include OVH SAS (France) and LeaseWeb Global B.V. (Netherlands); the group sub-processor MorphL R&D SRL is in Romania."
+      },
+      {
+        "country": "GB",
+        "role": "support",
+        "note": "Algolia Limited (London) is listed as a group sub-processor regardless of hosting region. Europe (UK), two data centers in London, is also a selectable hosting region."
+      },
+      {
+        "country": "JP",
+        "role": "support",
+        "note": "Algolia KK is listed as a group sub-processor. Japan (Tokyo and Osaka) is also a selectable hosting region."
+      },
+      {
+        "country": "AU",
+        "role": "support",
+        "note": "Sajari Corp Pty Limited (Search.io) and Sajari Pty Limited are listed as group sub-processors. Australia (Sydney) is also a selectable hosting region."
+      },
+      {
+        "country": "CA",
+        "role": "support",
+        "regionSelected": true,
+        "note": "Canada (Beauharnois) hosting region."
+      },
+      {
+        "country": "SG",
+        "role": "support",
+        "regionSelected": true,
+        "note": "Singapore hosting region."
+      },
+      {
+        "country": "BR",
+        "role": "support",
+        "regionSelected": true,
+        "note": "Brazil (Sao Paulo) hosting region. Latitude.sh, listed as a server provider, has a Brazilian corporate location."
+      },
+      {
+        "country": "IN",
+        "role": "support",
+        "regionSelected": true,
+        "note": "India (Noida) hosting region."
+      },
+      {
+        "country": "HK",
+        "role": "support",
+        "regionSelected": true,
+        "note": "Hong Kong hosting region."
+      },
+      {
+        "country": "ZA",
+        "role": "support",
+        "regionSelected": true,
+        "note": "South Africa (Johannesburg) hosting region."
+      },
+      {
+        "country": "AE",
+        "role": "support",
+        "regionSelected": true,
+        "note": "Middle East region, one data center in Dubai, listed as DSN only."
+      }
+    ],
+    "euRegion": {
+      "available": true,
+      "scope": "partial",
+      "docUrl": "https://www.algolia.com/doc/guides/scaling/infrastructure/classic/servers-clusters",
+      "notes": "The region table covers classic infrastructure, where the region is chosen per application at creation and 'Some regions aren't available for all plans.' Applications on the Elevate plan run on dynamic scaling infrastructure, for which Algolia states it 'picks the best infrastructure for your application'; no region table for it was found. The analytics region (us or eu) is a separate per-application setting with its own Analytics API host. Distributed Search Network servers are independent copies of the cluster's data in further regions the subscriber adds. Algolia, Inc. and the US-located service-specific sub-processors (Datadog logs, which include end-user queries and IP addresses; Cloudflare; the AI providers) are listed without reference to the hosting region, so an EU hosting region does not remove the United States from the processing chain."
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": true,
+      "url": "https://www.algolia.com/policies/data-processing-addendum",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-11-02"
+    },
+    "subprocessors": {
+      "url": "https://www.algolia.com/policies/infrastructure-and-sub-processors",
+      "listType": "page",
+      "notifications": "unknown"
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "SCC",
+        "url": "https://www.algolia.com/policies/data-processing-addendum",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "content",
+      "typical": true,
+      "note": "Indexed records and end-user queries. The DPA lists end-user queries and search logs, the latter for debugging purposes."
+    },
+    {
+      "category": "ip_address",
+      "typical": true,
+      "note": "The DPA lists IP address as network connection data and as an end-user identifier."
+    },
+    {
+      "category": "user_id",
+      "typical": true,
+      "note": "The DPA lists userToken as an end-user identifier."
+    },
+    {
+      "category": "usage_telemetry",
+      "typical": true,
+      "note": "The DPA lists end-user events, which the Insights API receives (clicks, conversions, views)."
+    },
+    {
+      "category": "location",
+      "typical": true,
+      "note": "The DPA lists 'Location of request (as indicated in IP address)'."
+    },
+    {
+      "category": "email",
+      "typical": false,
+      "note": "Listed in the DPA for dashboard administrators, not for end users; may also appear in indexed records the subscriber chooses to send."
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://www.algolia.com/policies/terms",
+      "title": "Algolia Terms of Service (last updated January 12, 2026): contracting entity and governing law",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/policies/data-processing-addendum",
+      "title": "Algolia Data Processing Addendum (last updated January 12, 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/policies/infrastructure-and-sub-processors",
+      "title": "Algolia Infrastructure & Sub-Processors (updated January 12, 2026)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/policies/privacy",
+      "title": "Algolia Privacy Policy: entity addresses and transfer safeguards",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/rest-api/search",
+      "title": "Algolia Search API: base URLs and retry strategy",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/rest-api/insights",
+      "title": "Algolia Insights API: base URLs",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/rest-api/analytics",
+      "title": "Algolia Analytics API: base URLs and analytics region",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/guides/scaling/infrastructure/classic/servers-clusters",
+      "title": "Algolia classic infrastructure: servers, clusters and location of infrastructure",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/guides/scaling/infrastructure/classic/distributed-search-network-dsn",
+      "title": "Algolia Distributed Search Network: server URLs",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.algolia.com/doc/guides/scaling/infrastructure/dynamic/dynamic",
+      "title": "Algolia dynamic scaling infrastructure",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/list",
+      "title": "Data Privacy Framework participant list (searched for Algolia; no record found)",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://registry.npmjs.org/algoliasearch/latest",
+      "title": "npm registry metadata: algoliasearch (repository github.com/algolia/algoliasearch-client-javascript)",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/pypi/algoliasearch/json",
+      "title": "PyPI metadata: algoliasearch (author Algolia Team, repository github.com/algolia/algoliasearch-client-python)",
+      "publisher": "other",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "verifiedBy": "egressa-kb",
+  "notes": "Contracting entity depends on the subscriber's domicile, which source code cannot show: Algolia SAS (France) for subscribers domiciled in Europe, Algolia, Inc. (Delaware, United States) for everyone else; the Terms, the DPA and the sub-processor page all say so. The name field carries both for that reason. Transfers: the DPA applies the EU SCCs (Module Two where the subscriber is a controller, Module Three where it is a processor, governed by French law) and the UK Addendum to Restricted Transfers, and requires SCCs for onward transfers to sub-processors. DPF: neither the Privacy Policy, the Terms nor the DPA mentions the Data Privacy Framework, and a search of the participant list for 'Algolia' returned no record, active or inactive, so no DPF mechanism is recorded. The list renders client-side; it was queried through the JSON API the site's own bundle calls (POST https://dpfapi.azurewebsites.net/api/participants with Status Active and Inactive); the same query returned Stripe, LLC as a control. Sub-processor notification is recorded as unknown because the DPA commits to notice 'either by sending an email or via the user interface dashboard', which matches none of the schema's values exactly. Hosts: only the Search, Insights and Analytics base URLs are listed. Other documented API hosts (personalization, query-suggestions, usage, recommend) and the dashboard are not. The two suffix aliases cover domains Algolia documents as per-application ({APPLICATION_ID}.algolia.net, {APPLICATION_ID}-dsn.algolia.net, {APPLICATION_ID}-N.algolianet.com). Packages: algoliasearch, @algolia/client-search and search-insights list Algolia as author and an Algolia GitHub repository; @algolia/* is recorded as a scope because packages in it are published from Algolia repositories with Algolia maintainers, and the namespace also holds UI and autocomplete libraries."
+}

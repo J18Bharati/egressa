@@ -26,7 +26,8 @@ describe('suppressions, applied by scan()', () => {
 
   it('marks a finding suppressed without removing it', () => {
     const out = result(config);
-    expect(out.findings).toHaveLength(1);
+    expect(out.findings).toHaveLength(result().findings.length);
+    expect(out.findings[0]?.vendor?.id).toBe('stripe');
     expect(out.findings[0]?.suppressed).toBe(true);
     expect(out.findings[0]?.suppression?.reason).toContain('PRIV-1');
     expect(out.summary.suppressed).toBe(1);
@@ -36,7 +37,8 @@ describe('suppressions, applied by scan()', () => {
     const out = result({
       suppressions: [{ vendor: 'stripe', reason: 'temporary', expires: '2026-01-01' }],
     });
-    expect(out.findings.map((f) => f.ruleId)).toEqual([
+    expect(out.findings[0]?.vendor?.id).toBe('stripe');
+    expect(out.findings.map((f) => f.ruleId).slice(0, 2)).toEqual([
       out.findings[0]?.ruleId,
       'config/expired-suppression',
     ]);
@@ -45,7 +47,7 @@ describe('suppressions, applied by scan()', () => {
     expect(out.findings[1]?.remediation.summary).toContain('expired on 2026-01-01');
     // Counted like any other finding, which the CLI used to skip.
     expect(out.summary.byRule['config/expired-suppression']).toBe(1);
-    expect(out.summary.findingCount).toBe(2);
+    expect(out.summary.findingCount).toBe(result().findings.length + 1);
   });
 
   it('leaves other vendors untouched', () => {
@@ -394,13 +396,13 @@ describe('a suppression that matches nothing says so', () => {
   it('says when an earlier suppression already takes everything it matches', () => {
     expect(
       warnings([
-        { vendor: 'stripe', reason: 'x' },
         { rule: 'transfer/adequate-country-egress', reason: 'y' },
+        { vendor: 'stripe', reason: 'x' },
       ]),
     ).toEqual([
       [
         false,
-        'suppression 2 (rule transfer/adequate-country-egress) matches nothing that suppression 1 does not already take',
+        'suppression 2 (vendor stripe) matches nothing that suppression 1 does not already take',
       ],
     ]);
   });
@@ -422,8 +424,8 @@ describe('a summary cut right after an expired finding', () => {
       out.findings[0]?.ruleId,
       'config/expired-suppression',
     ]);
-    expect(shown.truncated).toBe(false);
-    expect(shown.omittedFindings).toBe(0);
+    // Only findings after the pair are cut.
+    expect(shown.omittedFindings).toBe(out.findings.length - 2);
   });
 });
 
