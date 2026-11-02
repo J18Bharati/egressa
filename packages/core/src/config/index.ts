@@ -11,7 +11,7 @@ import {
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import { excludeProblem } from '../discovery/walk.js';
-import { RULE_IDS } from '../rules.js';
+import { isRuleId } from '../rules.js';
 import type { Finding } from '../types.js';
 
 export interface SuppressionRule {
@@ -174,11 +174,7 @@ export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   // Checked here, not only where the CLI reads it, so the same file is valid
   // or invalid on every surface.
   const failOn = config.failOn;
-  if (
-    failOn !== undefined &&
-    failOn !== null &&
-    !(FAIL_ON_LEVELS as readonly unknown[]).includes(failOn)
-  ) {
+  if (failOn !== undefined && failOn !== null && !isFailOnLevel(failOn)) {
     throw new ConfigError(`${path}: failOn must be one of ${FAIL_ON_LEVELS.join(', ')}`);
   }
 
@@ -231,6 +227,10 @@ const MAX_CONFIG_BYTES = 8 * 1_048_576;
 
 /** The levels `failOn` and `--fail-on` accept. */
 export const FAIL_ON_LEVELS = ['none', 'note', 'warning', 'error'] as const;
+
+export function isFailOnLevel(value: unknown): value is FailOnLevel {
+  return FAIL_ON_LEVELS.some((level) => level === value);
+}
 export type FailOnLevel = (typeof FAIL_ON_LEVELS)[number];
 
 // Checked against the interfaces, so a field added there and not here fails
@@ -450,7 +450,7 @@ export function suppressionProblems(
       );
       continue;
     }
-    if (rule.rule !== undefined && !(RULE_IDS as readonly string[]).includes(rule.rule)) {
+    if (rule.rule !== undefined && !isRuleId(rule.rule)) {
       problems.push(
         PLAIN.test(rule.rule)
           ? `${at} names rule "${rule.rule}", which is not a rule`

@@ -6,11 +6,11 @@ import {
   RULES,
   RULE_IDS,
   excludeProblem,
+  isRuleId,
   loadConfig,
   scan,
   summarise,
 } from '@egressa/core';
-import type { RuleId } from '@egressa/core';
 import { loadKnowledgeBase } from '@egressa/kb';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -228,8 +228,10 @@ server.tool(
   { ruleId: z.string().optional().describe('Omit to list every rule id') },
   async ({ ruleId }) => {
     if (!ruleId) return json({ rules: RULE_IDS, disclaimer: DISCLAIMER });
-    const rule = RULES[ruleId as RuleId];
-    if (!rule) return json({ found: false, ruleId, rules: RULE_IDS, disclaimer: DISCLAIMER });
+    if (!isRuleId(ruleId)) {
+      return json({ found: false, ruleId, rules: RULE_IDS, disclaimer: DISCLAIMER });
+    }
+    const rule = RULES[ruleId];
     return json({
       found: true,
       id: rule.id,

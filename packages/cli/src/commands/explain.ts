@@ -1,5 +1,4 @@
-import { DISCLAIMER, RULES, RULE_IDS } from '@egressa/core';
-import type { RuleId } from '@egressa/core';
+import { DISCLAIMER, RULES, RULE_IDS, isRuleId } from '@egressa/core';
 import { defineCommand } from 'citty';
 
 export const explainCommand = defineCommand({
@@ -16,12 +15,12 @@ export const explainCommand = defineCommand({
       for (const id of RULE_IDS) process.stdout.write(`${id}\n`);
       return;
     }
-    const id = String(args.rule) as RuleId;
-    const rule = RULES[id];
-    if (!rule) {
+    const id = String(args.rule);
+    if (!isRuleId(id)) {
       process.stderr.write(`egressa: unknown rule "${id}"\n`);
       process.exit(2);
     }
+    const rule = RULES[id];
     process.stdout.write(
       [
         rule.id,

@@ -218,6 +218,13 @@ describe('vendor lookups', () => {
     expect(result.fullDescription).toContain('Chapter V');
   });
 
+  it('does not explain an inherited object key as a rule', async () => {
+    for (const ruleId of ['constructor', '__proto__', 'toString']) {
+      const result = await call('explain_rule', { ruleId });
+      expect(result.found).toBe(false);
+    }
+  });
+
   it('refuses a negated exclude glob as a tool error rather than ignoring it', async () => {
     const response = (await client.callTool({
       name: 'scan_repository',

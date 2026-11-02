@@ -129,8 +129,16 @@ export const RULES: Readonly<Record<RuleId, RuleDefinition>> = {
 
 export const RULE_IDS = Object.keys(RULES) as RuleId[];
 
+/**
+ * Whether `value` names a rule. Membership in `RULE_IDS`, never a lookup in
+ * `RULES`: that is an object literal, so `RULES['constructor']` is a function
+ * and a truthiness check reads it as a rule.
+ */
+export function isRuleId(value: string): value is RuleId {
+  return RULE_IDS.some((id) => id === value);
+}
+
 export function getRule(id: RuleId): RuleDefinition {
-  const rule = RULES[id];
-  if (!rule) throw new Error(`Unknown rule id: ${id}`);
-  return rule;
+  if (!isRuleId(id)) throw new Error(`Unknown rule id: ${id}`);
+  return RULES[id];
 }

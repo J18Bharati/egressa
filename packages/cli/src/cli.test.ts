@@ -508,6 +508,14 @@ describe('cli end to end', () => {
     expect(stdout).toContain('does not assess or certify GDPR compliance');
   });
 
+  it('refuses a rule id that is only an inherited object key', () => {
+    // `RULES` is an object literal, so `RULES['constructor']` is a function and
+    // read as a rule: this exited 0 printing "Default level: undefined".
+    for (const id of ['constructor', '__proto__', 'toString']) {
+      expect(run(['explain', id]).code).toBe(2);
+    }
+  });
+
   it('lists the knowledge base without needing a scan', () => {
     const { stdout } = run(['vendors', 'list', '--kb', 'kb']);
     expect(stdout).toContain('stripe');

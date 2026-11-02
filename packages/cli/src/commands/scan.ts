@@ -7,6 +7,7 @@ import {
   type FailOnLevel,
   type ScanResult,
   excludeProblem,
+  isFailOnLevel,
   loadConfig,
   scan,
   toSarif,
@@ -223,7 +224,7 @@ function exitCodeFor(result: ScanResult, failOn: FailOnLevel): number {
 }
 
 function parseFailOn(value: string): FailOnLevel {
-  if ((FAIL_ON_LEVELS as readonly string[]).includes(value)) return value as FailOnLevel;
+  if (isFailOnLevel(value)) return value;
   process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON_LEVELS.join(', ')}\n`);
   process.exit(EXIT.USAGE);
 }
