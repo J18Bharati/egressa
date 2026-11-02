@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import { findForbiddenClaims } from './claims.js';
+import { loadConfig } from './config/index.js';
 import { scan } from './scan.js';
 import { FINDINGS_SCHEMA_VERSION } from './types.js';
 
@@ -254,5 +256,115 @@ describe('scan: loopback and documentation hosts', () => {
     expect(result.unmatched.hosts).toEqual(['unknown-vendor.io']);
     const matched = result.findings.flatMap((f) => f.evidence.map((e) => e.matchedOn));
     expect(matched).toEqual(['unknown-vendor.io']);
+  });
+});
+
+describe('scan: kb/stale-entry notes', () => {
+  const root = 'fixtures/repos/express-stripe-sendgrid';
+  const later = new Date('2027-09-06T12:00:00.000Z');
+  const stale = scan({ ...base, root, now: later });
+  const notes = stale.findings.filter((f) => f.ruleId === 'kb/stale-entry');
+
+  it('emits none while every entry is fresh', () => {
+    expect(scan({ ...base, root }).findings.some((f) => f.ruleId === 'kb/stale-entry')).toBe(false);
+  });
+
+  it('emits exactly one note per stale matched vendor, directly after its first finding', () => {
+    const vendors = new Set(
+      stale.findings.filter((f) => f.ruleId !== 'kb/stale-entry').map((f) => f.vendor?.id),
+    );
+    vendors.delete(undefined);
+    expect(notes.map((n) => n.vendor?.id).sort()).toEqual([...vendors].sort());
+    for (const note of notes) {
+      const at = stale.findings.indexOf(note);
+      const first = stale.findings.findIndex((f) => f.vendor?.id === note.vendor?.id);
+      expect(at).toBe(first + 1);
+      expect(note.severity).toBe('note');
+      expect(note.exposure).toBeNull();
+    }
+  });
+
+  it('carries the stale vendor tasks on the note and not on the finding', () => {
+    for (const note of notes) {
+      expect(note.verification?.some((t) => t.reason === 'stale-entry')).toBe(true);
+      const findings = stale.findings.filter(
+        (f) => f.vendor?.id === note.vendor?.id && f.ruleId !== 'kb/stale-entry',
+      );
+      for (const f of findings) expect(f.verification).toBeUndefined();
+    }
+  });
+
+  it('validates against the published schema', () => {
+    const ok = validateFindings(stale);
+    if (!ok) expect(validateFindings.errors?.slice(0, 5)).toEqual([]);
+    expect(ok).toBe(true);
+  });
+
+  it('gives the same ids on two runs and on two stale dates', () => {
+    const ids = (r: ReturnType<typeof scan>) =>
+      r.findings.map((f) => [f.id, ...(f.verification ?? []).map((t) => t.id)]);
+    expect(ids(scan({ ...base, root, now: later }))).toEqual(ids(stale));
+    expect(ids(scan({ ...base, root, now: new Date('2028-01-01T00:00:00Z') }))).toEqual(ids(stale));
+  });
+
+  it('no longer appends a staleness sentence to the vendor finding itself', () => {
+    for (const f of stale.findings.filter((x) => x.ruleId !== 'kb/stale-entry')) {
+      expect(f.remediation.summary).not.toMatch(/re-verified recently/);
+    }
+  });
+
+  it('can be suppressed by rule like any other finding', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-stale-'));
+    writeFileSync(join(dir, 'package.json'), '{"dependencies":{"stripe":"^14.0.0"}}');
+    writeFileSync(
+      join(dir, '.egressa.yml'),
+      'suppressions:\n  - rule: kb/stale-entry\n    reason: re-verification scheduled\n',
+    );
+    const result = scan({ ...base, root: dir, now: later, config: loadConfig(dir) });
+    const note = result.findings.find((f) => f.ruleId === 'kb/stale-entry');
+    expect(note?.suppressed).toBe(true);
+    expect(result.errors.filter((e) => /suppression/.test(e.message))).toEqual([]);
+  });
+});
+
+describe('scan: verification tasks on fresh findings', () => {
+  it('asks for a local entry on an unknown vendor, naming what was seen', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-unknown-'));
+    writeFileSync(
+      join(dir, 'send.js'),
+      "export const send = (b) => fetch('https://api.unlisted-vendor.io/v1/events', { method: 'POST', body: b });\n",
+    );
+    const result = scan({ ...base, root: dir, includeCallsites: true });
+    const unknown = result.findings.filter((f) => f.ruleId === 'transfer/unknown-vendor-egress');
+    expect(unknown).toHaveLength(1);
+    for (const f of unknown) {
+      expect(f.verification).toEqual([
+        expect.objectContaining({
+          vendorId: null,
+          fact: 'local-entry',
+          reason: 'unknown-vendor',
+          subject: f.evidence[0]?.matchedOn,
+          where: [],
+        }),
+      ]);
+    }
+  });
+});
+
+describe('scan: what the skills promise about kb/stale-entry', () => {
+  // The skills tell an agent what a kb/stale-entry finding is and what to do
+  // with it. For a long time the rule existed and nothing emitted it, so the
+  // promise was to a finding no scan could produce.
+  it('is emitted whenever a skill mentions it', () => {
+    const skillText = execFileSync('grep', ['-rl', 'kb/stale-entry', 'skill'], {
+      encoding: 'utf8',
+    });
+    expect(skillText.trim()).not.toBe('');
+    const result = scan({
+      ...base,
+      root: 'fixtures/repos/express-stripe-sendgrid',
+      now: new Date('2027-09-06T12:00:00.000Z'),
+    });
+    expect(result.findings.some((f) => f.ruleId === 'kb/stale-entry')).toBe(true);
   });
 });

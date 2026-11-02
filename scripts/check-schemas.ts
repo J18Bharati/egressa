@@ -12,6 +12,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import { DISCLAIMER, findForbiddenClaims } from '../packages/core/src/claims.js';
 import { RULE_IDS } from '../packages/core/src/rules.js';
 import { FINDINGS_SCHEMA_VERSION, SIGNAL_KINDS } from '../packages/core/src/types.js';
+import { VERIFY_FACTS, VERIFY_REASONS } from '../packages/kb-loader/src/tasks.js';
 
 const root = process.cwd();
 const failures: string[] = [];
@@ -70,6 +71,19 @@ if (kindsMissingInSchema.length > 0) {
 }
 if (kindsMissingInTs.length > 0) {
   failures.push(`signal kinds in schema but not in types.ts: ${kindsMissingInTs.join(', ')}`);
+}
+
+// Verification task vocabularies, for the same reason again.
+for (const [label, ts, json] of [
+  ['verification facts', VERIFY_FACTS, schema.$defs.verifyTask.properties.fact.enum],
+  ['verification reasons', VERIFY_REASONS, schema.$defs.verifyTask.properties.reason.enum],
+] as [string, readonly string[], string[]][]) {
+  const notInSchema = ts.filter((v) => !json.includes(v));
+  const notInTs = json.filter((v) => !ts.includes(v));
+  if (notInSchema.length > 0)
+    failures.push(`${label} in code but not in schema: ${notInSchema.join(', ')}`);
+  if (notInTs.length > 0)
+    failures.push(`${label} in schema but not in code: ${notInTs.join(', ')}`);
 }
 
 // vendor schema is at least parseable and self-consistent

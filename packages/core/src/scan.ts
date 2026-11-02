@@ -271,8 +271,7 @@ export function scan(options: ScanOptions): ScanResult {
     return meetsConfidence(signal.confidence, minConfidence);
   });
 
-  const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
-  const merged = mergeSignals(filtered, { kb, staleVendorIds });
+  const merged = mergeSignals(filtered, { kb, now });
   const narrowedBy = [
     ...(onlyVendor ? ['only some vendors were scanned'] : []),
     ...(minConfidence !== 'low' ? [`findings below ${minConfidence} confidence were dropped`] : []),
@@ -308,7 +307,7 @@ export function scan(options: ScanOptions): ScanResult {
       entryCount: kb.vendors.length,
       license: 'CC-BY-4.0',
       adequacyStatusAsOf: kb.adequacy.asOf,
-      staleEntryCount: staleVendorIds.size,
+      staleEntryCount: kb.staleEntries(now).length,
     },
     scan: {
       root,

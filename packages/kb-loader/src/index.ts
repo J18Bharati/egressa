@@ -3,6 +3,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostTrie, normaliseHost } from './host-trie.js';
 import { normalisePypiName } from './pypi.js';
+import { type VerifyTask, vendorTasks } from './tasks.js';
 import type { AdequacyDecision, AdequacyStatus, PackageMatch, VendorEntry } from './types.js';
 import { KnowledgeBaseError, readAdequacy, readText, readVendor } from './validate.js';
 
@@ -12,6 +13,7 @@ export { HostTrie, normaliseHost } from './host-trie.js';
 export { normalisePypiName } from './pypi.js';
 export * from './dpf-status.js';
 export { collisionIssues, entryIssues, type EntryIssue } from './checks.js';
+export * from './tasks.js';
 
 /** Entries older than this are reported as kb/stale-entry rather than as current. */
 export const STALE_AFTER_DAYS = 180;
@@ -32,6 +34,8 @@ export interface KnowledgeBase {
   /** In-force adequacy or DPF decision for a country, or null. */
   decisionFor(country: string): AdequacyDecision | null;
   staleEntries(asOf?: Date): VendorEntry[];
+  /** Legal facts on this entry a person or agent should re-check, as of `asOf`. */
+  verifyTasks(entry: VendorEntry, asOf?: Date): VerifyTask[];
 }
 
 export interface LoadOptions {
@@ -42,6 +46,10 @@ export interface LoadOptions {
    * "what breaks if adequacy lapses". Values look like "US" or "US:DPF".
    */
   assumeAdequacyLapsed?: string[];
+}
+
+function isStale(entry: VendorEntry, asOf: Date): boolean {
+  return Date.parse(entry.lastVerified) < asOf.getTime() - STALE_AFTER_DAYS * 86_400_000;
 }
 
 export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
@@ -179,8 +187,17 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
     },
 
     staleEntries(asOf = new Date()) {
-      const cutoff = asOf.getTime() - STALE_AFTER_DAYS * 86_400_000;
-      return vendors.filter((v) => Date.parse(v.lastVerified) < cutoff);
+      return vendors.filter((v) => isStale(v, asOf));
+    },
+
+    verifyTasks(entry, asOf = new Date()) {
+      return vendorTasks(entry, {
+        stale: isStale(entry, asOf),
+        dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
+          const decision = kb.decisionFor(j.country);
+          return decision?.mechanism === 'DPF' && decision.status !== 'withdrawn';
+        }),
+      });
     },
   };
   return kb;

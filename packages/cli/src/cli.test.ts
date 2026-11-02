@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FINDINGS_SCHEMA_VERSION, scan } from '@egressa/core';
 import { describe, expect, it } from 'vitest';
+import { exitCodeFor } from './commands/scan.js';
 import { EXIT } from './exit-codes.js';
 import { formatHuman } from './format/human.js';
 import { formatMarkdown } from './format/markdown.js';
@@ -826,5 +827,31 @@ describe('a reference is not rendered like a call site', () => {
     expect(referenceText).toContain('[named, not called]');
     expect(callsiteText).not.toContain('[reference]');
     expect(callsiteText).not.toContain('[named, not called]');
+  });
+});
+
+describe('exit codes for a kb/stale-entry note', () => {
+  // A stale knowledge base entry is a note, so it can fail CI only for a team
+  // that opted into --fail-on note. Anything stricter would break every
+  // pipeline the day an entry crossed the threshold, with no code change.
+  const result = scan({
+    root: 'fixtures/repos/express-stripe-sendgrid',
+    toolVersion: '0.1.0',
+    kbPath: 'kb',
+    now: new Date('2027-09-06T12:00:00.000Z'),
+  });
+  const notesOnly = {
+    ...result,
+    findings: result.findings.filter((f) => f.ruleId === 'kb/stale-entry'),
+  };
+
+  it.each([
+    ['none', 0],
+    ['error', 0],
+    ['warning', 0],
+    ['note', 1],
+  ] as const)('--fail-on %s exits %i', (level, code) => {
+    expect(notesOnly.findings.length).toBeGreaterThan(0);
+    expect(exitCodeFor(notesOnly, level)).toBe(code);
   });
 });

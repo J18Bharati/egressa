@@ -222,7 +222,7 @@ function render(result: ScanResult, format: string, color: boolean): string {
  * or when a knowledge base update lands through a floating npx version, gets
  * removed that afternoon. The shipped GitHub Action template opts in explicitly.
  */
-function exitCodeFor(result: ScanResult, failOn: FailOnLevel): number {
+export function exitCodeFor(result: ScanResult, failOn: FailOnLevel): number {
   if (failOn === 'none') return EXIT.CLEAN;
   const threshold = SEVERITY_RANK[failOn];
   const triggered = result.findings.some(

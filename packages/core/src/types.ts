@@ -8,6 +8,9 @@
  * `schemaVersion`.
  */
 
+export type { VerifyFact, VerifyReason, VerifyTask } from '@egressa/kb';
+import type { VerifyTask } from '@egressa/kb';
+
 export const FINDINGS_SCHEMA_VERSION = '1.1.0';
 
 export type RuleId =
@@ -243,6 +246,13 @@ export interface Finding {
   remediation: Remediation;
   suppressed: boolean;
   suppression: Suppression | null;
+  /**
+   * Legal facts behind this finding that should be re-checked, and where. On a
+   * `kb/stale-entry` note, every legal fact of a stale entry; on a vendor
+   * finding, only the records in doubt; on an unknown vendor, a request to
+   * draft an entry. Absent when there is nothing to check.
+   */
+  verification?: VerifyTask[];
 }
 
 // ---------------------------------------------------------------------------

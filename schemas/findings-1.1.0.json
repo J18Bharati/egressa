@@ -671,7 +671,44 @@
               }
             }
           ]
+        },
+        "verification": {
+          "type": "array",
+          "description": "Legal facts behind this finding to re-check, and where. Every URL in `where` comes from knowledge base data, never from the scanned repository.",
+          "items": { "$ref": "#/$defs/verifyTask" }
         }
+      }
+    },
+    "verifyTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "vendorId", "fact", "reason", "current", "where"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+        "vendorId": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
+        "fact": { "enum": ["dpf", "dpa", "subprocessors", "local-entry"] },
+        "reason": {
+          "enum": [
+            "stale-entry",
+            "dpf-unknown",
+            "dpf-status-unobserved",
+            "dpf-status-qualified",
+            "dpf-status-unrecognised",
+            "unknown-vendor"
+          ]
+        },
+        "current": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "asOf", "url"],
+          "properties": {
+            "value": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
+            "asOf": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/isoDate" }] },
+            "url": { "oneOf": [{ "type": "null" }, { "type": "string" }] }
+          }
+        },
+        "where": { "type": "array", "items": { "type": "string" } },
+        "subject": { "type": "string" }
       }
     }
   }

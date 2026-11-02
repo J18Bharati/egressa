@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { KnowledgeBase, VendorEntry } from '@egressa/kb';
+import { type KnowledgeBase, type VendorEntry, verifyTask } from '@egressa/kb';
 import { type AppliedRegion, isUnmappedRegion, resolveRegion } from '../exposure/regions.js';
 import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
 import { RULES } from '../rules.js';
@@ -11,13 +11,18 @@ import type {
   RuleId,
   Signal,
   TransferFacts,
+  VerifyTask,
 } from '../types.js';
 import { strongest } from './confidence.js';
 
 export interface MergeOptions {
   kb: KnowledgeBase;
-  /** Entries older than the staleness threshold, so findings can note it. */
-  staleVendorIds?: Set<string>;
+  /**
+   * The instant staleness and verification tasks are judged against. Required,
+   * so the same signals always merge to the same findings: a default of "now"
+   * made the output depend on the day a test happened to run.
+   */
+  now: Date;
 }
 
 /**
@@ -29,7 +34,8 @@ export interface MergeOptions {
  * evidence becomes the location and the rest become relatedLocations.
  */
 export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[] {
-  const { kb, staleVendorIds = new Set() } = options;
+  const { kb, now } = options;
+  const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
   const groups = new Map<
     string,
     {
@@ -71,25 +77,79 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
   const findings: Finding[] = [];
   for (const group of groups.values()) {
     findings.push(
-      buildFinding(
-        group.ruleId,
-        group.vendor,
-        group.signals,
-        group.classified,
-        group.region,
-        staleVendorIds,
-        kb,
-      ),
+      buildFinding(group.ruleId, group.vendor, group.signals, group.classified, group.region, kb),
     );
   }
 
   // Deterministic order: severity, then confidence, then vendor name.
-  return findings.sort(
+  findings.sort(
     (a, b) =>
       severityOrder(b) - severityOrder(a) ||
       confidenceOrder(b) - confidenceOrder(a) ||
       (a.vendor?.name ?? a.ruleId).localeCompare(b.vendor?.name ?? b.ruleId),
   );
+  return withVerification(findings, kb, now, staleVendorIds);
+}
+
+/**
+ * Attaches verification tasks, and one `kb/stale-entry` note per stale vendor.
+ *
+ * The note sits directly after that vendor's first finding, for the reason the
+ * expired-suppression note does: a summarised view keeps the first N findings,
+ * and a note placed last is the first thing cut. A stale vendor's tasks go on
+ * the note only, so the same task is never listed twice.
+ */
+function withVerification(
+  findings: Finding[],
+  kb: KnowledgeBase,
+  now: Date,
+  staleVendorIds: Set<string>,
+): Finding[] {
+  const noted = new Set<string>();
+  return findings.flatMap((finding) => {
+    const vendor = finding.vendor ? kb.byId.get(finding.vendor.id) : undefined;
+    if (!vendor) {
+      if (finding.ruleId !== 'transfer/unknown-vendor-egress') return [finding];
+      const subject = finding.evidence[0]?.matchedOn ?? '';
+      const task = verifyTask({
+        vendorId: null,
+        subject,
+        fact: 'local-entry',
+        reason: 'unknown-vendor',
+        current: { value: null, asOf: null, url: null },
+        where: [],
+      });
+      return [{ ...finding, verification: [task] }];
+    }
+    const tasks = kb.verifyTasks(vendor, now);
+    if (!staleVendorIds.has(vendor.id)) {
+      return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
+    }
+    if (noted.has(vendor.id)) return [finding];
+    noted.add(vendor.id);
+    return [finding, staleNote(finding, vendor, tasks)];
+  });
+}
+
+function staleNote(finding: Finding, vendor: VendorEntry, tasks: VerifyTask[]): Finding {
+  const primary = finding.evidence[0];
+  return {
+    ...finding,
+    id: fingerprint(vendor.id, 'kb/stale-entry', primary, null),
+    ruleId: 'kb/stale-entry',
+    exposure: null,
+    severity: RULES['kb/stale-entry'].defaultLevel,
+    remediation: {
+      summary: `The knowledge base entry for ${vendor.name} was last verified on ${vendor.lastVerified}. ${RULES['kb/stale-entry'].help}`,
+      links: [...new Set(tasks.flatMap((t) => t.where))].map((url) => ({
+        label: `${vendor.name}: source to re-check`,
+        url,
+      })),
+    },
+    suppressed: false,
+    suppression: null,
+    verification: tasks,
+  };
 }
 
 /** The rule for a signal that matched no knowledge base entry. */
@@ -103,7 +163,6 @@ function buildFinding(
   signals: Signal[],
   classified: ExposureResult | null,
   region: AppliedRegion | null,
-  staleVendorIds: Set<string>,
   kb: KnowledgeBase,
 ): Finding {
   const evidence = signals.map((s) => toEvidence(s, vendor)).sort(byStrength);
@@ -136,7 +195,7 @@ function buildFinding(
     confidence,
     signals,
     evidence,
-    remediation: buildRemediation(ruleId, vendor, staleVendorIds),
+    remediation: buildRemediation(ruleId, vendor),
     suppressed: false,
     suppression: null,
   };
@@ -192,11 +251,7 @@ function toTransferFacts(vendor: VendorEntry): TransferFacts {
   };
 }
 
-function buildRemediation(
-  ruleId: RuleId,
-  vendor: VendorEntry | null,
-  staleVendorIds: Set<string>,
-): Remediation {
+function buildRemediation(ruleId: RuleId, vendor: VendorEntry | null): Remediation {
   const links: Remediation['links'] = [];
   if (vendor?.legal.dpa.url) {
     links.push({ label: `${vendor.name} data processing agreement`, url: vendor.legal.dpa.url });
@@ -214,12 +269,7 @@ function buildRemediation(
     });
   }
 
-  const stale = vendor && staleVendorIds.has(vendor.id);
-  const summary = stale
-    ? `${RULES[ruleId].help} This entry has not been re-verified recently; check the sources before relying on it.`
-    : RULES[ruleId].help;
-
-  return { summary, links };
+  return { summary: RULES[ruleId].help, links };
 }
 
 /**

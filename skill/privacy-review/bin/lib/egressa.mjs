@@ -13952,6 +13952,7 @@ var import_yaml2 = __toESM(require_dist(), 1);
 import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
 import { basename as basename2, dirname as dirname2, join as join2, relative as relative2, resolve as resolve3, sep as sep3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
+import { createHash } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 var HostTrie = class {
@@ -14013,6 +14014,104 @@ function normaliseHost(host) {
 }
 function normalisePypiName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+var DPF_STATUS_ACTIVE = "Active";
+var DPF_STATUS_QUALIFIED = "Active - Re-certification under Review";
+var DPF_STATUS_NOT_LISTED = "not-listed";
+var fold = (status) => status.trim().replace(/\s+/g, " ").toLowerCase();
+function dpfStatusVerdict(observedStatus, accepted) {
+  const status = fold(observedStatus);
+  if (status === fold(DPF_STATUS_ACTIVE)) return { certified: true, kind: "active" };
+  if (status === fold(DPF_STATUS_QUALIFIED)) return { certified: accepted, kind: "qualified" };
+  if (status === fold(DPF_STATUS_NOT_LISTED)) return { certified: false, kind: "not-listed" };
+  if (status === "inactive" || status.startsWith("inactive - ")) {
+    return { certified: false, kind: "inactive" };
+  }
+  return { certified: false, kind: "unrecognised" };
+}
+function verifyTask(task) {
+  const key = [
+    task.vendorId ?? "",
+    task.subject ?? "",
+    task.fact,
+    task.reason,
+    task.current.url ?? ""
+  ].join("\0");
+  return { id: createHash("sha256").update(key).digest("hex").slice(0, 16), ...task };
+}
+function vendorTasks(entry, context) {
+  const tasks = [];
+  const vendorId = entry.id;
+  const dpfRecords = entry.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
+  for (const m2 of dpfRecords) {
+    const reason = dpfRecordReason(m2) ?? (context.stale ? "stale-entry" : null);
+    if (reason === null) continue;
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpf",
+        reason,
+        current: {
+          value: m2.observedStatus ?? (m2.dpfCertified === true ? "certified" : "not certified"),
+          asOf: m2.lastChecked ?? entry.lastVerified,
+          url: m2.url ?? null
+        },
+        where: m2.url ? [m2.url] : []
+      })
+    );
+  }
+  if (dpfRecords.length === 0 && context.dpfJurisdiction) {
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpf",
+        reason: "dpf-unknown",
+        current: { value: null, asOf: entry.lastVerified, url: null },
+        // The list itself, not a participant page: there is no record to point at.
+        where: ["https://www.dataprivacyframework.gov/list"]
+      })
+    );
+  }
+  if (context.stale) {
+    const dpa = entry.legal.dpa;
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpa",
+        reason: "stale-entry",
+        current: {
+          value: dpa.available ? dpa.type ?? "available" : "not available",
+          asOf: dpa.lastChecked ?? entry.lastVerified,
+          url: dpa.url ?? null
+        },
+        where: dpa.url ? [dpa.url] : []
+      })
+    );
+    const sub = entry.legal.subprocessors;
+    if (sub) {
+      tasks.push(
+        verifyTask({
+          vendorId,
+          fact: "subprocessors",
+          reason: "stale-entry",
+          current: { value: sub.listType ?? "published", asOf: entry.lastVerified, url: sub.url },
+          where: [sub.url]
+        })
+      );
+    }
+  }
+  return tasks;
+}
+function dpfRecordReason(m2) {
+  if (m2.observedStatus === void 0) {
+    return m2.dpfCertified === true ? "dpf-status-unobserved" : null;
+  }
+  const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
+  if (verdict.kind === "unrecognised") return "dpf-status-unrecognised";
+  if (verdict.kind === "qualified" && m2.acceptQualifiedStatus === void 0) {
+    return "dpf-status-qualified";
+  }
+  return null;
 }
 var KnowledgeBaseError = class extends Error {
   constructor(file, issues) {
@@ -14262,21 +14361,10 @@ var conformsTo = (schemaPath) => (value, issues) => {
 };
 var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
 var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
-var DPF_STATUS_ACTIVE = "Active";
-var DPF_STATUS_QUALIFIED = "Active - Re-certification under Review";
-var DPF_STATUS_NOT_LISTED = "not-listed";
-var fold = (status) => status.trim().replace(/\s+/g, " ").toLowerCase();
-function dpfStatusVerdict(observedStatus, accepted) {
-  const status = fold(observedStatus);
-  if (status === fold(DPF_STATUS_ACTIVE)) return { certified: true, kind: "active" };
-  if (status === fold(DPF_STATUS_QUALIFIED)) return { certified: accepted, kind: "qualified" };
-  if (status === fold(DPF_STATUS_NOT_LISTED)) return { certified: false, kind: "not-listed" };
-  if (status === "inactive" || status.startsWith("inactive - ")) {
-    return { certified: false, kind: "inactive" };
-  }
-  return { certified: false, kind: "unrecognised" };
-}
 var STALE_AFTER_DAYS = 180;
+function isStale(entry, asOf) {
+  return Date.parse(entry.lastVerified) < asOf.getTime() - STALE_AFTER_DAYS * 864e5;
+}
 function loadKnowledgeBase(options = {}) {
   const bundled = bundledKbPath();
   if (bundled === void 0) {
@@ -14381,8 +14469,16 @@ function loadKnowledgeBase(options = {}) {
       return decision;
     },
     staleEntries(asOf = /* @__PURE__ */ new Date()) {
-      const cutoff = asOf.getTime() - STALE_AFTER_DAYS * 864e5;
-      return vendors.filter((v2) => Date.parse(v2.lastVerified) < cutoff);
+      return vendors.filter((v2) => isStale(v2, asOf));
+    },
+    verifyTasks(entry, asOf = /* @__PURE__ */ new Date()) {
+      return vendorTasks(entry, {
+        stale: isStale(entry, asOf),
+        dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
+          const decision = kb.decisionFor(j.country);
+          return decision?.mechanism === "DPF" && decision.status !== "withdrawn";
+        })
+      });
     }
   };
   return kb;
@@ -14426,7 +14522,7 @@ import { isAbsolute as isAbsolute32 } from "path";
 import { statSync as statSync22 } from "fs";
 import { basename as basename22 } from "path";
 var import_yaml4 = __toESM(require_dist(), 1);
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 var FINDINGS_SCHEMA_VERSION = "1.1.0";
 var TAGS = ["gdpr", "data-transfer", "third-party"];
 var RULES = {
@@ -17466,7 +17562,8 @@ function parseServerlessYaml(text, path) {
   ];
 }
 function mergeSignals(signals, options) {
-  const { kb, staleVendorIds = /* @__PURE__ */ new Set() } = options;
+  const { kb, now } = options;
+  const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
   const groups = /* @__PURE__ */ new Map();
   for (const signal of signals) {
     const vendor = signal.vendorId ? kb.byId.get(signal.vendorId) ?? null : null;
@@ -17482,25 +17579,64 @@ function mergeSignals(signals, options) {
   const findings = [];
   for (const group of groups.values()) {
     findings.push(
-      buildFinding(
-        group.ruleId,
-        group.vendor,
-        group.signals,
-        group.classified,
-        group.region,
-        staleVendorIds,
-        kb
-      )
+      buildFinding(group.ruleId, group.vendor, group.signals, group.classified, group.region, kb)
     );
   }
-  return findings.sort(
+  findings.sort(
     (a2, b2) => severityOrder(b2) - severityOrder(a2) || confidenceOrder(b2) - confidenceOrder(a2) || (a2.vendor?.name ?? a2.ruleId).localeCompare(b2.vendor?.name ?? b2.ruleId)
   );
+  return withVerification(findings, kb, now, staleVendorIds);
+}
+function withVerification(findings, kb, now, staleVendorIds) {
+  const noted = /* @__PURE__ */ new Set();
+  return findings.flatMap((finding) => {
+    const vendor = finding.vendor ? kb.byId.get(finding.vendor.id) : void 0;
+    if (!vendor) {
+      if (finding.ruleId !== "transfer/unknown-vendor-egress") return [finding];
+      const subject = finding.evidence[0]?.matchedOn ?? "";
+      const task = verifyTask({
+        vendorId: null,
+        subject,
+        fact: "local-entry",
+        reason: "unknown-vendor",
+        current: { value: null, asOf: null, url: null },
+        where: []
+      });
+      return [{ ...finding, verification: [task] }];
+    }
+    const tasks = kb.verifyTasks(vendor, now);
+    if (!staleVendorIds.has(vendor.id)) {
+      return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
+    }
+    if (noted.has(vendor.id)) return [finding];
+    noted.add(vendor.id);
+    return [finding, staleNote(finding, vendor, tasks)];
+  });
+}
+function staleNote(finding, vendor, tasks) {
+  const primary = finding.evidence[0];
+  return {
+    ...finding,
+    id: fingerprint(vendor.id, "kb/stale-entry", primary, null),
+    ruleId: "kb/stale-entry",
+    exposure: null,
+    severity: RULES["kb/stale-entry"].defaultLevel,
+    remediation: {
+      summary: `The knowledge base entry for ${vendor.name} was last verified on ${vendor.lastVerified}. ${RULES["kb/stale-entry"].help}`,
+      links: [...new Set(tasks.flatMap((t2) => t2.where))].map((url) => ({
+        label: `${vendor.name}: source to re-check`,
+        url
+      }))
+    },
+    suppressed: false,
+    suppression: null,
+    verification: tasks
+  };
 }
 function unmatchedRule(signal) {
   return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
 }
-function buildFinding(ruleId, vendor, signals, classified, region, staleVendorIds, kb) {
+function buildFinding(ruleId, vendor, signals, classified, region, kb) {
   const evidence = signals.map((s2) => toEvidence(s2, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
@@ -17524,7 +17660,7 @@ function buildFinding(ruleId, vendor, signals, classified, region, staleVendorId
     confidence,
     signals,
     evidence,
-    remediation: buildRemediation(ruleId, vendor, staleVendorIds),
+    remediation: buildRemediation(ruleId, vendor),
     suppressed: false,
     suppression: null
   };
@@ -17571,7 +17707,7 @@ function toTransferFacts(vendor) {
     disputed: vendor.disputed ?? null
   };
 }
-function buildRemediation(ruleId, vendor, staleVendorIds) {
+function buildRemediation(ruleId, vendor) {
   const links = [];
   if (vendor?.legal.dpa.url) {
     links.push({ label: `${vendor.name} data processing agreement`, url: vendor.legal.dpa.url });
@@ -17588,14 +17724,12 @@ function buildRemediation(ruleId, vendor, staleVendorIds) {
       url: "https://github.com/egressa-dev/egressa/issues/new?template=vendor-request.yml"
     });
   }
-  const stale = vendor && staleVendorIds.has(vendor.id);
-  const summary = stale ? `${RULES[ruleId].help} This entry has not been re-verified recently; check the sources before relying on it.` : RULES[ruleId].help;
-  return { summary, links };
+  return { summary: RULES[ruleId].help, links };
 }
 function fingerprint(vendorKey, ruleId, primary, narrowedCountry) {
   const parts = [vendorKey, ruleId, primary?.file ?? "", primary?.matchedOn ?? ""];
   if (narrowedCountry) parts.push(`region:${narrowedCountry}`);
-  return createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 16);
+  return createHash2("sha256").update(parts.join("\0")).digest("hex").slice(0, 16);
 }
 var SEVERITY_ORDER = { error: 3, warning: 2, note: 1 };
 var CONFIDENCE_ORDER = { high: 3, medium: 2, low: 1 };
@@ -17763,8 +17897,7 @@ function scan(options) {
     if (onlyVendor && (!signal.vendorId || !onlyVendor.includes(signal.vendorId))) return false;
     return meetsConfidence(signal.confidence, minConfidence);
   });
-  const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
-  const merged = mergeSignals(filtered, { kb, staleVendorIds });
+  const merged = mergeSignals(filtered, { kb, now });
   const narrowedBy = [
     ...onlyVendor ? ["only some vendors were scanned"] : [],
     ...minConfidence !== "low" ? [`findings below ${minConfidence} confidence were dropped`] : [],
@@ -17793,7 +17926,7 @@ function scan(options) {
       entryCount: kb.vendors.length,
       license: "CC-BY-4.0",
       adequacyStatusAsOf: kb.adequacy.asOf,
-      staleEntryCount: staleVendorIds.size
+      staleEntryCount: kb.staleEntries(now).length
     },
     scan: {
       root,

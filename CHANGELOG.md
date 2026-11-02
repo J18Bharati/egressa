@@ -23,6 +23,16 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Added
 
+- **`kb/stale-entry` is emitted, and findings carry verification tasks.** The rule was defined and
+  documented, and the skills told agents what to do with it, but no scan ever produced it: a stale
+  entry only appended a sentence to each finding's remediation. Now one note is emitted per stale
+  matched vendor, directly after its first finding, carrying `verification`: each legal fact (DPF
+  record, DPA, sub-processor list) with its current value, its date and the pages to re-check, all
+  taken from the knowledge base and never from the scanned repository. A fresh entry's findings
+  carry tasks only for records in doubt: a DPF status nobody observed, the qualified status, an
+  unrecognised status, or a US jurisdiction with no DPF record. An unknown vendor carries a task to
+  draft an entry. The note is `note` level, so it changes an exit code only under `--fail-on note`.
+  `verification` is optional in schema `1.1.0`, edited in place.
 - **Python dependency manifests are read.** `requirements*.txt` and `pyproject.toml` (PEP 621
   dependencies and extras, PEP 735 groups, Poetry tables), with PEP 503 name normalisation and
   dev-only detection. Both field tests missed Twilio in five production files because no Python

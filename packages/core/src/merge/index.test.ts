@@ -4,6 +4,8 @@ import type { Signal } from '../types.js';
 import { mergeSignals } from './index.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
+/** Fixed, so staleness never depends on the day the suite runs. */
+const now = new Date('2026-11-03T00:00:00Z');
 
 const signal = (overrides: Partial<Signal>): Signal => ({
   kind: 'infrastructure',
@@ -15,7 +17,8 @@ const signal = (overrides: Partial<Signal>): Signal => ({
   ...overrides,
 });
 
-const evidenceOf = (signals: Signal[]) => mergeSignals(signals, { kb }).flatMap((f) => f.evidence);
+const evidenceOf = (signals: Signal[]) =>
+  mergeSignals(signals, { kb, now }).flatMap((f) => f.evidence);
 
 describe('an unmapped region is marked on its evidence', () => {
   it('flags a region the vendor map does not know', () => {
@@ -53,7 +56,7 @@ describe('an unmapped region is marked on its evidence', () => {
           snippet: '"@aws-sdk/client-s3": "^3.0.0"',
         }),
       ],
-      { kb },
+      { kb, now },
     );
     expect(findings).toHaveLength(1);
     const flagged = findings[0]?.evidence.filter((e) => e.regionUnmapped);
@@ -74,7 +77,7 @@ describe('an unmapped region is marked on its evidence', () => {
       [dep, infra],
       [infra, dep],
     ]) {
-      const [finding] = mergeSignals(order, { kb });
+      const [finding] = mergeSignals(order, { kb, now });
       expect(finding?.exposure?.inputs).toContain('region:eu-wset-1');
       expect(finding?.exposure?.inputs).toContain('regionSource:unmapped');
       expect(finding?.exposure?.inputs).not.toContain('regionSource:none');
@@ -84,7 +87,7 @@ describe('an unmapped region is marked on its evidence', () => {
   it('records every unmapped region, not only the first', () => {
     const [finding] = mergeSignals(
       [signal({ region: 'eu-wset-1' }), signal({ region: 'us-esat-1', snippet: 'b' })],
-      { kb },
+      { kb, now },
     );
     expect(finding?.exposure?.inputs).toEqual(
       expect.arrayContaining(['region:eu-wset-1', 'region:us-esat-1', 'regionSource:unmapped']),
