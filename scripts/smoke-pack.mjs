@@ -33,10 +33,11 @@ try {
   const tarballs = readdirSync(out).filter((f) => f.endsWith('.tgz'));
   process.stdout.write(`smoke-pack: packed ${tarballs.join(', ')}\n`);
 
-  // All four are installed together: the CLI and MCP manifests declare
-  // @egressa/core and @egressa/kb as runtime dependencies even though tsup
-  // bundles them, so an `egressa` tarball alone would try to fetch a
-  // @egressa/core that has never been published.
+  // All four are installed together, which is stricter than a user needs: tsup
+  // bundles @egressa/core and @egressa/kb into the CLI and MCP binaries, so
+  // their manifests list those as devDependencies and an `egressa` tarball
+  // installs alone. Installing every tarball is still the cheapest way to prove
+  // each one is intact.
   const inContainer = [
     'set -e',
     'mkdir /work && cd /work',

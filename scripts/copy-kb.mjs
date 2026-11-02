@@ -1,15 +1,69 @@
 /**
- * Copies the knowledge base into each publishable package.
+ * Copies the knowledge base and the licence files into each publishable package.
  *
- * The data is CC-BY-4.0 while the code is Apache-2.0, so it lives at the repo
- * root as the single source of truth and is copied in at build time rather than
- * duplicated in git. Each package ships kb/LICENSE alongside it.
+ * The data is CC-BY-4.0 while the code is Apache-2.0, so both live at the repo
+ * root as the single source of truth and are copied in rather than duplicated in
+ * git. Each tarball must carry what governs it:
+ *
+ *   - LICENSE and NOTICE (Apache-2.0, section 4) in every package;
+ *   - kb/ with its own kb/LICENSE (CC-BY-4.0) in every package that ships data.
+ *
+ * Two entry points, one script:
+ *
+ *   node scripts/copy-kb.mjs           every package -- the tail of `pnpm build`
+ *   node scripts/copy-kb.mjs <dir>     one package   -- each package's `prepack`
+ *
+ * `prepack` runs it so that `pnpm pack` and `pnpm publish` are correct from a
+ * clean checkout, without depending on `pnpm build` having been run last. It
+ * names a single package because `pnpm -r pack` runs the packages concurrently,
+ * and one package's prepack deleting another's kb/ mid-pack would be a race.
+ *
+ * The one-package form also refuses to continue without a built dist/, so an
+ * unbuilt checkout cannot be published as an empty package.
+ *
+ * Paths resolve from this file, not from the working directory: prepack runs
+ * with the package as cwd, the build runs with the repository root.
  */
-import { cpSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, rmSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const targets = ['packages/kb-loader/kb', 'packages/cli/kb', 'packages/mcp/kb'];
-for (const target of targets) {
-  rmSync(target, { recursive: true, force: true });
-  cpSync('kb', target, { recursive: true });
-  console.log(`copied kb -> ${target}`);
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Packages and whether they ship the knowledge base. */
+const packages = {
+  core: { kb: false },
+  'kb-loader': { kb: true },
+  cli: { kb: true },
+  mcp: { kb: true },
+};
+
+const only = process.argv[2];
+if (only !== undefined && !Object.hasOwn(packages, only)) {
+  console.error(
+    `copy-kb: unknown package "${only}" (expected one of ${Object.keys(packages).join(', ')})`,
+  );
+  process.exit(1);
+}
+
+for (const [dir, { kb }] of Object.entries(packages)) {
+  if (only !== undefined && only !== dir) continue;
+  const pkg = join(root, 'packages', dir);
+
+  if (only !== undefined && !existsSync(join(pkg, 'dist'))) {
+    console.error(`copy-kb: packages/${dir}/dist is missing -- run \`pnpm build\` before packing`);
+    process.exit(1);
+  }
+
+  for (const file of ['LICENSE', 'NOTICE']) {
+    cpSync(join(root, file), join(pkg, file));
+  }
+  console.log(`copied LICENSE, NOTICE -> packages/${dir}`);
+
+  if (kb) {
+    const target = join(pkg, 'kb');
+    rmSync(target, { recursive: true, force: true });
+    cpSync(join(root, 'kb'), target, { recursive: true });
+    console.log(`copied kb -> packages/${dir}/kb`);
+  }
 }

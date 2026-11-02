@@ -35,25 +35,25 @@ importers:
 
   packages/cli:
     dependencies:
+      oxc-parser:
+        specifier: ^0.148.0
+        version: 0.148.0
+    devDependencies:
       '@egressa/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@egressa/kb':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../kb-loader
       citty:
         specifier: ^0.1.6
         version: 0.1.6
-      oxc-parser:
-        specifier: ^0.148.0
-        version: 0.148.0
-      yaml:
-        specifier: ^2.6.1
-        version: 2.9.0
-    devDependencies:
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)(yaml@2.9.0)
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
 
   packages/core:
     dependencies:
@@ -88,12 +88,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@egressa/core':
-        specifier: workspace:*
-        version: link:../core
-      '@egressa/kb':
-        specifier: workspace:*
-        version: link:../kb-loader
       '@modelcontextprotocol/sdk':
         specifier: ^1.13.0
         version: 1.30.0(zod@3.25.76)
@@ -104,6 +98,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@egressa/core':
+        specifier: workspace:^
+        version: link:../core
+      '@egressa/kb':
+        specifier: workspace:^
+        version: link:../kb-loader
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)(yaml@2.9.0)

@@ -3,6 +3,25 @@
   "version": "0.2.0",
   "description": "MCP server exposing Egressa transfer-exposure scanning and vendor lookups.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egressa-dev/egressa.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/egressa-dev/egressa#readme",
+  "bugs": {
+    "url": "https://github.com/egressa-dev/egressa/issues"
+  },
+  "keywords": [
+    "gdpr",
+    "privacy",
+    "data-protection",
+    "data-transfer",
+    "cross-border",
+    "static-analysis",
+    "mcp",
+    "model-context-protocol"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20.11"
@@ -10,19 +29,24 @@
   "bin": {
     "egressa-mcp": "./dist/server.js"
   },
-  "files": ["dist", "README.md", "kb"],
+  "files": ["dist", "!dist/**/*.map", "kb", "LICENSE", "NOTICE", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "node ../../scripts/copy-kb.mjs mcp"
   },
   "dependencies": {
-    "@egressa/core": "workspace:*",
-    "@egressa/kb": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.13.0",
     "oxc-parser": "^0.148.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@egressa/core": "workspace:^",
+    "@egressa/kb": "workspace:^",
     "tsup": "^8.5.1"
   }
 }
