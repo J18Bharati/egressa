@@ -1,0 +1,98 @@
+name: Release
+
+# The filename is load-bearing. npm trusted publishing is configured per package
+# on npmjs.com against the exact workflow filename `release.yml`, and a rename
+# turns every publish into ENEEDAUTH. See docs/RELEASING.md before touching it.
+#
+# On every push to main this either opens (or updates) a "Version Packages"
+# pull request, when changesets are pending, or publishes, when the versions in
+# the tree are not yet on npm. All four packages publish in one run: the CLI and
+# the MCP server declare @egressa/core and @egressa/kb as runtime dependencies,
+# so a partial publish installs broken.
+on:
+  push:
+    branches: [main]
+
+# One release at a time, and never cancel a publish half way through.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+jobs:
+  verify:
+    # Gate before anything is published. A version pull request opened with the
+    # default GITHUB_TOKEN does not trigger ci.yml, so this is the first time the
+    # merged version commit is tested.
+    if: github.repository == 'egressa-dev/egressa'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # Reads the version from packageManager in package.json. Do not add a
+      # `version:` input: action-setup refuses two sources that disagree.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm build
+      # Installs the four packed tarballs together in a clean node:20-slim
+      # container and boots both binaries (it rebuilds first). Needs Docker and
+      # the network, both present on ubuntu-latest.
+      - run: pnpm smoke:pack
+
+  release:
+    needs: verify
+    if: github.repository == 'egressa-dev/egressa'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version branch and the release tags
+      pull-requests: write # open and update the "Version Packages" pull request
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      # Trusted publishing needs Node >= 22.14 and npm >= 11.5.1. Do not set
+      # `registry-url` here: it writes an .npmrc that reads NODE_AUTH_TOKEN, and
+      # an empty token would shadow the OIDC exchange.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Require npm 11.5.1 or later
+        run: |
+          if ! node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)"; then
+            npm install -g npm@^11.5.1
+          fi
+          npm --version
+      - run: pnpm install --frozen-lockfile
+      - name: Version pull request, or publish
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          # changeset version, then carry the version into VERSION, the two
+          # TOOL_VERSION literals and the committed skill bundle.
+          version: pnpm version-packages
+          # Builds, then `changeset publish`. In a pnpm workspace that shells out
+          # to `pnpm publish`, which rewrites workspace: ranges to real versions.
+          publish: pnpm release
+          commit: 'Version Packages'
+          title: 'Version Packages'
+          # Four per-package releases of one version are noise; the root
+          # CHANGELOG.md is the human-facing record. Tags are still pushed.
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No NPM_TOKEN anywhere: npm exchanges the OIDC token for a
+          # short-lived publish credential. Provenance is requested explicitly
+          # as well as being the default for a public repository.
+          NPM_CONFIG_PROVENANCE: 'true'

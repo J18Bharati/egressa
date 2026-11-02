@@ -1,0 +1,11 @@
+{
+  "$schema": "../node_modules/@changesets/config/schema.json",
+  "changelog": false,
+  "commit": false,
+  "fixed": [["egressa", "@egressa/core", "@egressa/kb", "@egressa/mcp"]],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}
