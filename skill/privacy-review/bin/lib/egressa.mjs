@@ -12269,8 +12269,8 @@ import {
   realpathSync as realpathSync2,
   statSync as statSync2
 } from "fs";
-import { isAbsolute as isAbsolute2, join as join22, relative as relative3, sep as sep3 } from "path";
-import { relative as relative2, sep as sep22 } from "path";
+import { isAbsolute as isAbsolute2, join as join22, relative as relative3, sep as sep32 } from "path";
+import { relative as relative22, sep as sep22 } from "path";
 
 // ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
 import { readdir, readdirSync, realpath, realpathSync, stat, statSync } from "fs";
@@ -13950,7 +13950,7 @@ var import_yaml2 = __toESM(require_dist(), 1);
 
 // ../kb-loader/dist/index.js
 import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
-import { basename as basename2, dirname as dirname2, join as join2, resolve as resolve3 } from "path";
+import { basename as basename2, dirname as dirname2, join as join2, relative as relative2, resolve as resolve3, sep as sep3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -14376,7 +14376,7 @@ function loadKnowledgeBase(options = {}) {
 function bundledKbPath() {
   const here = dirname2(fileURLToPath2(import.meta.url));
   const root = resolve3(here, "..", "..", "..");
-  const workspaceKb = isThisWorkspace(root) ? join2(root, "kb") : void 0;
+  const workspaceKb = isThisWorkspace(root, here) ? join2(root, "kb") : void 0;
   const ownKb = join2(here, "..", "kb");
   const candidates = basename2(here) === "src" ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
   for (const candidate of candidates) {
@@ -14389,11 +14389,18 @@ function bundledKbPath() {
   }
   return void 0;
 }
-function isThisWorkspace(dir) {
+var WORKSPACE_LOADER_DIRS = /* @__PURE__ */ new Set([
+  "packages/kb-loader/src",
+  "packages/kb-loader/dist",
+  "packages/cli/dist",
+  "packages/mcp/dist"
+]);
+function isThisWorkspace(root, here) {
+  if (!WORKSPACE_LOADER_DIRS.has(relative2(root, here).split(sep3).join("/"))) return false;
   try {
-    readFileSync2(join2(dir, "pnpm-workspace.yaml"), "utf8");
-    const pkg = JSON.parse(readFileSync2(join2(dir, "package.json"), "utf8"));
-    return typeof pkg === "object" && pkg !== null && "name" in pkg && pkg.name === "egressa-workspace";
+    readFileSync2(join2(root, "pnpm-workspace.yaml"), "utf8");
+    readFileSync2(join2(root, "packages", "kb-loader", "src", "index.ts"), "utf8");
+    return true;
   } catch {
     return false;
   }
@@ -14662,7 +14669,7 @@ function loadConfig(root, explicitPath) {
     const summary = (error.message.split("\n")[0] ?? "").replace(/:\s*$/, "");
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  const source = relative3(root, path).split(sep3).join("/") || path;
+  const source = relative3(root, path).split(sep32).join("/") || path;
   if (parsed === null || parsed === void 0) return { source };
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new ConfigError(

@@ -33,6 +33,10 @@ inputs:
 runs:
   using: composite
   steps:
+    # Three steps, in this order, so the upload depends only on a step that
+    # succeeded: the SARIF scan, the upload, then the scan that applies the
+    # caller's `fail-on`. With the gate inside the first step, the upload ran
+    # on the outputs of a step that had just failed.
     - name: Scan
       id: scan
       shell: bash
@@ -42,7 +46,6 @@ runs:
       env:
         EGRESSA_PATH: ${{ inputs.path }}
         EGRESSA_VERSION: ${{ inputs.version }}
-        EGRESSA_FAIL_ON: ${{ inputs.fail-on }}
         EGRESSA_ADEQUACY: ${{ inputs.assume-adequacy-lapsed }}
       run: |
         set -euo pipefail
@@ -65,20 +68,36 @@ runs:
         # `${extra[@]+...}` because macOS runners ship bash 3.2, where an empty
         # array under `set -u` is an unbound variable.
         # `--fail-on none`: a committed .egressa.yml `failOn` would otherwise fail
-        # this scan, and `set -e` would end the step before the next one, the one
-        # carrying the caller's `fail-on` input, which is the only one that decides.
+        # this scan, and the caller's `fail-on` input is the only thing that decides.
         egressa scan "$target" --format sarif --out "$sarif" \
           --fail-on none ${extra[@]+"${extra[@]}"}
         echo "sarif=$sarif" >> "$GITHUB_OUTPUT"
-        egressa scan "$target" --fail-on "$EGRESSA_FAIL_ON" ${extra[@]+"${extra[@]}"}
 
     - name: Upload SARIF
-      # Needs `security-events: write` on the calling job. Skipped when the first
-      # scan never finished, so a crash is not buried under a second error. The
-      # output is set only after that scan succeeds, and it runs even when the
-      # second scan fails the step on the caller's `fail-on`.
-      if: always() && inputs.upload-sarif == 'true' && steps.scan.outputs.sarif != ''
+      # Needs `security-events: write` on the calling job. Runs only when the
+      # scan above succeeded, so a crash is not buried under a second error.
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.sarif != ''
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: ${{ steps.scan.outputs.sarif }}
         category: egressa
+
+    - name: Check fail-on
+      shell: bash
+      # The same rules as the Scan step: inputs through env, run from outside
+      # the workspace, registry named outright.
+      env:
+        EGRESSA_PATH: ${{ inputs.path }}
+        EGRESSA_VERSION: ${{ inputs.version }}
+        EGRESSA_FAIL_ON: ${{ inputs.fail-on }}
+        EGRESSA_ADEQUACY: ${{ inputs.assume-adequacy-lapsed }}
+      run: |
+        set -euo pipefail
+        target="$(cd "$EGRESSA_PATH" && pwd)"
+        extra=()
+        if [ -n "$EGRESSA_ADEQUACY" ]; then
+          extra=(--assume-adequacy-lapsed "$EGRESSA_ADEQUACY")
+        fi
+        cd "$RUNNER_TEMP"
+        egressa() { npx -y --registry=https://registry.npmjs.org/ "egressa@${EGRESSA_VERSION}" "$@"; }
+        egressa scan "$target" --fail-on "$EGRESSA_FAIL_ON" ${extra[@]+"${extra[@]}"}

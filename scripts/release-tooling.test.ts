@@ -174,17 +174,43 @@ describe('the GitHub Action', () => {
     expect(sarifScan.slice(0, end === -1 ? undefined : end)).toContain('--fail-on none');
   });
 
+  /** The composite steps, in order, split on their `- name:` lines. */
+  function steps(): { name: string; body: string }[] {
+    const action = readFileSync('action.yml', 'utf8');
+    return action
+      .split(/\n {4}- name: /)
+      .slice(1)
+      .map((chunk) => ({ name: chunk.slice(0, chunk.indexOf('\n')), body: chunk }));
+  }
+
   // The scanned repository is untrusted, and the upload used to run whenever a
   // file named egressa.sarif existed in the workspace: a committed file was
   // uploaded when the scan crashed, and a committed directory of that name
   // survived `rm -f`, aborting the step while hashFiles still matched it.
   it('uploads only a SARIF file the scan step wrote outside the checkout', () => {
-    const action = readFileSync('action.yml', 'utf8');
-    expect(action).not.toContain('hashFiles(');
-    expect(action).not.toMatch(/--out "\$GITHUB_WORKSPACE/);
-    expect(action).toMatch(/sarif="\$RUNNER_TEMP\//);
-    expect(action).toContain('echo "sarif=$sarif" >> "$GITHUB_OUTPUT"');
-    expect(action).toContain("steps.scan.outputs.sarif != ''");
-    expect(action).toContain('sarif_file: ${{ steps.scan.outputs.sarif }}');
+    const [scan, upload] = steps();
+    expect(readFileSync('action.yml', 'utf8')).not.toContain('hashFiles(');
+    expect(scan?.body).toMatch(/sarif="\$RUNNER_TEMP\//);
+    expect(scan?.body).not.toMatch(/--out "\$GITHUB_WORKSPACE/);
+    // The output is set only once the scan has written the file.
+    const body = scan?.body ?? '';
+    expect(body.indexOf('echo "sarif=$sarif" >> "$GITHUB_OUTPUT"')).toBeGreaterThan(
+      body.indexOf('--format sarif'),
+    );
+    expect(upload?.body).toContain("steps.scan.outputs.sarif != ''");
+    expect(upload?.body).toContain('sarif_file: ${{ steps.scan.outputs.sarif }}');
+  });
+
+  // With the fail-on scan inside the Scan step, a tripped gate failed that
+  // step, and the upload then relied on the outputs of a failed step.
+  it('applies fail-on in its own step, after the upload, so the upload never follows a failure', () => {
+    const names = steps().map((s) => s.name);
+    expect(names).toEqual(['Scan', 'Upload SARIF', 'Check fail-on']);
+    const [scan, upload, gate] = steps();
+    expect(scan?.body).not.toContain('EGRESSA_FAIL_ON');
+    expect(upload?.body).not.toContain('always()');
+    expect(gate?.body).toContain('--fail-on "$EGRESSA_FAIL_ON"');
+    expect(gate?.body).toContain('cd "$RUNNER_TEMP"');
+    expect(gate?.body).toContain('--registry=https://registry.npmjs.org/');
   });
 });

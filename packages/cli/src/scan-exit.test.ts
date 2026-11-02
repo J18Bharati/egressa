@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EXIT } from './exit-codes.js';
 
 // scan's catch used to report every throw as a knowledge base failure (exit 4),
-// sending the reader to the wrong place. Only a KnowledgeBaseError is exit 4;
-// the exit-4 half is tested end to end in kb-loader's validation.test.ts.
+// sending the reader to the wrong place. Only a KnowledgeBaseError is exit 4.
+// kb-loader's validation.test.ts also covers exit 4 end to end, from a bad --kb.
 describe('scan exit codes for a throw from the engine', () => {
   afterEach(() => {
     vi.doUnmock('@egressa/core');

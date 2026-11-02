@@ -62,6 +62,7 @@ describe('no bundled knowledge base', () => {
 // these copy the loader into a scratch layout and load it from there.
 describe('where the bundled knowledge base is looked for', () => {
   const SOURCES = ['index.ts', 'validate.ts', 'host-trie.ts', 'pypi.ts', 'types.ts'];
+  const MISSING = /missing from its installation/;
 
   function layout(): string {
     const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-layout-'));
@@ -90,6 +91,22 @@ describe('where the bundled knowledge base is looked for', () => {
       join(root, 'node_modules/@egressa/kb/dist'),
     );
     expect(() => loadKnowledgeBase()).toThrow(KnowledgeBaseError);
+    expect(() => loadKnowledgeBase()).toThrow(MISSING);
+  });
+
+  it('does not take them from a scanned project dressed up as the workspace', async () => {
+    // From node_modules/egressa/dist, three levels up is the project that
+    // installed it -- the one being scanned. It can carry every marker a
+    // workspace has, including the name; it cannot choose where the loader is.
+    const root = layout();
+    writeFileSync(join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n");
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'egressa-workspace' }));
+    placeLoader(join(root, 'packages/kb-loader/src'));
+    cpSync('kb', join(root, 'kb'), { recursive: true });
+    writeFileSync(join(root, 'kb/schema/vendor-1.0.0.json'), '{}');
+    placeLoader(join(root, 'node_modules/egressa/dist'));
+    const { loadKnowledgeBase } = await loaderAt(join(root, 'node_modules/egressa/dist'));
+    expect(() => loadKnowledgeBase()).toThrow(MISSING);
   });
 
   it('prefers the workspace kb/ over a stale build copy when run from source', async () => {

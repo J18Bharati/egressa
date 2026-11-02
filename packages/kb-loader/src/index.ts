@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostTrie, normaliseHost } from './host-trie.js';
 import { normalisePypiName } from './pypi.js';
@@ -189,19 +189,24 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
  * checked against. A built file finds it at `../kb`: the published package,
  * the CLI bundle and the skill bundle all ship it there.
  *
- * The repository's own kb/ is accepted only when three levels up is provably
- * this workspace. Unchecked, that same relative path from an installed
+ * The repository's own kb/ is accepted only when this file provably sits in
+ * the workspace: three levels up holds pnpm-workspace.yaml and the loader's
+ * own source, and this file's path below it is one the workspace builds.
+ * Unchecked, the same relative path from an installed
  * `node_modules/egressa/dist` is the *scanned project's* kb/, and from
  * `@egressa/kb/dist` it is an unrelated npm package called `kb` -- either of
- * which would then supply the schemas that vouch for the data.
+ * which would then supply the schemas that vouch for the data. A check on the
+ * workspace's *name* was tried first; the scanned project can carry any name.
  *
- * Running from source prefers the workspace copy, because `../kb` there is a
- * gitignored build copy that goes stale the moment a schema is edited.
+ * When the loader itself runs from `src/` (vitest aliases it there) the
+ * workspace copy is preferred, because `../kb` beside src is a gitignored build
+ * copy that goes stale the moment a schema is edited. A built file, including
+ * `tsx` resolving `@egressa/kb` to its dist, uses the copy its build made.
  */
 function bundledKbPath(): string | undefined {
   const here = dirname(fileURLToPath(import.meta.url));
   const root = resolve(here, '..', '..', '..');
-  const workspaceKb = isThisWorkspace(root) ? join(root, 'kb') : undefined;
+  const workspaceKb = isThisWorkspace(root, here) ? join(root, 'kb') : undefined;
   const ownKb = join(here, '..', 'kb');
   const candidates = basename(here) === 'src' ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
   for (const candidate of candidates) {
@@ -216,13 +221,20 @@ function bundledKbPath(): string | undefined {
   return undefined;
 }
 
-function isThisWorkspace(dir: string): boolean {
+/** Where a loader file may sit, relative to the workspace root, to use its kb/. */
+const WORKSPACE_LOADER_DIRS = new Set([
+  'packages/kb-loader/src',
+  'packages/kb-loader/dist',
+  'packages/cli/dist',
+  'packages/mcp/dist',
+]);
+
+function isThisWorkspace(root: string, here: string): boolean {
+  if (!WORKSPACE_LOADER_DIRS.has(relative(root, here).split(sep).join('/'))) return false;
   try {
-    readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8');
-    const pkg: unknown = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-    return (
-      typeof pkg === 'object' && pkg !== null && 'name' in pkg && pkg.name === 'egressa-workspace'
-    );
+    readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8');
+    readFileSync(join(root, 'packages', 'kb-loader', 'src', 'index.ts'), 'utf8');
+    return true;
   } catch {
     return false;
   }
