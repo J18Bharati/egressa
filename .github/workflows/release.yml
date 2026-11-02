@@ -6,9 +6,9 @@ name: Release
 #
 # On every push to main this either opens (or updates) a "Version Packages"
 # pull request, when changesets are pending, or publishes, when the versions in
-# the tree are not yet on npm. All four packages publish in one run: the CLI and
-# the MCP server declare @egressa/core and @egressa/kb as runtime dependencies,
-# so a partial publish installs broken.
+# the tree are not yet on npm. All four packages publish in one run, at one
+# version: they are a Changesets `fixed` group, so a CLI version always names
+# the same engine and knowledge base as the library packages of that version.
 on:
   push:
     branches: [main]
@@ -41,7 +41,11 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      # --ignore-scripts: the release job holds id-token: write, which is all npm
+      # trusted publishing needs, so no dependency's install script may run with
+      # it in reach. Nothing here needs one: oxc-parser and esbuild ship their
+      # native binaries as optionalDependencies.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm verify
       - run: pnpm build
       # Installs the four packed tarballs together in a clean node:20-slim
@@ -75,7 +79,11 @@ jobs:
             npm install -g npm@^11.5.1
           fi
           npm --version
-      - run: pnpm install --frozen-lockfile
+      # --ignore-scripts: the release job holds id-token: write, which is all npm
+      # trusted publishing needs, so no dependency's install script may run with
+      # it in reach. Nothing here needs one: oxc-parser and esbuild ship their
+      # native binaries as optionalDependencies.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Version pull request, or publish
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:

@@ -48,4 +48,11 @@ for (const [file, pattern] of LITERALS) {
   writeFileSync(file, before.replace(pattern, `$1${version}$2`));
 }
 
+// Claude Code decides whether an installed plugin needs updating from this
+// field, so a stale value hides every release from plugin installs.
+const PLUGIN = '.claude-plugin/plugin.json';
+const plugin = JSON.parse(readFileSync(PLUGIN, 'utf8'));
+plugin.version = version;
+writeFileSync(PLUGIN, `${JSON.stringify(plugin, null, 2)}\n`);
+
 console.log(`sync-version: ${version}`);

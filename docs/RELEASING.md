@@ -1,9 +1,10 @@
 # Releasing
 
-Four packages publish together, or the CLI installs broken: `egressa`, `@egressa/core`, `@egressa/kb`,
-`@egressa/mcp`. `egressa` and `@egressa/mcp` declare the other two as runtime dependencies even though
-tsup bundles them. Changesets treats the four as a `fixed` group (`.changeset/config.json`), and
-`.github/workflows/release.yml` publishes them in one run.
+Four packages share one version: `egressa`, `@egressa/core`, `@egressa/kb`, `@egressa/mcp`. The CLI and
+the MCP server bundle core and the knowledge base loader, so each installs on its own; the shared version
+is so that `egressa@x` and `@egressa/kb@x` always mean the same knowledge base and engine. Changesets
+treats the four as a `fixed` group (`.changeset/config.json`), and `.github/workflows/release.yml`
+publishes them in one run.
 
 ## How a release works once the setup below is done
 
@@ -39,7 +40,10 @@ later locally, 2FA on your npm account.
    npm view egressa        # expect E404
    npm org ls egressa      # after creating the org on npmjs.com
    ```
-2. **Publish a placeholder for each of the four names.** The tag keeps `latest` unset until the real release.
+2. **Publish a placeholder for each of the four names.** A first publish sets `latest` whatever `--tag`
+   says, so from here until step 8 `npx egressa` resolves to this placeholder, which has no binary. Keep
+   that window short, and remove the `bootstrap` tag after the real release
+   (`npm dist-tag rm <name> bootstrap`).
    ```bash
    for n in egressa @egressa/core @egressa/kb @egressa/mcp; do
      d=$(mktemp -d) && (cd "$d" && npm init -y >/dev/null \

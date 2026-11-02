@@ -631,16 +631,14 @@ the tsup config) avoids that.
 `docs/mcp.md` are all future tense. The docs say so now, but that is a stopgap.
 
 **Context:** Deliberately deferred — distribution is the Claude Code plugin for now, which needs a
-git ref rather than a registry. There is no `.changeset`, no `.npmrc`, and `.github/workflows/` holds
-only `ci.yml`, `kb-validate.yml` and `link-check.yml`. `SECURITY.md` describes the provenance
-verification step as future, and must be updated when this lands. The published tarball needs a smoke
-test from a clean container, since the bundle's shape has changed twice. `pnpm smoke:pack` now does that
-for all four tarballs installed together in `node:20-slim`, by running `scripts/smoke-dist.mjs`
-against the installed binaries. Wire it into the release workflow rather than writing a second
-check. It installs all four because `egressa` and `@egressa/mcp` declare `@egressa/core` and
-`@egressa/kb` as runtime dependencies although tsup bundles them, so a tarball published alone
-would try to fetch packages that do not exist on the registry. Decide that before the first
-publish.
+git ref rather than a registry.
+
+**Status (2026-11-02): built, never run.** `.changeset/` (a `fixed` group of the four packages),
+`.github/workflows/release.yml` (npm trusted publishing over OIDC, provenance, no token) and
+`docs/RELEASING.md` exist, and `release.yml` runs `pnpm smoke:pack` before publishing. The bundled
+packages were moved to `devDependencies`, so `egressa` and `@egressa/mcp` each install alone. What
+remains is the human-gated half in `docs/RELEASING.md`, and updating `SECURITY.md`'s provenance
+wording once the first release has shipped with it.
 
 **Effort:** M
 **Priority:** P2

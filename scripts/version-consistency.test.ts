@@ -25,6 +25,10 @@ const manifests = [
   'packages/core/package.json',
   'packages/kb-loader/package.json',
   'packages/mcp/package.json',
+  // Claude Code decides whether an installed plugin needs updating from this
+  // field. It sat at 0.1.0 while the tree moved to 0.2.0, so plugin installs of
+  // the skills and the hook would never have been offered a new release.
+  '.claude-plugin/plugin.json',
 ];
 
 /** Each source literal, with the pattern that finds it. */

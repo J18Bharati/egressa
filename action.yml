@@ -45,6 +45,9 @@ runs:
         EGRESSA_ADEQUACY: ${{ inputs.assume-adequacy-lapsed }}
       run: |
         set -euo pipefail
+        # The upload below runs whenever this file exists, so a copy committed in
+        # the scanned repository would be uploaded if the scan crashed first.
+        rm -f "$GITHUB_WORKSPACE/egressa.sarif"
         target="$(cd "$EGRESSA_PATH" && pwd)"
         extra=()
         if [ -n "$EGRESSA_ADEQUACY" ]; then
@@ -57,8 +60,11 @@ runs:
         egressa() { npx -y --registry=https://registry.npmjs.org/ "egressa@${EGRESSA_VERSION}" "$@"; }
         # `${extra[@]+...}` because macOS runners ship bash 3.2, where an empty
         # array under `set -u` is an unbound variable.
+        # `--fail-on none`: a committed .egressa.yml `failOn` would otherwise fail
+        # this scan, and `set -e` would end the step before the next one, the one
+        # carrying the caller's `fail-on` input, which is the only one that decides.
         egressa scan "$target" --format sarif --out "$GITHUB_WORKSPACE/egressa.sarif" \
-          ${extra[@]+"${extra[@]}"}
+          --fail-on none ${extra[@]+"${extra[@]}"}
         egressa scan "$target" --fail-on "$EGRESSA_FAIL_ON" ${extra[@]+"${extra[@]}"}
 
     - name: Upload SARIF

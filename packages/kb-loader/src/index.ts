@@ -45,8 +45,18 @@ export interface LoadOptions {
 export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
   const kbPath = options.kbPath ?? defaultKbPath();
 
-  // The schemas that vouch for the data are the ones this tool shipped with.
-  const schemaDir = join(bundledKbPath() ?? kbPath, 'schema');
+  // The schemas that vouch for the data are the ones this tool shipped with,
+  // never the ones beside the data: a supplied knowledge base carrying a
+  // permissive schema would otherwise vouch for itself. With no bundled copy
+  // there is nothing to check against, so that is a load failure, not a
+  // reason to trust the input.
+  const bundled = bundledKbPath();
+  if (bundled === undefined) {
+    throw new KnowledgeBaseError(kbPath, [
+      "this tool's own schemas were not found, so the knowledge base cannot be checked",
+    ]);
+  }
+  const schemaDir = join(bundled, 'schema');
 
   const vendorDir = join(kbPath, 'vendors');
   let vendorFiles: string[];
@@ -195,5 +205,7 @@ function bundledKbPath(): string | undefined {
 function defaultKbPath(): string {
   const found = bundledKbPath();
   if (found) return found;
-  throw new Error('Could not locate the knowledge base. Pass kbPath explicitly.');
+  throw new KnowledgeBaseError(fileURLToPath(import.meta.url), [
+    'no knowledge base found beside this file; pass kbPath explicitly',
+  ]);
 }

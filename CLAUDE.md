@@ -471,8 +471,11 @@ the failure arrives as a `SyntaxError` at link time before any code runs. `parse
 
 ## Current state
 
-v1 is complete on branch `v1-build` and **unpublished** — nothing on npm, no git remote. The
-release pipeline does not exist yet: no `.changeset`, no `.npmrc`, no release workflow.
+v1 is complete and **unpublished** — nothing on npm, no git remote. The release pipeline exists
+(`.changeset/`, `.github/workflows/release.yml`, npm trusted publishing over OIDC, no token) but has
+never run; `docs/RELEASING.md` holds the ordered human-gated steps that remain. `egressa` and
+`@egressa/mcp` bundle core and the knowledge base loader, so their only runtime dependencies are
+`oxc-parser` (and the MCP SDK and zod for the server).
 
 Because nothing has ever been published, `schemas/findings-1.0.0.json` was corrected in place when
 the Chapter V flag semantics were fixed, rather than a 2.0.0 being cut for a version no consumer

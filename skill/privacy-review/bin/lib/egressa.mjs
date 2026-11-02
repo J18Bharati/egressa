@@ -14265,7 +14265,13 @@ var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(sche
 var STALE_AFTER_DAYS = 180;
 function loadKnowledgeBase(options = {}) {
   const kbPath = options.kbPath ?? defaultKbPath();
-  const schemaDir = join2(bundledKbPath() ?? kbPath, "schema");
+  const bundled = bundledKbPath();
+  if (bundled === void 0) {
+    throw new KnowledgeBaseError(kbPath, [
+      "this tool's own schemas were not found, so the knowledge base cannot be checked"
+    ]);
+  }
+  const schemaDir = join2(bundled, "schema");
   const vendorDir = join2(kbPath, "vendors");
   let vendorFiles;
   try {
@@ -14381,7 +14387,9 @@ function bundledKbPath() {
 function defaultKbPath() {
   const found = bundledKbPath();
   if (found) return found;
-  throw new Error("Could not locate the knowledge base. Pass kbPath explicitly.");
+  throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
+    "no knowledge base found beside this file; pass kbPath explicitly"
+  ]);
 }
 
 // ../core/dist/index.js
