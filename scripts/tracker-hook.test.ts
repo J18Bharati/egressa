@@ -12,8 +12,12 @@ import { describe, expect, it } from 'vitest';
  */
 
 interface HookOutput {
-  hookSpecificOutput?: { hookEventName?: string; permissionDecision?: string };
-  additionalContext?: string;
+  hookSpecificOutput?: {
+    hookEventName?: string;
+    permissionDecision?: string;
+    additionalContext?: string;
+  };
+  additionalContext?: unknown;
   systemMessage?: string;
 }
 
@@ -52,7 +56,7 @@ describe('the strict-necessity exemption is tested against the key, not the edit
         "import { auth } from '@clerk/nextjs/server';\nlocalStorage.setItem('utm_source', src);",
       ),
     );
-    expect(out?.additionalContext).toContain('src/track.ts');
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('src/track.ts');
   });
 
   it('still reports when one key is exempt and another is not', () => {
@@ -62,7 +66,7 @@ describe('the strict-necessity exemption is tested against the key, not the edit
         "localStorage.setItem('csrf_token', t);\nlocalStorage.setItem('utm_campaign', c);",
       ),
     );
-    expect(out?.additionalContext).toBeTruthy();
+    expect(out?.hookSpecificOutput?.additionalContext).toBeTruthy();
   });
 
   it('stays silent when every key is exempt', () => {
@@ -73,14 +77,14 @@ describe('the strict-necessity exemption is tested against the key, not the edit
 
   it('reports a write whose key is not a literal, because it cannot be cleared', () => {
     const { out } = run(write('src/dyn.ts', 'localStorage.setItem(keyName, value);'));
-    expect(out?.additionalContext).toBeTruthy();
+    expect(out?.hookSpecificOutput?.additionalContext).toBeTruthy();
   });
 
   it('reports a server-set cookie through the Next.js cookies() API', () => {
     const { out } = run(
       write('src/mw.ts', "cookies().set('_ga_client', id, { maxAge: 60 * 60 * 24 * 365 });"),
     );
-    expect(out?.additionalContext).toBeTruthy();
+    expect(out?.hookSpecificOutput?.additionalContext).toBeTruthy();
   });
 
   it('stays silent on a server-set session cookie', () => {
@@ -95,13 +99,13 @@ describe('the tracker write hook fires on', () => {
   it('a tracker initialised in new code', () => {
     const { out } = run(write('app/layout.tsx', 'mixpanel.init("TOKEN");'));
     expect(out?.systemMessage).toContain('tracker');
-    expect(out?.additionalContext).toContain('Art 5(3)');
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('Art 5(3)');
   });
 
   it('a session-replay init, with the masking question attached', () => {
     const { out } = run(write('app/rec.ts', 'LogRocket.init("org/app");'));
     expect(out?.systemMessage).toContain('session-replay');
-    expect(out?.additionalContext).toContain('inputSanitizer');
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('inputSanitizer');
   });
 
   it('Sentry Replay added to an existing init', () => {
@@ -111,7 +115,7 @@ describe('the tracker write hook fires on', () => {
       write('sentry.client.config.ts', 'integrations: [Sentry.replayIntegration()],'),
     );
     expect(out?.systemMessage).toContain('session-replay');
-    expect(out?.additionalContext).toContain('maskAllInputs');
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('maskAllInputs');
   });
 
   it('Sentry v7 Replay constructed as a class', () => {
@@ -127,7 +131,7 @@ describe('the tracker write hook fires on', () => {
   it('Datadog RUM replay sampling', () => {
     const { out } = run(write('src/rum.ts', 'datadogRum.init({ sessionReplaySampleRate: 20 });'));
     expect(out?.systemMessage).toContain('session-replay');
-    expect(out?.additionalContext).toContain('defaultPrivacyLevel');
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('defaultPrivacyLevel');
   });
 
   it('a storage write that is not strictly necessary', () => {
@@ -213,9 +217,19 @@ describe('the tracker write hook', () => {
     expect(out?.hookSpecificOutput?.hookEventName).toBe('PreToolUse');
   });
 
+  it('puts the context where Claude Code reads it', () => {
+    // A PreToolUse hook's context is read from hookSpecificOutput only. It was
+    // written at the top level, so Claude never saw the question or the
+    // disclaimer, and this file's assertions read it from the same wrong place.
+    const { out } = run(write('app/where.ts', 'mixpanel.init("T");'));
+    expect(out?.hookSpecificOutput?.additionalContext).toContain('app/where.ts');
+    expect(out?.additionalContext).toBeUndefined();
+  });
+
   it('makes no forbidden claim in anything it emits', () => {
     const { out } = run(write('app/claim.ts', 'mixpanel.init("T");'));
-    const text = `${out?.additionalContext} ${out?.systemMessage}`.toLowerCase();
+    const text =
+      `${out?.hookSpecificOutput?.additionalContext} ${out?.systemMessage}`.toLowerCase();
     for (const word of ['compliant', 'violation', 'illegal', 'unlawful', 'guarantees']) {
       expect(text).not.toContain(word);
     }

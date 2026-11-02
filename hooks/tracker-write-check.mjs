@@ -163,8 +163,9 @@ const main = async () => {
 
   process.stdout.write(
     `${JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'PreToolUse' },
-      additionalContext: context,
+      // Claude Code reads a PreToolUse hook's context from hookSpecificOutput
+      // only; at the top level it was silently dropped.
+      hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: context },
       systemMessage: `egressa: ${hit.what} in ${file} — ${hit.provision}. Run /privacy-review for the full pass.`,
     })}\n`,
   );
