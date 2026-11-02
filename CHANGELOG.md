@@ -8,12 +8,18 @@ data that consumers pin and diff, and a knowledge base update can change what a 
 no code moving at all. A reader working out why today's findings differ from last week's needs to
 know which half moved. Knowledge base versions are dates (`kb.version`); the tool version is semver.
 
+<!-- Update at the first release: the next sentence stops being true then. -->
 Nothing has been published yet — there is no npm release and no git remote — so every version below
 describes the state of the repository rather than an artifact anyone can install.
 
 ## [Unreleased]
 
 Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
+
+This section will become the first published release. The entries under **Fixed** and **Changed**,
+here and in the versions below, record defects and decisions in the repository before anything was
+published: no published version had them. They are kept because they explain why the tool
+behaves as it does. Schema `1.1.0` was corrected in place for the same reason: no consumer had it.
 
 ### Added
 
