@@ -1852,16 +1852,16 @@ var require_foldFlowLines = __commonJS({
         onFold();
       let res = text.slice(0, folds[0]);
       for (let i3 = 0; i3 < folds.length; ++i3) {
-        const fold = folds[i3];
+        const fold2 = folds[i3];
         const end2 = folds[i3 + 1] || text.length;
-        if (fold === 0)
+        if (fold2 === 0)
           res = `
 ${indent}${text.slice(0, end2)}`;
         else {
-          if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text[fold]}\\`;
+          if (mode === FOLD_QUOTED && escapedFolds[fold2])
+            res += `${text[fold2]}\\`;
           res += `
-${indent}${text.slice(fold + 1, end2)}`;
+${indent}${text.slice(fold2 + 1, end2)}`;
         }
       }
       return res;
@@ -5499,8 +5499,8 @@ var require_resolve_flow_scalar = __commonJS({
         if (ch === "\r" && source[i2 + 1] === "\n")
           continue;
         if (ch === "\n") {
-          const { fold, offset } = foldNewline(source, i2);
-          res += fold;
+          const { fold: fold2, offset } = foldNewline(source, i2);
+          res += fold2;
           i2 = offset;
         } else if (ch === "\\") {
           let next = source[++i2];
@@ -5540,19 +5540,19 @@ var require_resolve_flow_scalar = __commonJS({
       return res;
     }
     function foldNewline(source, offset) {
-      let fold = "";
+      let fold2 = "";
       let ch = source[offset + 1];
       while (ch === " " || ch === "	" || ch === "\n" || ch === "\r") {
         if (ch === "\r" && source[offset + 2] !== "\n")
           break;
         if (ch === "\n")
-          fold += "\n";
+          fold2 += "\n";
         offset += 1;
         ch = source[offset + 1];
       }
-      if (!fold)
-        fold = " ";
-      return { fold, offset };
+      if (!fold2)
+        fold2 = " ";
+      return { fold: fold2, offset };
     }
     var escapeCodes = {
       "0": "\0",
@@ -14262,6 +14262,20 @@ var conformsTo = (schemaPath) => (value, issues) => {
 };
 var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
 var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
+var DPF_STATUS_ACTIVE = "Active";
+var DPF_STATUS_QUALIFIED = "Active - Re-certification under Review";
+var DPF_STATUS_NOT_LISTED = "not-listed";
+var fold = (status) => status.trim().replace(/\s+/g, " ").toLowerCase();
+function dpfStatusVerdict(observedStatus, accepted) {
+  const status = fold(observedStatus);
+  if (status === fold(DPF_STATUS_ACTIVE)) return { certified: true, kind: "active" };
+  if (status === fold(DPF_STATUS_QUALIFIED)) return { certified: accepted, kind: "qualified" };
+  if (status === fold(DPF_STATUS_NOT_LISTED)) return { certified: false, kind: "not-listed" };
+  if (status === "inactive" || status.startsWith("inactive - ")) {
+    return { certified: false, kind: "inactive" };
+  }
+  return { certified: false, kind: "unrecognised" };
+}
 var STALE_AFTER_DAYS = 180;
 function loadKnowledgeBase(options = {}) {
   const bundled = bundledKbPath();
@@ -15847,7 +15861,7 @@ function covers(decision, vendor) {
 }
 function vendorIsDpfCertified(vendor) {
   return vendor.legal.transferMechanisms.some(
-    (m2) => m2.mechanism === "DPF" && m2.dpfCertified === true
+    (m2) => m2.mechanism === "DPF" && m2.dpfCertified === true && (m2.observedStatus === void 0 || dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0).certified)
   );
 }
 function flags(input) {

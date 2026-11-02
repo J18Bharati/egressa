@@ -72,6 +72,24 @@ describe('entryIssues', () => {
     expect(messages(entryIssues(draft(edit))).some((m) => pattern.test(m))).toBe(true);
   });
 
+  it('refuses a DPF record whose dpfCertified disagrees with its observed status', () => {
+    const auth0 = structuredClone(read('auth0'));
+    const record = auth0.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
+    expect(record?.observedStatus).toBe('Active - Re-certification under Review');
+    if (record) record.dpfCertified = true;
+    expect(messages(entryIssues(auth0)).some((m) => /reads as qualified/.test(m))).toBe(true);
+    // A named acceptance is what makes the same record valid.
+    if (record) record.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'checked' };
+    expect(entryIssues(auth0)).toEqual([]);
+  });
+
+  it('refuses an acceptance on a status that is not the qualified one', () => {
+    const clerk = structuredClone(read('clerk'));
+    const record = clerk.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
+    if (record) record.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
+    expect(messages(entryIssues(clerk)).some((m) => /applies only to/.test(m))).toBe(true);
+  });
+
   it('never quotes an entry note in a message', () => {
     const issues = entryIssues(
       draft((e) => {

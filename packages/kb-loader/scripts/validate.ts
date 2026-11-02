@@ -9,7 +9,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
-import { aliasCounts, collisionIssues, entryIssues } from '../src/checks.js';
+import { aliasCounts, collisionIssues, entryIssues, unobservedDpfRecords } from '../src/checks.js';
 import type { VendorEntry } from '../src/types.js';
 
 const KB = join(process.cwd(), 'kb');
@@ -146,6 +146,13 @@ for (const file of vendorFiles) {
 const fileFor = (vendorId: string) => `kb/vendors/${vendorId}.json`;
 for (const issue of [...entries.flatMap(entryIssues), ...collisionIssues(entries)]) {
   errors.push(`${fileFor(issue.vendorId)}: ${issue.message}`);
+}
+for (const entry of entries) {
+  for (const url of unobservedDpfRecords(entry)) {
+    warnings.push(
+      `${fileFor(entry.id)}: DPF record ${url} claims certification with no observedStatus (a verification task)`,
+    );
+  }
 }
 
 // --- adequacy status ------------------------------------------------------

@@ -248,6 +248,16 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Changed
 
+- **One closed table decides what a DPF list status means.** A DPF record may carry the status it was
+  read from (`observedStatus`, verbatim), and `dpfCertified` must agree with it: `Active` is
+  certified; `Active - Re-certification under Review`, which the DPF programme does not define, is
+  not, unless a named person accepts it (`acceptQualifiedStatus`); `Inactive`, `not-listed` and any
+  status the table does not know are not. `kb:validate` refuses a record that disagrees, and the
+  engine applies the same table at scan time, so a `--kb` directory cannot read a status two ways.
+  A certified record with no observed status is a validation warning and a verification task.
+- **The authored-override layer is removed.** `kb/ratings/exposure-overrides.json` was read by
+  nothing at run time. The knowledge base checks beyond the schema now live in
+  `packages/kb-loader/src/checks.ts`, shared by `kb:validate` and anything that judges one entry.
 - **`.egressa.yml` is read strictly.** An unknown key, a YAML merge key, a file that is not UTF-8 or
   not a mapping, a symlink that does not resolve, and anything that is not a regular file (a FIFO
   used to hang the scan) are usage errors, where each used to load as something else or as no
@@ -285,6 +295,13 @@ regulator page fetched on 2026-11-02 or 2026-11-03.
 - **Not added:** `ip-api` and `ipify`. ip-api serves requests from servers it does not locate, so an
   entry naming only its Romanian operator would have read as EU-only processing. ipify's pages name
   no legal entity. Both stay unknown vendors, which a reviewer sees.
+- **Four DPF records reclassified under the closed status table.** Auth0 (Okta, Inc.), Notion,
+  Resend and the Meta Platforms, Inc. record read `Active - Re-certification under Review`, so they
+  are recorded `dpfCertified: false` and Auth0, Notion and Resend are no longer cleared to the
+  adequate-country rule. Meta's WhatsApp LLC record reads `Active` and stays certified, and the
+  engine counts a vendor certified when any of its DPF records is. Every other DPF record now
+  carries the status its entry already recorded; six (AWS, Sentry, Stripe and the three Google
+  entries) recorded none and are verification tasks.
 
 ### Knowledge base — `2026.10.09` → `2026.11.02`
 

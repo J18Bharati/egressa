@@ -1,4 +1,9 @@
-import type { AdequacyDecision, KnowledgeBase, VendorEntry } from '@egressa/kb';
+import {
+  type AdequacyDecision,
+  type KnowledgeBase,
+  type VendorEntry,
+  dpfStatusVerdict,
+} from '@egressa/kb';
 import type { Exposure, ExposureLevel, RuleId } from '../types.js';
 import { type AppliedRegion, declaresRegionNarrowing } from './regions.js';
 
@@ -213,9 +218,19 @@ function covers(decision: AdequacyDecision, vendor: VendorEntry): boolean {
   return true;
 }
 
+/**
+ * A DPF record counts only when it says certified and, where it records the
+ * status it was read from, the closed status table agrees. kb:validate holds
+ * the shipped data to that already; this holds a `--kb` directory, which is
+ * schema-checked only at load, to the same rule.
+ */
 function vendorIsDpfCertified(vendor: VendorEntry): boolean {
   return vendor.legal.transferMechanisms.some(
-    (m) => m.mechanism === 'DPF' && m.dpfCertified === true,
+    (m) =>
+      m.mechanism === 'DPF' &&
+      m.dpfCertified === true &&
+      (m.observedStatus === undefined ||
+        dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined).certified),
   );
 }
 

@@ -152,6 +152,7 @@
     "transferMechanisms": [
       {
         "mechanism": "DPF",
+        "observedStatus": "Active",
         "dpfCertified": true,
         "url": "https://www.dataprivacyframework.gov/participant/4595",
         "lastChecked": "2026-09-10"

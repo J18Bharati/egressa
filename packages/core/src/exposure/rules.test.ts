@@ -35,6 +35,28 @@ describe('classifyExposure: DPF is not blanket US adequacy', () => {
     expect(exposure.adequacyDependent).toBe(false);
   });
 
+  it('does not clear a qualified DPF status that nobody accepted', () => {
+    // Auth0's record reads 'Active - Re-certification under Review'. The
+    // closed status table does not count that as certified.
+    expect(classifyExposure(vendor('auth0'), kb).ruleId).not.toBe(
+      'transfer/adequate-country-egress',
+    );
+  });
+
+  it('does not trust a dpfCertified flag its own observed status contradicts', () => {
+    // A --kb directory is schema-checked only, so a record can say certified
+    // while recording a status that is not. The engine applies the table.
+    const forged = structuredClone(vendor('auth0'));
+    for (const m of forged.legal.transferMechanisms) {
+      if (m.mechanism === 'DPF') m.dpfCertified = true;
+    }
+    expect(classifyExposure(forged, kb).exposure.inputs).toContain('dpfCertified:false');
+    for (const m of forged.legal.transferMechanisms) {
+      if (m.mechanism === 'DPF') m.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
+    }
+    expect(classifyExposure(forged, kb).exposure.inputs).toContain('dpfCertified:true');
+  });
+
   it('records the certification check in the audit trail', () => {
     expect(classifyExposure(vendor('stripe'), kb).exposure.inputs).toContain('dpfCertified:true');
     expect(classifyExposure(vendor('openai'), kb).exposure.inputs).toContain('dpfCertified:false');

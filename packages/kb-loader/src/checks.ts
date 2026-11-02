@@ -7,6 +7,7 @@
  * an id, which are the things a contributor needs to find the problem; quoting
  * a note would carry whatever a hostile file put there into the output.
  */
+import { DPF_STATUS_QUALIFIED, dpfStatusVerdict } from './dpf-status.js';
 import { normalisePypiName } from './pypi.js';
 import type { VendorEntry } from './types.js';
 
@@ -56,6 +57,24 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
           );
         }
       }
+    }
+  }
+
+  // A DPF record's `dpfCertified` must be what the closed status table says
+  // its observed status means, so the shipped data and a repository-supplied
+  // fact can never read the same status two ways.
+  for (const m of entry.legal.transferMechanisms) {
+    if (m.mechanism !== 'DPF' || m.observedStatus === undefined) continue;
+    const verdict = dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined);
+    if (verdict.certified !== (m.dpfCertified === true)) {
+      add(
+        `DPF record ${m.url ?? '(no url)'}: dpfCertified is ${m.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`,
+      );
+    }
+    if (m.acceptQualifiedStatus && verdict.kind !== 'qualified') {
+      add(
+        `DPF record ${m.url ?? '(no url)'}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`,
+      );
     }
   }
 
@@ -185,6 +204,19 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
     }
   }
   return issues;
+}
+
+/**
+ * DPF records claiming certification with no observed status behind them.
+ *
+ * A warning rather than an error: the status was never recorded for some
+ * entries written before the closed table existed, and each one is a
+ * verification task for a maintainer, not a broken file.
+ */
+export function unobservedDpfRecords(entry: VendorEntry): string[] {
+  return entry.legal.transferMechanisms
+    .filter((m) => m.mechanism === 'DPF' && m.dpfCertified === true && !m.observedStatus)
+    .map((m) => m.url ?? '(no url)');
 }
 
 /** Package aliases and host patterns across the set, for the summary line. */

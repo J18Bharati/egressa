@@ -256,6 +256,28 @@
               },
               "lastChecked": {
                 "$ref": "#/$defs/isoDate"
+              },
+              "observedStatus": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "The participant's public status exactly as the Data Privacy Framework list showed it on lastChecked, e.g. 'Active' or 'Active - Re-certification under Review'. dpfCertified must agree with it under the engine's closed status table."
+              },
+              "acceptQualifiedStatus": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["acceptedBy", "reason"],
+                "properties": {
+                  "acceptedBy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "description": "A named person's acceptance that a qualified status ('Active - Re-certification under Review') counts as certified for this record. Without it, a qualified status is not certified."
               }
             }
           }

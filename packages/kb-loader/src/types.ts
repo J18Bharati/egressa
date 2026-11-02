@@ -47,6 +47,10 @@ export interface VendorEntry {
       dpfCertified?: boolean;
       url?: string;
       lastChecked?: string;
+      /** The DPF list's public status, verbatim, as observed on `lastChecked`. */
+      observedStatus?: string;
+      /** A named person accepting a qualified status as certified. */
+      acceptQualifiedStatus?: { acceptedBy: string; reason: string };
     }[];
   };
   dataCategories: { category: string; typical: boolean; note?: string }[];

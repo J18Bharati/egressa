@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -61,7 +61,10 @@ describe('no bundled knowledge base', () => {
 // Where the loader looks is decided by the directory its own file sits in, so
 // these copy the loader into a scratch layout and load it from there.
 describe('where the bundled knowledge base is looked for', () => {
-  const SOURCES = ['index.ts', 'validate.ts', 'host-trie.ts', 'pypi.ts', 'types.ts'];
+  // Computed, so a new module in the loader cannot leave this copy unable to boot.
+  const SOURCES = readdirSync('packages/kb-loader/src').filter(
+    (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
+  );
   const MISSING = /missing from its installation/;
 
   function layout(): string {

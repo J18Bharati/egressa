@@ -10,6 +10,8 @@ export * from './types.js';
 export { KnowledgeBaseError } from './validate.js';
 export { HostTrie, normaliseHost } from './host-trie.js';
 export { normalisePypiName } from './pypi.js';
+export * from './dpf-status.js';
+export { collisionIssues, entryIssues, type EntryIssue } from './checks.js';
 
 /** Entries older than this are reported as kb/stale-entry rather than as current. */
 export const STALE_AFTER_DAYS = 180;

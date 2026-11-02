@@ -58,6 +58,7 @@
       },
       {
         "mechanism": "DPF",
+        "observedStatus": "Active",
         "dpfCertified": true,
         "url": "https://www.dataprivacyframework.gov/participant/1738",
         "lastChecked": "2026-09-06"
