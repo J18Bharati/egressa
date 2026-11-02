@@ -113,9 +113,9 @@ function buildFinding(
   const transfer = vendor ? toTransferFacts(vendor) : null;
   // Re-classified with every unmapped region the group's evidence carries, so
   // the audit trail matches the evidence whatever order the signals arrived in.
-  const unmappedRegions = signals
-    .filter((s) => isUnmappedRegion(vendor, s.region))
-    .map((s) => s.region as string);
+  const unmappedRegions = signals.flatMap((s) =>
+    s.region !== undefined && isUnmappedRegion(vendor, s.region) ? [s.region] : [],
+  );
   const exposure =
     vendor && unmappedRegions.length > 0
       ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure
@@ -171,7 +171,7 @@ function toTransferFacts(vendor: VendorEntry): TransferFacts {
     jurisdictions: vendor.processing.jurisdictions.map((j) => j.country),
     euRegion: vendor.processing.euRegion,
     mechanisms: vendor.legal.transferMechanisms.map((m) => ({
-      mechanism: m.mechanism as TransferFacts['mechanisms'][number]['mechanism'],
+      mechanism: m.mechanism,
       ...(m.dpfCertified !== undefined ? { dpfCertified: m.dpfCertified } : {}),
       ...(m.url ? { url: m.url } : {}),
       ...(m.lastChecked ? { lastChecked: m.lastChecked } : {}),
@@ -184,7 +184,7 @@ function toTransferFacts(vendor: VendorEntry): TransferFacts {
     kbSources: vendor.sources.map((s) => ({
       url: s.url,
       title: s.title,
-      publisher: s.publisher as TransferFacts['kbSources'][number]['publisher'],
+      publisher: s.publisher,
       accessedAt: s.accessedAt,
     })),
     lastVerified: vendor.lastVerified,

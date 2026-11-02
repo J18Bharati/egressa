@@ -1,3 +1,22 @@
+/**
+ * Transfer mechanisms a vendor entry may name. Mirrors the `mechanism` enum in
+ * kb/schema/vendor-1.0.0.json; `validation.test.ts` fails if the two drift. A
+ * list rather than a bare union so the test has something to compare at run time.
+ */
+export const TRANSFER_MECHANISMS = ['DPF', 'SCC', 'BCR', 'adequacy', 'derogation', 'none'] as const;
+export type TransferMechanismKind = (typeof TRANSFER_MECHANISMS)[number];
+
+/** Who published a cited source. Mirrors the `publisher` enum in both kb schemas. */
+export const SOURCE_PUBLISHERS = ['vendor', 'regulator', 'other'] as const;
+export type SourcePublisher = (typeof SOURCE_PUBLISHERS)[number];
+
+export interface KbSourceEntry {
+  url: string;
+  title: string;
+  publisher: SourcePublisher;
+  accessedAt: string;
+}
+
 /** Shape of a kb/vendors/<id>.json entry. Mirrors kb/schema/vendor-1.0.0.json. */
 export interface VendorEntry {
   schemaVersion: string;
@@ -24,14 +43,14 @@ export interface VendorEntry {
     dpa: { available: boolean; url?: string; type?: string; lastChecked?: string };
     subprocessors?: { url: string; listType?: string; notifications?: string };
     transferMechanisms: {
-      mechanism: string;
+      mechanism: TransferMechanismKind;
       dpfCertified?: boolean;
       url?: string;
       lastChecked?: string;
     }[];
   };
   dataCategories: { category: string; typical: boolean; note?: string }[];
-  sources: { url: string; title: string; publisher: string; accessedAt: string }[];
+  sources: KbSourceEntry[];
   lastVerified: string;
   verifiedBy?: string;
   disputed?: { issueUrl: string; raisedAt: string; summary: string } | null;
@@ -134,7 +153,7 @@ export interface AdequacyDecision {
 export interface AdequacyStatus {
   schemaVersion: string;
   asOf: string;
-  sources: { url: string; title: string; publisher: string; accessedAt: string }[];
+  sources: KbSourceEntry[];
   decisions: AdequacyDecision[];
 }
 
