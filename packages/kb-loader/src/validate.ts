@@ -38,8 +38,8 @@ export function readText(file: string): string {
 //
 // The schemas in kb/schema/ are the single source of truth, and `pnpm
 // kb:validate` checks the shipped data against them with Ajv. Ajv is not used
-// here: compiling the vendor schema costs ~100 ms on every CLI start and
-// ~285 KB in each bundled binary, for a loader that reads seventeen small
+// here: compiling the vendor schema costs ~150 ms on every CLI start and
+// ~285 KB in each bundled binary, for a loader that reads a few dozen small
 // files. This reads the same schema files and turns the handful of keywords
 // they use into closures, once.
 //

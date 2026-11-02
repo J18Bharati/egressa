@@ -8767,13 +8767,13 @@ var require_ignore = __commonJS({
         const rules = this._rules;
         const { length } = rules;
         const shortcut = this._basenameCount * 2 >= length;
-        const basename3 = shortcut ? basenameOf(path) : path;
+        const basename4 = shortcut ? basenameOf(path) : path;
         for (let index = 0; index < length; index++) {
           const rule = rules[index];
           const { negative } = rule;
           const skip = unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored;
           if (!skip && rule[mode].test(
-            shortcut && rule._basenameOnly ? basename3 : path
+            shortcut && rule._basenameOnly ? basename4 : path
           )) {
             ignored = !negative;
             unignored = negative;
@@ -13049,7 +13049,7 @@ function globSync(globInput, options) {
 // ../core/dist/index.js
 import { constants, closeSync, fstatSync, openSync, readFileSync as readFileSync3, realpathSync as realpathSync3 } from "fs";
 import { isAbsolute as isAbsolute3, join as join3, relative as relative4, sep as sep4 } from "path";
-import { basename as basename2 } from "path";
+import { basename as basename3 } from "path";
 
 // ../../node_modules/.pnpm/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
 function createScanner(text, ignoreTrivia = false) {
@@ -13950,7 +13950,7 @@ var import_yaml2 = __toESM(require_dist(), 1);
 
 // ../kb-loader/dist/index.js
 import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
-import { dirname as dirname2, join as join2, resolve as resolve3 } from "path";
+import { basename as basename2, dirname as dirname2, join as join2, resolve as resolve3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -14264,13 +14264,13 @@ var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schema
 var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
 var STALE_AFTER_DAYS = 180;
 function loadKnowledgeBase(options = {}) {
-  const kbPath = options.kbPath ?? defaultKbPath();
   const bundled = bundledKbPath();
   if (bundled === void 0) {
-    throw new KnowledgeBaseError(kbPath, [
-      "this tool's own schemas were not found, so the knowledge base cannot be checked"
+    throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
+      "this tool's own knowledge base and schemas are missing from its installation; reinstall it"
     ]);
   }
+  const kbPath = options.kbPath ?? bundled;
   const schemaDir = join2(bundled, "schema");
   const vendorDir = join2(kbPath, "vendors");
   let vendorFiles;
@@ -14375,7 +14375,12 @@ function loadKnowledgeBase(options = {}) {
 }
 function bundledKbPath() {
   const here = dirname2(fileURLToPath2(import.meta.url));
-  for (const candidate of [join2(here, "..", "kb"), join2(here, "..", "..", "..", "kb")]) {
+  const root = resolve3(here, "..", "..", "..");
+  const workspaceKb = isThisWorkspace(root) ? join2(root, "kb") : void 0;
+  const ownKb = join2(here, "..", "kb");
+  const candidates = basename2(here) === "src" ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
+  for (const candidate of candidates) {
+    if (candidate === void 0) continue;
     try {
       readFileSync2(join2(candidate, "kb.version"), "utf8");
       return resolve3(candidate);
@@ -14384,12 +14389,14 @@ function bundledKbPath() {
   }
   return void 0;
 }
-function defaultKbPath() {
-  const found = bundledKbPath();
-  if (found) return found;
-  throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
-    "no knowledge base found beside this file; pass kbPath explicitly"
-  ]);
+function isThisWorkspace(dir) {
+  try {
+    readFileSync2(join2(dir, "pnpm-workspace.yaml"), "utf8");
+    const pkg = JSON.parse(readFileSync2(join2(dir, "package.json"), "utf8"));
+    return typeof pkg === "object" && pkg !== null && "name" in pkg && pkg.name === "egressa-workspace";
+  } catch {
+    return false;
+  }
 }
 
 // ../core/dist/index.js
@@ -15638,7 +15645,7 @@ function analyzeManifests(options) {
       errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
-    const file = basename2(path);
+    const file = basename3(path);
     if (file === "package.json") {
       const result2 = parsePackageJson(text, path);
       if (result2.name && path !== "package.json") workspaces.push(result2.name);

@@ -34,6 +34,7 @@ runs:
   using: composite
   steps:
     - name: Scan
+      id: scan
       shell: bash
       # Inputs travel through the environment, never spliced into the script:
       # an expression inside `run:` is pasted into the shell text, so an input
@@ -45,9 +46,12 @@ runs:
         EGRESSA_ADEQUACY: ${{ inputs.assume-adequacy-lapsed }}
       run: |
         set -euo pipefail
-        # The upload below runs whenever this file exists, so a copy committed in
-        # the scanned repository would be uploaded if the scan crashed first.
-        rm -f "$GITHUB_WORKSPACE/egressa.sarif"
+        # The SARIF is written outside the checkout and the upload is gated on
+        # this step saying so. Gating on a file in the workspace let a scanned
+        # repository supply its own: a committed egressa.sarif uploaded when the
+        # scan crashed, and a committed egressa.sarif/ directory survived `rm -f`.
+        sarif="$RUNNER_TEMP/egressa-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.sarif"
+        rm -f "$sarif"
         target="$(cd "$EGRESSA_PATH" && pwd)"
         extra=()
         if [ -n "$EGRESSA_ADEQUACY" ]; then
@@ -63,15 +67,18 @@ runs:
         # `--fail-on none`: a committed .egressa.yml `failOn` would otherwise fail
         # this scan, and `set -e` would end the step before the next one, the one
         # carrying the caller's `fail-on` input, which is the only one that decides.
-        egressa scan "$target" --format sarif --out "$GITHUB_WORKSPACE/egressa.sarif" \
+        egressa scan "$target" --format sarif --out "$sarif" \
           --fail-on none ${extra[@]+"${extra[@]}"}
+        echo "sarif=$sarif" >> "$GITHUB_OUTPUT"
         egressa scan "$target" --fail-on "$EGRESSA_FAIL_ON" ${extra[@]+"${extra[@]}"}
 
     - name: Upload SARIF
       # Needs `security-events: write` on the calling job. Skipped when the first
-      # scan never produced a file, so a crash is not buried under a second error.
-      if: always() && inputs.upload-sarif == 'true' && hashFiles('egressa.sarif') != ''
+      # scan never finished, so a crash is not buried under a second error. The
+      # output is set only after that scan succeeds, and it runs even when the
+      # second scan fails the step on the caller's `fail-on`.
+      if: always() && inputs.upload-sarif == 'true' && steps.scan.outputs.sarif != ''
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
-        sarif_file: egressa.sarif
+        sarif_file: ${{ steps.scan.outputs.sarif }}
         category: egressa

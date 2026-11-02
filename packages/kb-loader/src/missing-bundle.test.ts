@@ -1,7 +1,7 @@
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { join, resolve } from 'node:path';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 // A binary copied without the kb/ beside it, or a bundler that drops it, finds
 // no bundled knowledge base. That is a knowledge base load failure, exit 4,
@@ -55,5 +55,60 @@ describe('no bundled knowledge base', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// Where the loader looks is decided by the directory its own file sits in, so
+// these copy the loader into a scratch layout and load it from there.
+describe('where the bundled knowledge base is looked for', () => {
+  const SOURCES = ['index.ts', 'validate.ts', 'host-trie.ts', 'pypi.ts', 'types.ts'];
+
+  function layout(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-kb-layout-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    return dir;
+  }
+
+  function placeLoader(dir: string): void {
+    mkdirSync(dir, { recursive: true });
+    for (const f of SOURCES) cpSync(resolve('packages/kb-loader/src', f), join(dir, f));
+  }
+
+  async function loaderAt(dir: string): Promise<typeof import('./index.js')> {
+    vi.resetModules();
+    return import(join(dir, 'index.ts'));
+  }
+
+  it('does not take the schemas from a kb/ three levels above an installed package', async () => {
+    // node_modules/@egressa/kb/dist/../../../kb is node_modules/kb: any npm
+    // package of that name. From egressa/dist it is the scanned project's kb/.
+    const root = layout();
+    placeLoader(join(root, 'node_modules/@egressa/kb/dist'));
+    cpSync('kb', join(root, 'node_modules/kb'), { recursive: true });
+    writeFileSync(join(root, 'node_modules/kb/schema/vendor-1.0.0.json'), '{}');
+    const { loadKnowledgeBase, KnowledgeBaseError } = await loaderAt(
+      join(root, 'node_modules/@egressa/kb/dist'),
+    );
+    expect(() => loadKnowledgeBase()).toThrow(KnowledgeBaseError);
+  });
+
+  it('prefers the workspace kb/ over a stale build copy when run from source', async () => {
+    const root = layout();
+    writeFileSync(join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n");
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'egressa-workspace' }));
+    cpSync('kb', join(root, 'kb'), { recursive: true });
+    cpSync('kb', join(root, 'packages/kb-loader/kb'), { recursive: true });
+    writeFileSync(join(root, 'packages/kb-loader/kb/kb.version'), 'stale-build-copy\n');
+    placeLoader(join(root, 'packages/kb-loader/src'));
+    const { loadKnowledgeBase } = await loaderAt(join(root, 'packages/kb-loader/src'));
+    expect(loadKnowledgeBase().version).not.toBe('stale-build-copy');
+  });
+
+  it('uses the kb/ shipped beside a built file', async () => {
+    const root = layout();
+    cpSync('kb', join(root, 'node_modules/@egressa/kb/kb'), { recursive: true });
+    placeLoader(join(root, 'node_modules/@egressa/kb/dist'));
+    const { loadKnowledgeBase } = await loaderAt(join(root, 'node_modules/@egressa/kb/dist'));
+    expect(loadKnowledgeBase().vendors.length).toBeGreaterThan(0);
   });
 });

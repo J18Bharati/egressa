@@ -173,4 +173,18 @@ describe('the GitHub Action', () => {
     const end = sarifScan.search(/\n\s*egressa scan /);
     expect(sarifScan.slice(0, end === -1 ? undefined : end)).toContain('--fail-on none');
   });
+
+  // The scanned repository is untrusted, and the upload used to run whenever a
+  // file named egressa.sarif existed in the workspace: a committed file was
+  // uploaded when the scan crashed, and a committed directory of that name
+  // survived `rm -f`, aborting the step while hashFiles still matched it.
+  it('uploads only a SARIF file the scan step wrote outside the checkout', () => {
+    const action = readFileSync('action.yml', 'utf8');
+    expect(action).not.toContain('hashFiles(');
+    expect(action).not.toMatch(/--out "\$GITHUB_WORKSPACE/);
+    expect(action).toMatch(/sarif="\$RUNNER_TEMP\//);
+    expect(action).toContain('echo "sarif=$sarif" >> "$GITHUB_OUTPUT"');
+    expect(action).toContain("steps.scan.outputs.sarif != ''");
+    expect(action).toContain('sarif_file: ${{ steps.scan.outputs.sarif }}');
+  });
 });

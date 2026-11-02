@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostTrie, normaliseHost } from './host-trie.js';
 import { normalisePypiName } from './pypi.js';
@@ -43,19 +43,18 @@ export interface LoadOptions {
 }
 
 export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
-  const kbPath = options.kbPath ?? defaultKbPath();
-
   // The schemas that vouch for the data are the ones this tool shipped with,
   // never the ones beside the data: a supplied knowledge base carrying a
   // permissive schema would otherwise vouch for itself. With no bundled copy
   // there is nothing to check against, so that is a load failure, not a
-  // reason to trust the input.
+  // reason to trust the input -- and passing --kb cannot repair it.
   const bundled = bundledKbPath();
   if (bundled === undefined) {
-    throw new KnowledgeBaseError(kbPath, [
-      "this tool's own schemas were not found, so the knowledge base cannot be checked",
+    throw new KnowledgeBaseError(fileURLToPath(import.meta.url), [
+      "this tool's own knowledge base and schemas are missing from its installation; reinstall it",
     ]);
   }
+  const kbPath = options.kbPath ?? bundled;
   const schemaDir = join(bundled, 'schema');
 
   const vendorDir = join(kbPath, 'vendors');
@@ -186,12 +185,27 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
 }
 
 /**
- * The bundled knowledge base. In the published package this sits alongside dist/;
- * in the workspace it is the repo's kb/ directory.
+ * The bundled knowledge base, and with it the schemas every knowledge base is
+ * checked against. A built file finds it at `../kb`: the published package,
+ * the CLI bundle and the skill bundle all ship it there.
+ *
+ * The repository's own kb/ is accepted only when three levels up is provably
+ * this workspace. Unchecked, that same relative path from an installed
+ * `node_modules/egressa/dist` is the *scanned project's* kb/, and from
+ * `@egressa/kb/dist` it is an unrelated npm package called `kb` -- either of
+ * which would then supply the schemas that vouch for the data.
+ *
+ * Running from source prefers the workspace copy, because `../kb` there is a
+ * gitignored build copy that goes stale the moment a schema is edited.
  */
 function bundledKbPath(): string | undefined {
   const here = dirname(fileURLToPath(import.meta.url));
-  for (const candidate of [join(here, '..', 'kb'), join(here, '..', '..', '..', 'kb')]) {
+  const root = resolve(here, '..', '..', '..');
+  const workspaceKb = isThisWorkspace(root) ? join(root, 'kb') : undefined;
+  const ownKb = join(here, '..', 'kb');
+  const candidates = basename(here) === 'src' ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
     try {
       readFileSync(join(candidate, 'kb.version'), 'utf8');
       return resolve(candidate);
@@ -202,10 +216,14 @@ function bundledKbPath(): string | undefined {
   return undefined;
 }
 
-function defaultKbPath(): string {
-  const found = bundledKbPath();
-  if (found) return found;
-  throw new KnowledgeBaseError(fileURLToPath(import.meta.url), [
-    'no knowledge base found beside this file; pass kbPath explicitly',
-  ]);
+function isThisWorkspace(dir: string): boolean {
+  try {
+    readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8');
+    const pkg: unknown = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    return (
+      typeof pkg === 'object' && pkg !== null && 'name' in pkg && pkg.name === 'egressa-workspace'
+    );
+  } catch {
+    return false;
+  }
 }

@@ -5,7 +5,7 @@
  *   pnpm smoke:pack
  *
  * `scripts/smoke-dist.mjs` proves the repository's own `dist/` starts. This
- * proves the *published shape* starts: `pnpm pack` rewrites `workspace:*`, drops
+ * proves the *published shape* starts: `pnpm pack` rewrites `workspace:^`, drops
  * everything outside `files`, and installs with no workspace, no hoisting and no
  * stray `node_modules` in a parent directory to lean on. The bundle's shape has
  * changed twice, and each change was a way for the two to differ.

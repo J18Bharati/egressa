@@ -3,7 +3,7 @@
  * Copy the built CLI and the knowledge base into skill/privacy-review/bin/ so the
  * transfers specialist can run a scan with no install step.
  *
- * Layout matters. kb-loader's defaultKbPath() looks for `../kb` relative to the
+ * Layout matters. kb-loader's bundledKbPath() looks for `../kb` relative to the
  * JavaScript file, so the binary sits in bin/lib/ and the data in bin/kb/.
  * The directory is `lib`, not `dist`, because the repo's .gitignore excludes
  * `dist/` everywhere -- naming it dist would silently drop the bundle from git
