@@ -75,8 +75,10 @@ describe('entryIssues', () => {
   it('refuses a DPF record whose dpfCertified disagrees with its observed status', () => {
     const auth0 = structuredClone(read('auth0'));
     const record = auth0.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
-    expect(record?.observedStatus).toBe('Active - Re-certification under Review');
-    if (record) record.dpfCertified = true;
+    if (record) {
+      record.observedStatus = 'Active - Re-certification under Review';
+      record.dpfCertified = true;
+    }
     expect(messages(entryIssues(auth0)).some((m) => /reads as qualified/.test(m))).toBe(true);
     // A named acceptance is what makes the same record valid.
     if (record) record.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'checked' };

@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { STALE_AFTER_DAYS, type VendorEntry, loadKnowledgeBase } from './index.js';
+import {
+  STALE_AFTER_DAYS,
+  type VendorEntry,
+  knowledgeBaseTasks,
+  loadKnowledgeBase,
+} from './index.js';
 import { vendorTasks } from './tasks.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
@@ -14,6 +19,16 @@ const entry = (id: string): VendorEntry => {
 const staleDay = (e: VendorEntry) =>
   new Date(Date.parse(e.lastVerified) + (STALE_AFTER_DAYS + 1) * 86_400_000);
 const freshDay = (e: VendorEntry) => new Date(Date.parse(e.lastVerified) + 86_400_000);
+/** A copy of a shipped entry with its DPF records edited, so a case never rests on today's data. */
+function withDpf(
+  id: string,
+  edit: (m: VendorEntry['legal']['transferMechanisms'][number]) => void,
+): VendorEntry {
+  const copy = structuredClone(entry(id));
+  for (const m of copy.legal.transferMechanisms) if (m.mechanism === 'DPF') edit(m);
+  return copy;
+}
+const fresh = { stale: false, dpfJurisdiction: true };
 const reasons = (id: string, asOf: Date) =>
   kb.verifyTasks(entry(id), asOf).map((t) => `${t.fact}:${t.reason}`);
 
@@ -23,11 +38,19 @@ describe('verify tasks', () => {
   });
 
   it('lists a qualified status nobody has accepted, even when fresh', () => {
-    expect(reasons('auth0', freshDay(entry('auth0')))).toEqual(['dpf:dpf-status-qualified']);
+    const qualified = withDpf('clerk', (m) => {
+      m.observedStatus = 'Active - Re-certification under Review';
+      m.dpfCertified = false;
+    });
+    expect(vendorTasks(qualified, fresh).map((t) => t.reason)).toEqual(['dpf-status-qualified']);
   });
 
   it('lists a certified record with no observed status', () => {
-    expect(reasons('stripe', freshDay(entry('stripe')))).toContain('dpf:dpf-status-unobserved');
+    const unobserved = structuredClone(entry('clerk'));
+    unobserved.legal.transferMechanisms = unobserved.legal.transferMechanisms.map(
+      ({ observedStatus: _, ...m }) => m,
+    );
+    expect(vendorTasks(unobserved, fresh).map((t) => t.reason)).toEqual(['dpf-status-unobserved']);
   });
 
   it('lists a US vendor with no DPF record at all', () => {
@@ -48,23 +71,29 @@ describe('verify tasks', () => {
       'dpa:stale-entry',
       'subprocessors:stale-entry',
     ]);
-    expect(reasons('auth0', staleDay(entry('auth0')))[0]).toBe('dpf:dpf-status-qualified');
+    const qualified = withDpf('clerk', (m) => {
+      m.observedStatus = 'Active - Re-certification under Review';
+      m.dpfCertified = false;
+    });
+    expect(vendorTasks(qualified, { ...fresh, stale: true })[0]?.reason).toBe(
+      'dpf-status-qualified',
+    );
   });
 
   it('accepts an accepted qualified status without a standing task', () => {
-    const auth0 = structuredClone(entry('auth0'));
-    for (const m of auth0.legal.transferMechanisms) {
-      if (m.mechanism === 'DPF') m.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
-    }
-    expect(vendorTasks(auth0, { stale: false, dpfJurisdiction: true })).toEqual([]);
+    const accepted = withDpf('clerk', (m) => {
+      m.observedStatus = 'Active - Re-certification under Review';
+      m.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
+    });
+    expect(vendorTasks(accepted, fresh)).toEqual([]);
   });
 
   it('lists an unrecognised status', () => {
-    const clerk = structuredClone(entry('clerk'));
-    for (const m of clerk.legal.transferMechanisms) {
-      if (m.mechanism === 'DPF') m.observedStatus = 'Pending';
-    }
-    const [task] = vendorTasks(clerk, { stale: false, dpfJurisdiction: true });
+    const clerk = withDpf('clerk', (m) => {
+      m.observedStatus = 'Pending';
+      m.dpfCertified = false;
+    });
+    const [task] = vendorTasks(clerk, fresh);
     expect(task?.reason).toBe('dpf-status-unrecognised');
     expect(task?.current.value).toBe('Pending');
   });
@@ -88,5 +117,18 @@ describe('verify tasks', () => {
         }
       }
     }
+  });
+});
+
+describe('knowledgeBaseTasks, behind pnpm kb:tasks', () => {
+  const asOf = new Date('2027-09-06T00:00:00Z');
+
+  it('is identical on two runs for the same date', () => {
+    expect(knowledgeBaseTasks(kb, asOf)).toEqual(knowledgeBaseTasks(kb, asOf));
+  });
+
+  it('lists vendors in id order, and is what each entry yields on its own', () => {
+    const sorted = [...kb.vendors].sort((a, b) => a.id.localeCompare(b.id));
+    expect(knowledgeBaseTasks(kb, asOf)).toEqual(sorted.flatMap((v) => kb.verifyTasks(v, asOf)));
   });
 });

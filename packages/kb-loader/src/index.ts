@@ -48,6 +48,17 @@ export interface LoadOptions {
   assumeAdequacyLapsed?: string[];
 }
 
+/**
+ * Every verification task the knowledge base itself generates as of `asOf`,
+ * in vendor id order: what `pnpm kb:tasks` hands a maintainer. The same builder
+ * a scan uses, so a maintainer works from the tasks users see.
+ */
+export function knowledgeBaseTasks(kb: KnowledgeBase, asOf: Date): VerifyTask[] {
+  return [...kb.vendors]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .flatMap((vendor) => kb.verifyTasks(vendor, asOf));
+}
+
 function isStale(entry: VendorEntry, asOf: Date): boolean {
   return Date.parse(entry.lastVerified) < asOf.getTime() - STALE_AFTER_DAYS * 86_400_000;
 }

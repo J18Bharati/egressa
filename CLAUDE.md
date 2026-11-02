@@ -23,6 +23,7 @@ pnpm build           # tsup across all packages, then scripts/copy-kb.mjs
 pnpm lint:fix        # biome check --write
 pnpm kb:validate     # schema + source + collision checks over kb/
 pnpm kb:coverage     # fraction of detected hosts/packages matching a KB entry
+pnpm kb:tasks        # verification tasks the KB itself generates (JSON; --as-of YYYY-MM-DD)
 pnpm schema:check    # asserts types.ts, schemas/, and the disclaimer agree
 ```
 

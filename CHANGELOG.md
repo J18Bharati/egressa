@@ -23,6 +23,9 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Added
 
+- **`pnpm kb:tasks`** lists the verification tasks the shipped knowledge base generates, as JSON,
+  using the builder a scan uses. It reads no repository and reaches no network. `kb/KB_POLICY.md`
+  describes the re-verification flow it feeds.
 - **`kb/stale-entry` is emitted, and findings carry verification tasks.** The rule was defined and
   documented, and the skills told agents what to do with it, but no scan ever produced it: a stale
   entry only appended a sentence to each finding's remediation. Now one note is emitted per stale
@@ -305,13 +308,17 @@ regulator page fetched on 2026-11-02 or 2026-11-03.
 - **Not added:** `ip-api` and `ipify`. ip-api serves requests from servers it does not locate, so an
   entry naming only its Romanian operator would have read as EU-only processing. ipify's pages name
   no legal entity. Both stay unknown vendors, which a reviewer sees.
-- **Four DPF records reclassified under the closed status table.** Auth0 (Okta, Inc.), Notion,
-  Resend and the Meta Platforms, Inc. record read `Active - Re-certification under Review`, so they
-  are recorded `dpfCertified: false` and Auth0, Notion and Resend are no longer cleared to the
-  adequate-country rule. Meta's WhatsApp LLC record reads `Active` and stays certified, and the
-  engine counts a vendor certified when any of its DPF records is. Every other DPF record now
-  carries the status its entry already recorded; six (AWS, Sentry, Stripe and the three Google
-  entries) recorded none and are verification tasks.
+- **DPF records read under one closed status table, and every one now carries the status it was
+  read from.** Notion, Resend and the Meta Platforms, Inc. record read `Active - Re-certification
+  under Review` on 2026-11-03, so they are recorded `dpfCertified: false`, and Notion and Resend are
+  no longer cleared to the adequate-country rule. Meta's WhatsApp LLC record reads `Active` and
+  stays certified, because the engine counts a vendor certified when any of its DPF records is.
+  Auth0 (Okta, Inc.) read the qualified status on 2026-09-10 and `Active` on 2026-11-03, so it
+  stays certified. AWS, Sentry, Stripe and the three Google entries had recorded no status; all
+  six read `Active` on 2026-11-03, found by running `pnpm kb:tasks` against this knowledge base.
+  Stripe's record moved from participant 6436 (Stripe, Inc., which carries no certification) to
+  10014 (Stripe, LLC, the entity Stripe's DPA and DPF notice name), and the Google entries now cite
+  Google LLC's participant record 5780 rather than Google's own pages.
 
 ### Knowledge base — `2026.10.09` → `2026.11.02`
 

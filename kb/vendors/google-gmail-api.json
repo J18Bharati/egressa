@@ -50,8 +50,9 @@
       {
         "mechanism": "DPF",
         "dpfCertified": true,
-        "url": "https://policies.google.com/privacy/frameworks?hl=en",
-        "lastChecked": "2026-10-09"
+        "url": "https://www.dataprivacyframework.gov/participant/5780",
+        "lastChecked": "2026-11-03",
+        "observedStatus": "Active"
       }
     ]
   },
@@ -87,6 +88,12 @@
       "title": "Google Privacy Policy: data transfer frameworks",
       "publisher": "vendor",
       "accessedAt": "2026-10-09"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5780",
+      "title": "Data Privacy Framework participant record 5780",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-03"
     },
     {
       "url": "https://developers.google.com/workspace/gmail/api/reference/rest",

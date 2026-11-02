@@ -75,7 +75,8 @@
         "mechanism": "DPF",
         "dpfCertified": true,
         "url": "https://www.dataprivacyframework.gov/participant/5869",
-        "lastChecked": "2026-09-06"
+        "lastChecked": "2026-11-03",
+        "observedStatus": "Active"
       },
       { "mechanism": "SCC", "url": "https://sentry.io/legal/dpa/", "lastChecked": "2026-09-06" }
     ]
@@ -133,7 +134,7 @@
       "url": "https://www.dataprivacyframework.gov/participant/5869",
       "title": "Data Privacy Framework participant record 5869",
       "publisher": "regulator",
-      "accessedAt": "2026-09-06"
+      "accessedAt": "2026-11-03"
     }
   ],
   "lastVerified": "2026-09-06",

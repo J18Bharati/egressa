@@ -49,8 +49,9 @@
       {
         "mechanism": "DPF",
         "dpfCertified": true,
-        "url": "https://business.safety.google/adsdatatransfers/",
-        "lastChecked": "2026-09-06"
+        "url": "https://www.dataprivacyframework.gov/participant/5780",
+        "lastChecked": "2026-11-03",
+        "observedStatus": "Active"
       },
       {
         "mechanism": "SCC",
@@ -84,6 +85,12 @@
       "title": "Advertising and analytics products: information about international data transfers",
       "publisher": "vendor",
       "accessedAt": "2026-09-06"
+    },
+    {
+      "url": "https://www.dataprivacyframework.gov/participant/5780",
+      "title": "Data Privacy Framework participant record 5780",
+      "publisher": "regulator",
+      "accessedAt": "2026-11-03"
     },
     {
       "url": "https://support.google.com/analytics/answer/12017362?hl=en",

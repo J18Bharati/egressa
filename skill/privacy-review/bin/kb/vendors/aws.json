@@ -226,7 +226,8 @@
         "mechanism": "DPF",
         "dpfCertified": true,
         "url": "https://www.dataprivacyframework.gov/participant/5776",
-        "lastChecked": "2026-09-21"
+        "lastChecked": "2026-11-03",
+        "observedStatus": "Active"
       },
       {
         "mechanism": "SCC",
@@ -264,7 +265,7 @@
       "url": "https://www.dataprivacyframework.gov/participant/5776",
       "title": "Data Privacy Framework participant record 5776",
       "publisher": "regulator",
-      "accessedAt": "2026-09-21"
+      "accessedAt": "2026-11-03"
     },
     {
       "url": "https://aws.amazon.com/compliance/sub-processors/",

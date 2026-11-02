@@ -72,14 +72,14 @@
         "observedStatus": "Active - Re-certification under Review",
         "dpfCertified": false,
         "url": "https://www.dataprivacyframework.gov/participant/4452",
-        "lastChecked": "2026-11-02"
+        "lastChecked": "2026-11-03"
       },
       {
         "mechanism": "DPF",
         "observedStatus": "Active",
         "dpfCertified": true,
         "url": "https://www.dataprivacyframework.gov/participant/7735",
-        "lastChecked": "2026-11-02"
+        "lastChecked": "2026-11-03"
       }
     ]
   },

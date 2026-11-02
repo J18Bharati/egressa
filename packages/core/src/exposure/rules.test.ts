@@ -1,4 +1,4 @@
-import { loadKnowledgeBase } from '@egressa/kb';
+import { DPF_STATUS_QUALIFIED, loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
 import { isUnmappedRegion, resolveRegion } from './regions.js';
 import { classifyExposure } from './rules.js';
@@ -48,7 +48,9 @@ describe('classifyExposure: DPF is not blanket US adequacy', () => {
     // while recording a status that is not. The engine applies the table.
     const forged = structuredClone(vendor('auth0'));
     for (const m of forged.legal.transferMechanisms) {
-      if (m.mechanism === 'DPF') m.dpfCertified = true;
+      if (m.mechanism !== 'DPF') continue;
+      m.observedStatus = DPF_STATUS_QUALIFIED;
+      m.dpfCertified = true;
     }
     expect(classifyExposure(forged, kb).exposure.inputs).toContain('dpfCertified:false');
     for (const m of forged.legal.transferMechanisms) {
