@@ -5397,7 +5397,7 @@ var require_resolve_flow_scalar = __commonJS({
       switch (type) {
         case "scalar":
           _type = Scalar.Scalar.PLAIN;
-          value = plainValue(source, _onError);
+          value = plainValue2(source, _onError);
           break;
         case "single-quoted-scalar":
           _type = Scalar.Scalar.QUOTE_SINGLE;
@@ -5426,7 +5426,7 @@ var require_resolve_flow_scalar = __commonJS({
         range: [offset, valueEnd, re.offset]
       };
     }
-    function plainValue(source, onError) {
+    function plainValue2(source, onError) {
       let badChar = "";
       switch (source[0]) {
         /* istanbul ignore next should not happen */
@@ -12259,18 +12259,19 @@ async function runMain(cmd, opts = {}) {
 // ../core/dist/index.js
 var import_yaml = __toESM(require_dist(), 1);
 var import_ignore = __toESM(require_ignore(), 1);
+import { join as join22, relative as relative4, sep as sep32 } from "path";
 import {
-  constants as constants2,
-  closeSync as closeSync2,
-  fstatSync as fstatSync2,
+  constants,
+  closeSync,
+  fstatSync,
   lstatSync,
-  openSync as openSync2,
-  readFileSync as readFileSync22,
+  openSync,
+  readFileSync as readFileSync3,
   realpathSync as realpathSync2,
   statSync as statSync2
 } from "fs";
-import { isAbsolute as isAbsolute2, join as join22, relative as relative3, sep as sep32 } from "path";
-import { relative as relative22, sep as sep22 } from "path";
+import { isAbsolute as isAbsolute2, relative as relative3 } from "path";
+import { relative as relative32, sep as sep22 } from "path";
 
 // ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
 import { readdir, readdirSync, realpath, realpathSync, stat, statSync } from "fs";
@@ -13047,9 +13048,740 @@ function globSync(globInput, options) {
 }
 
 // ../core/dist/index.js
-import { constants, closeSync, fstatSync, openSync, readFileSync as readFileSync3, realpathSync as realpathSync3 } from "fs";
-import { isAbsolute as isAbsolute3, join as join3, relative as relative4, sep as sep4 } from "path";
-import { basename as basename3 } from "path";
+import { constants as constants2, closeSync as closeSync2, fstatSync as fstatSync2, openSync as openSync2, readFileSync as readFileSync22, realpathSync as realpathSync22 } from "fs";
+import { isAbsolute as isAbsolute22, join as join3, relative as relative22, sep as sep4 } from "path";
+import { join as join32 } from "path";
+
+// ../kb-loader/dist/index.js
+import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
+import { basename as basename2, dirname as dirname2, join as join2, relative as relative2, resolve as resolve3, sep as sep3 } from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import { createHash } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
+var HostTrie = class {
+  root = { children: /* @__PURE__ */ new Map() };
+  add(vendor, alias) {
+    const labels = alias.pattern.split(".").reverse();
+    let node = this.root;
+    for (const label of labels) {
+      let next = node.children.get(label);
+      if (!next) {
+        next = { children: /* @__PURE__ */ new Map() };
+        node.children.set(label, next);
+      }
+      node = next;
+    }
+    if (alias.match === "exact") node.exact = { vendor, alias };
+    else node.suffix = { vendor, alias };
+  }
+  /**
+   * Resolve a host to a vendor. Returns null when nothing claims it, which the
+   * caller reports as an unknown vendor rather than guessing.
+   */
+  lookup(host) {
+    const normalised = normaliseHost(host);
+    if (!normalised) return null;
+    const labels = normalised.split(".").reverse();
+    let node = this.root;
+    let deepestSuffix = null;
+    let depth = 0;
+    for (const label of labels) {
+      node = node.children.get(label);
+      if (!node) break;
+      depth += 1;
+      if (node.suffix) deepestSuffix = node.suffix;
+      if (node.exact && depth === labels.length) return node.exact;
+    }
+    return deepestSuffix;
+  }
+  get size() {
+    let count = 0;
+    const visit2 = (node) => {
+      if (node.exact) count += 1;
+      if (node.suffix) count += 1;
+      for (const child of node.children.values()) visit2(child);
+    };
+    visit2(this.root);
+    return count;
+  }
+};
+function normaliseHost(host) {
+  let value = host.trim().toLowerCase();
+  if (!value) return null;
+  const at = value.lastIndexOf("@");
+  if (at >= 0) value = value.slice(at + 1);
+  const colon = value.indexOf(":");
+  if (colon >= 0) value = value.slice(0, colon);
+  value = value.replace(/\.$/, "");
+  return /^[a-z0-9.-]+$/.test(value) && value.includes(".") ? value : null;
+}
+function normalisePypiName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+var DPF_STATUS_ACTIVE = "Active";
+var DPF_STATUS_QUALIFIED = "Active - Re-certification under Review";
+var DPF_STATUS_NOT_LISTED = "not-listed";
+var fold = (status) => status.trim().replace(/\s+/g, " ").toLowerCase();
+function dpfStatusVerdict(observedStatus, accepted) {
+  const status = fold(observedStatus);
+  if (status === fold(DPF_STATUS_ACTIVE)) return { certified: true, kind: "active" };
+  if (status === fold(DPF_STATUS_QUALIFIED)) return { certified: accepted, kind: "qualified" };
+  if (status === fold(DPF_STATUS_NOT_LISTED)) return { certified: false, kind: "not-listed" };
+  if (status === "inactive" || status.startsWith("inactive - ")) {
+    return { certified: false, kind: "inactive" };
+  }
+  return { certified: false, kind: "unrecognised" };
+}
+function verifyTask(task) {
+  const key = [
+    task.vendorId ?? "",
+    task.subject ?? "",
+    task.fact,
+    task.reason,
+    task.current.url ?? ""
+  ].join("\0");
+  return { id: createHash("sha256").update(key).digest("hex").slice(0, 16), ...task };
+}
+function vendorTasks(entry, context) {
+  const tasks = [];
+  const vendorId = entry.id;
+  const dpfRecords = entry.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
+  for (const m2 of dpfRecords) {
+    const reason = dpfRecordReason(m2) ?? (context.stale ? "stale-entry" : null);
+    if (reason === null) continue;
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpf",
+        reason,
+        current: {
+          value: m2.observedStatus ?? (m2.dpfCertified === true ? "certified" : "not certified"),
+          asOf: m2.lastChecked ?? entry.lastVerified,
+          url: m2.url ?? null
+        },
+        where: m2.url ? [m2.url] : []
+      })
+    );
+  }
+  if (dpfRecords.length === 0 && context.dpfJurisdiction) {
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpf",
+        reason: "dpf-unknown",
+        current: { value: null, asOf: entry.lastVerified, url: null },
+        // The list itself, not a participant page: there is no record to point at.
+        where: ["https://www.dataprivacyframework.gov/list"]
+      })
+    );
+  }
+  if (context.stale) {
+    const dpa = entry.legal.dpa;
+    tasks.push(
+      verifyTask({
+        vendorId,
+        fact: "dpa",
+        reason: "stale-entry",
+        current: {
+          value: dpa.available ? dpa.type ?? "available" : "not available",
+          asOf: dpa.lastChecked ?? entry.lastVerified,
+          url: dpa.url ?? null
+        },
+        where: dpa.url ? [dpa.url] : []
+      })
+    );
+    const sub = entry.legal.subprocessors;
+    if (sub) {
+      tasks.push(
+        verifyTask({
+          vendorId,
+          fact: "subprocessors",
+          reason: "stale-entry",
+          current: { value: sub.listType ?? "published", asOf: entry.lastVerified, url: sub.url },
+          where: [sub.url]
+        })
+      );
+    }
+  }
+  return tasks;
+}
+function dpfRecordReason(m2) {
+  if (m2.observedStatus === void 0) {
+    return m2.dpfCertified === true ? "dpf-status-unobserved" : null;
+  }
+  const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
+  if (verdict.kind === "unrecognised") return "dpf-status-unrecognised";
+  if (verdict.kind === "qualified" && m2.acceptQualifiedStatus === void 0) {
+    return "dpf-status-qualified";
+  }
+  return null;
+}
+var KnowledgeBaseError = class extends Error {
+  constructor(file, issues) {
+    super(
+      issues.length === 1 ? `${file}: ${issues[0]}` : `${file}:
+${issues.map((issue) => `  - ${issue}`).join("\n")}`
+    );
+    this.file = file;
+    this.issues = issues;
+  }
+  file;
+  issues;
+  name = "KnowledgeBaseError";
+};
+var messageOf = (error) => error instanceof Error ? error.message : String(error);
+function readText(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    throw new KnowledgeBaseError(file, [`could not be read: ${messageOf(error)}`]);
+  }
+}
+var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var ANNOTATIONS = /* @__PURE__ */ new Set(["$schema", "$id", "$defs", "title", "description", "default"]);
+var TYPE_TESTS = /* @__PURE__ */ new Map([
+  ["object", isRecord],
+  ["array", Array.isArray],
+  ["string", (v2) => typeof v2 === "string"],
+  ["number", (v2) => typeof v2 === "number" && Number.isFinite(v2)],
+  ["integer", (v2) => typeof v2 === "number" && Number.isInteger(v2)],
+  ["boolean", (v2) => typeof v2 === "boolean"],
+  ["null", (v2) => v2 === null]
+]);
+var typeName = (value) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+var sameJson = (a2, b2) => a2 === b2 || typeof a2 === "object" && a2 !== null && JSON.stringify(a2) === JSON.stringify(b2);
+var report2 = (at, out, message) => out.push(`${at === "" ? "(top level)" : at} ${message}`);
+function unsupported(keyword) {
+  throw new Error(
+    `knowledge base schema keyword "${keyword}" is not supported by the loader's checker; teach validate.ts about it`
+  );
+}
+function resolveRef(root, ref) {
+  if (!ref.startsWith("#/")) unsupported(`$ref ${ref}`);
+  let node = root;
+  for (const part of ref.slice(2).split("/")) {
+    node = isRecord(node) ? node[part.replace(/~1/g, "/").replace(/~0/g, "~")] : void 0;
+  }
+  if (!isRecord(node)) throw new Error(`knowledge base schema $ref ${ref} does not resolve`);
+  return node;
+}
+function compile(root, schema, byRef) {
+  const checks = [];
+  for (const [keyword, rule] of Object.entries(schema)) {
+    if (ANNOTATIONS.has(keyword)) continue;
+    switch (keyword) {
+      case "$ref": {
+        const ref = String(rule);
+        let target = byRef.get(ref);
+        if (!target) {
+          let compiled2;
+          target = (value, at, out) => compiled2?.(value, at, out);
+          byRef.set(ref, target);
+          compiled2 = compile(root, resolveRef(root, ref), byRef);
+        }
+        checks.push(target);
+        break;
+      }
+      case "type": {
+        const types = (Array.isArray(rule) ? rule : [rule]).map(String);
+        const tests = types.map((t2) => TYPE_TESTS.get(t2) ?? unsupported(`type: ${t2}`));
+        const expected = types.join(" or ");
+        checks.push((value, at, out) => {
+          if (!tests.some((test) => test(value))) {
+            report2(at, out, `must be ${expected} (got ${typeName(value)})`);
+          }
+        });
+        break;
+      }
+      case "const":
+        checks.push((value, at, out) => {
+          if (!sameJson(rule, value)) {
+            report2(at, out, `must be equal to constant ${JSON.stringify(rule)}`);
+          }
+        });
+        break;
+      case "enum": {
+        if (!Array.isArray(rule)) unsupported("enum");
+        const allowed = rule;
+        checks.push((value, at, out) => {
+          if (!allowed.some((candidate) => sameJson(candidate, value))) {
+            report2(
+              at,
+              out,
+              `must be equal to one of the allowed values (allowed: ${allowed.join(", ")})`
+            );
+          }
+        });
+        break;
+      }
+      case "required": {
+        if (!Array.isArray(rule)) unsupported("required");
+        const keys = rule.map(String);
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const key of keys) {
+            if (!Object.hasOwn(value, key)) report2(at, out, `must have required property '${key}'`);
+          }
+        });
+        break;
+      }
+      case "properties": {
+        if (!isRecord(rule)) unsupported("properties");
+        const props = Object.entries(rule).map(([key, sub]) => {
+          if (!isRecord(sub)) unsupported(`properties.${key}`);
+          return [key, compile(root, sub, byRef)];
+        });
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const [key, check] of props) {
+            if (Object.hasOwn(value, key)) check(value[key], `${at}/${key}`, out);
+          }
+        });
+        break;
+      }
+      case "additionalProperties": {
+        if (rule === true) break;
+        if (rule !== false) unsupported("additionalProperties (other than a boolean)");
+        const known = isRecord(schema.properties) ? schema.properties : {};
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const key of Object.keys(value)) {
+            if (!Object.hasOwn(known, key)) {
+              report2(at, out, `must NOT have additional property '${key}'`);
+            }
+          }
+        });
+        break;
+      }
+      case "items": {
+        if (!isRecord(rule)) unsupported("items (other than a schema)");
+        const each = compile(root, rule, byRef);
+        checks.push((value, at, out) => {
+          if (!Array.isArray(value)) return;
+          for (let i2 = 0; i2 < value.length; i2++) each(value[i2], `${at}/${i2}`, out);
+        });
+        break;
+      }
+      case "minItems":
+        checks.push((value, at, out) => {
+          if (Array.isArray(value) && value.length < Number(rule)) {
+            report2(at, out, `must have at least ${rule} item${rule === 1 ? "" : "s"}`);
+          }
+        });
+        break;
+      case "minLength":
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && Array.from(value).length < Number(rule)) {
+            report2(at, out, `must be at least ${rule} character${rule === 1 ? "" : "s"} long`);
+          }
+        });
+        break;
+      case "maxLength":
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && Array.from(value).length > Number(rule)) {
+            report2(at, out, `must be at most ${rule} characters long`);
+          }
+        });
+        break;
+      case "pattern": {
+        const pattern = new RegExp(String(rule), "u");
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && !pattern.test(value)) {
+            report2(at, out, `must match pattern "${rule}"`);
+          }
+        });
+        break;
+      }
+      case "oneOf": {
+        if (!Array.isArray(rule)) unsupported("oneOf");
+        const shapes = rule.map((sub) => {
+          if (!isRecord(sub)) unsupported("oneOf (other than schemas)");
+          return compile(root, sub, byRef);
+        });
+        checks.push((value, at, out) => {
+          const passing = shapes.filter((shape) => {
+            const scratch = [];
+            shape(value, at, scratch);
+            return scratch.length === 0;
+          });
+          if (passing.length !== 1) report2(at, out, "must match exactly one allowed shape");
+        });
+        break;
+      }
+      case "if": {
+        if (!isRecord(rule)) unsupported("if (other than a schema)");
+        if (!isRecord(schema.then)) unsupported("if without then");
+        const condition = compile(root, rule, byRef);
+        const consequence = compile(root, schema.then, byRef);
+        checks.push((value, at, out) => {
+          const scratch = [];
+          condition(value, at, scratch);
+          if (scratch.length === 0) consequence(value, at, out);
+        });
+        break;
+      }
+      case "then":
+        if (!Object.hasOwn(schema, "if")) unsupported("then without if");
+        break;
+      default:
+        unsupported(keyword);
+    }
+  }
+  return (value, at, out) => {
+    for (const check of checks) check(value, at, out);
+  };
+}
+function schemaIssues(schema, value) {
+  const out = [];
+  compile(schema, schema, /* @__PURE__ */ new Map())(value, "", out);
+  return out;
+}
+var MAX_ISSUES = 8;
+function capped(issues) {
+  if (issues.length <= MAX_ISSUES) return issues;
+  return [...issues.slice(0, MAX_ISSUES), `... and ${issues.length - MAX_ISSUES} more`];
+}
+var compiled = /* @__PURE__ */ new Map();
+function checkerFor(schemaPath) {
+  const known = compiled.get(schemaPath);
+  if (known) return known;
+  const parsed = JSON.parse(readText(schemaPath));
+  if (!isRecord(parsed)) throw new Error(`knowledge base schema ${schemaPath} is not an object`);
+  const checker = compile(parsed, parsed, /* @__PURE__ */ new Map());
+  compiled.set(schemaPath, checker);
+  return checker;
+}
+function readValidated(file, conforms) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readText(file));
+  } catch (error) {
+    if (error instanceof KnowledgeBaseError) throw error;
+    throw new KnowledgeBaseError(file, [`is not valid JSON: ${messageOf(error)}`]);
+  }
+  const issues = [];
+  if (!conforms(parsed, issues)) throw new KnowledgeBaseError(file, capped(issues));
+  return parsed;
+}
+var conformsTo = (schemaPath) => (value, issues) => {
+  checkerFor(schemaPath)(value, "", issues);
+  return issues.length === 0;
+};
+var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
+var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
+var EVALUATIVE = ["risky", "dangerous", "avoid", "bad ", "unsafe", "problematic"];
+function entryIssues(entry) {
+  const issues = [];
+  const add = (message) => issues.push({ vendorId: entry.id, message });
+  const primary = entry.sources.filter(
+    (s2) => s2.publisher === "vendor" || s2.publisher === "regulator"
+  );
+  if (primary.length === 0) {
+    add("needs at least one source published by the vendor or a regulator");
+  }
+  for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
+    for (const alias of list ?? []) {
+      const key = `${ecosystem}:${alias.name}`;
+      if (alias.name.endsWith("/*") !== (alias.kind === "scope")) {
+        add(
+          `package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`
+        );
+      }
+      if (ecosystem === "pypi") {
+        const normalised = normalisePypiName(alias.name);
+        if (alias.name !== normalised || alias.name.endsWith("/*")) {
+          add(
+            `pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`
+          );
+        }
+      }
+    }
+  }
+  for (const m2 of entry.legal.transferMechanisms) {
+    if (m2.mechanism !== "DPF" || m2.observedStatus === void 0) continue;
+    const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
+    if (verdict.certified !== (m2.dpfCertified === true)) {
+      add(
+        `DPF record ${m2.url ?? "(no url)"}: dpfCertified is ${m2.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`
+      );
+    }
+    if (m2.acceptQualifiedStatus && verdict.kind !== "qualified") {
+      add(
+        `DPF record ${m2.url ?? "(no url)"}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`
+      );
+    }
+  }
+  for (const host of entry.aliases.hosts) {
+    if (host.pattern.split(".").length < 2) {
+      add(`host pattern "${host.pattern}" has too few labels`);
+    }
+  }
+  const prose = [
+    entry.notes ?? "",
+    entry.processing.euRegion?.notes ?? "",
+    ...(entry.processing.jurisdictions ?? []).map((j) => j.note ?? ""),
+    ...(entry.sdkDefaults ?? []).map((d2) => d2.effect ?? ""),
+    ...(entry.regions ?? []).map((r3) => `${r3.label ?? ""} ${r3.note ?? ""}`)
+  ].join(" ").toLowerCase();
+  for (const word of EVALUATIVE) {
+    if (prose.includes(word)) {
+      add(`evaluative language "${word.trim()}" does not belong in the data layer`);
+    }
+  }
+  return issues;
+}
+function collisionIssues(entries) {
+  const issues = [];
+  const vendorIds = /* @__PURE__ */ new Set();
+  const packageOwners = /* @__PURE__ */ new Map();
+  const scopeOwners = /* @__PURE__ */ new Map();
+  const hostOwners = /* @__PURE__ */ new Map();
+  for (const entry of entries) {
+    const add = (message) => issues.push({ vendorId: entry.id, message });
+    if (vendorIds.has(entry.id)) add(`duplicate vendor id "${entry.id}"`);
+    vendorIds.add(entry.id);
+    for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
+      for (const alias of list ?? []) {
+        const key = `${ecosystem}:${alias.name}`;
+        const owner = packageOwners.get(key);
+        if (owner && owner !== entry.id) {
+          add(`package alias "${key}" already claimed by "${owner}"`);
+        }
+        packageOwners.set(key, entry.id);
+        if (alias.name.endsWith("/*")) {
+          scopeOwners.set(`${ecosystem}:${alias.name.slice(0, -1)}`, entry.id);
+        }
+      }
+    }
+    for (const host of entry.aliases.hosts) {
+      const key = `${host.pattern}|${host.match}`;
+      const owner = hostOwners.get(key);
+      if (owner && owner !== entry.id) {
+        add(`host pattern "${host.pattern}" already claimed by "${owner}"`);
+      }
+      hostOwners.set(key, entry.id);
+    }
+  }
+  for (const [scope, owner] of scopeOwners) {
+    for (const [other, otherOwner] of scopeOwners) {
+      if (other === scope || otherOwner === owner) continue;
+      if (other.startsWith(scope)) {
+        issues.push({
+          vendorId: owner,
+          message: `package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`
+        });
+      }
+    }
+    for (const [pkg, pkgOwner] of packageOwners) {
+      if (pkgOwner === owner || pkg.endsWith("/*")) continue;
+      if (pkg.startsWith(scope)) {
+        issues.push({
+          vendorId: owner,
+          message: `package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`
+        });
+      }
+    }
+  }
+  for (const [key, owner] of packageOwners) {
+    const [ecosystem, name = ""] = key.split(/:(.*)/s);
+    if (name.endsWith("/*")) continue;
+    if (vendorIds.has(name) && name !== owner) {
+      issues.push({
+        vendorId: owner,
+        message: `package alias "${key}" is the id of vendor "${name}"`
+      });
+    }
+    if (ecosystem === "npm") {
+      const pypiOwner = packageOwners.get(`pypi:${normalisePypiName(name)}`);
+      if (pypiOwner && pypiOwner !== owner) {
+        issues.push({
+          vendorId: owner,
+          message: `"${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`
+        });
+      }
+    }
+    for (const [hostKey, hostOwner] of hostOwners) {
+      if (hostOwner !== owner && hostKey.split("|")[0] === name) {
+        issues.push({
+          vendorId: owner,
+          message: `package alias "${key}" is a host of vendor "${hostOwner}"`
+        });
+      }
+    }
+  }
+  return issues;
+}
+var STALE_AFTER_DAYS = 180;
+var bundledSchemas = /* @__PURE__ */ new Map();
+function bundledSchemaIssues(file, def, value) {
+  const bundled = bundledKbPath();
+  if (bundled === void 0) {
+    throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
+      "this tool's own knowledge base and schemas are missing from its installation; reinstall it"
+    ]);
+  }
+  let schema = bundledSchemas.get(file);
+  if (!schema) {
+    schema = JSON.parse(readText(join2(bundled, "schema", file)));
+    bundledSchemas.set(file, schema);
+  }
+  const target = def === null ? schema : { $defs: schema.$defs, $ref: `#/$defs/${def}` };
+  return schemaIssues(target, value);
+}
+function isStale(entry, asOf) {
+  return Date.parse(entry.lastVerified) < asOf.getTime() - STALE_AFTER_DAYS * 864e5;
+}
+function loadKnowledgeBase(options = {}) {
+  const bundled = bundledKbPath();
+  if (bundled === void 0) {
+    throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
+      "this tool's own knowledge base and schemas are missing from its installation; reinstall it"
+    ]);
+  }
+  const kbPath = options.kbPath ?? bundled;
+  const schemaDir = join2(bundled, "schema");
+  const vendorDir = join2(kbPath, "vendors");
+  let vendorFiles;
+  try {
+    vendorFiles = readdirSync2(vendorDir).filter((f3) => f3.endsWith(".json"));
+  } catch (error) {
+    throw new KnowledgeBaseError(vendorDir, [
+      `could not be listed: ${error instanceof Error ? error.message : String(error)}`
+    ]);
+  }
+  const vendors = vendorFiles.map((f3) => readVendor(join2(vendorDir, f3), schemaDir)).sort((a2, b2) => a2.id.localeCompare(b2.id));
+  const adequacy = readAdequacy(join2(kbPath, "adequacy-status.json"), schemaDir);
+  const version = readText(join2(kbPath, "kb.version")).trim();
+  const byId = new Map(vendors.map((v2) => [v2.id, v2]));
+  const packageIndex = /* @__PURE__ */ new Map();
+  const scopeIndex = [];
+  const hosts = new HostTrie();
+  for (const vendor of vendors) {
+    for (const [ecosystem, aliases] of Object.entries(vendor.aliases.packages)) {
+      for (const alias of aliases ?? []) {
+        const match = { vendor, alias };
+        if (alias.name.endsWith("/*")) {
+          scopeIndex.push({ scope: `${ecosystem}:${alias.name.slice(0, -1)}`, match });
+        } else {
+          packageIndex.set(`${ecosystem}:${alias.name}`, match);
+        }
+      }
+    }
+    for (const alias of vendor.aliases.hosts) hosts.add(vendor, alias);
+  }
+  const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v2) => v2.toUpperCase()));
+  const kb = {
+    version,
+    vendors,
+    byId,
+    adequacy,
+    /**
+     * Exact aliases win over wildcard scopes, and a name matched by more than
+     * one vendor's scope is refused rather than attributed.
+     *
+     * Returning the first matching scope is the same bug `findSinks()` already
+     * had: whichever entry happened to sort first silently shadowed the other.
+     * A package index is worse than a sink table to get wrong, because the
+     * output names a company. A wrong vendor is worse than no vendor, so the
+     * ambiguous case degrades to "unmatched" -- which is visible in
+     * `unmatched.packages` -- rather than to a confident misattribution.
+     *
+     * The validator rejects overlapping scopes outright, so this branch should
+     * be unreachable on the shipped knowledge base; it exists because a caller
+     * may pass its own `kbPath`.
+     */
+    lookupPackage(ecosystem, name) {
+      const key = `${ecosystem}:${ecosystem === "pypi" ? normalisePypiName(name) : name}`;
+      const exact = packageIndex.get(key);
+      if (exact) return exact;
+      const matched = scopeIndex.filter((entry) => key.startsWith(entry.scope));
+      if (matched.length === 0) return null;
+      if (new Set(matched.map((entry) => entry.match.vendor.id)).size > 1) return null;
+      return matched.reduce(
+        (best, entry) => entry.scope.length > best.scope.length ? entry : best
+      ).match;
+    },
+    lookupHost(host) {
+      return hosts.lookup(host);
+    },
+    /**
+     * A question like "is `boto3` a known vendor?" does not say which registry
+     * it means. Trying npm alone answered "no entry" for a vendor the knowledge
+     * base carries under PyPI. So every reading is tried -- a vendor id in any
+     * case, an npm name, a PyPI name, a host -- and when two of them name
+     * different vendors the query answers nothing: naming either would be a
+     * guess, the same refusal `lookupPackage` makes for two overlapping
+     * scopes. The first version let an id win over a package and a package
+     * over a host, silently.
+     */
+    findVendor(query) {
+      const lower = query.toLowerCase();
+      const readings = [
+        byId.get(query) ?? vendors.find((v2) => v2.id.toLowerCase() === lower),
+        kb.lookupPackage("npm", query)?.vendor,
+        kb.lookupPackage("pypi", query)?.vendor,
+        hosts.lookup(query)?.vendor
+      ].filter((v2) => v2 !== void 0);
+      const [first] = readings;
+      return first && readings.every((v2) => v2.id === first.id) ? first : null;
+    },
+    decisionFor(country) {
+      const upper = country.toUpperCase();
+      const decision = adequacy.decisions.find((d2) => d2.country.toUpperCase() === upper);
+      if (!decision) return null;
+      if (lapsed.has(upper) || lapsed.has(`${upper}:${decision.mechanism.toUpperCase()}`)) {
+        return { ...decision, status: "withdrawn" };
+      }
+      return decision;
+    },
+    staleEntries(asOf = /* @__PURE__ */ new Date()) {
+      return vendors.filter((v2) => isStale(v2, asOf));
+    },
+    verifyTasks(entry, asOf = /* @__PURE__ */ new Date()) {
+      return vendorTasks(entry, {
+        stale: isStale(entry, asOf),
+        dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
+          const decision = kb.decisionFor(j.country);
+          return decision?.mechanism === "DPF" && decision.status !== "withdrawn";
+        })
+      });
+    }
+  };
+  return kb;
+}
+function bundledKbPath() {
+  const here = dirname2(fileURLToPath2(import.meta.url));
+  const root = resolve3(here, "..", "..", "..");
+  const workspaceKb = isThisWorkspace(root, here) ? join2(root, "kb") : void 0;
+  const ownKb = join2(here, "..", "kb");
+  const candidates = basename2(here) === "src" ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
+  for (const candidate of candidates) {
+    if (candidate === void 0) continue;
+    try {
+      readFileSync2(join2(candidate, "kb.version"), "utf8");
+      return resolve3(candidate);
+    } catch {
+    }
+  }
+  return void 0;
+}
+var WORKSPACE_LOADER_DIRS = /* @__PURE__ */ new Set([
+  "packages/kb-loader/src",
+  "packages/kb-loader/dist",
+  "packages/cli/dist",
+  "packages/mcp/dist"
+]);
+function isThisWorkspace(root, here) {
+  if (!WORKSPACE_LOADER_DIRS.has(relative2(root, here).split(sep3).join("/"))) return false;
+  try {
+    readFileSync2(join2(root, "pnpm-workspace.yaml"), "utf8");
+    readFileSync2(join2(root, "packages", "kb-loader", "src", "index.ts"), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ../../node_modules/.pnpm/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
 function createScanner(text, ignoreTrivia = false) {
@@ -13944,581 +14676,49 @@ var ParseErrorCode;
   ParseErrorCode2[ParseErrorCode2["InvalidEscapeCharacter"] = 15] = "InvalidEscapeCharacter";
   ParseErrorCode2[ParseErrorCode2["InvalidCharacter"] = 16] = "InvalidCharacter";
 })(ParseErrorCode || (ParseErrorCode = {}));
+function printParseErrorCode(code) {
+  switch (code) {
+    case 1:
+      return "InvalidSymbol";
+    case 2:
+      return "InvalidNumberFormat";
+    case 3:
+      return "PropertyNameExpected";
+    case 4:
+      return "ValueExpected";
+    case 5:
+      return "ColonExpected";
+    case 6:
+      return "CommaExpected";
+    case 7:
+      return "CloseBraceExpected";
+    case 8:
+      return "CloseBracketExpected";
+    case 9:
+      return "EndOfFileExpected";
+    case 10:
+      return "InvalidCommentToken";
+    case 11:
+      return "UnexpectedEndOfComment";
+    case 12:
+      return "UnexpectedEndOfString";
+    case 13:
+      return "UnexpectedEndOfNumber";
+    case 14:
+      return "InvalidUnicode";
+    case 15:
+      return "InvalidEscapeCharacter";
+    case 16:
+      return "InvalidCharacter";
+  }
+  return "<unknown ParseErrorCode>";
+}
 
 // ../core/dist/index.js
+import { basename as basename3 } from "path";
 var import_yaml2 = __toESM(require_dist(), 1);
-
-// ../kb-loader/dist/index.js
-import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
-import { basename as basename2, dirname as dirname2, join as join2, relative as relative2, resolve as resolve3, sep as sep3 } from "path";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import { createHash } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
-var HostTrie = class {
-  root = { children: /* @__PURE__ */ new Map() };
-  add(vendor, alias) {
-    const labels = alias.pattern.split(".").reverse();
-    let node = this.root;
-    for (const label of labels) {
-      let next = node.children.get(label);
-      if (!next) {
-        next = { children: /* @__PURE__ */ new Map() };
-        node.children.set(label, next);
-      }
-      node = next;
-    }
-    if (alias.match === "exact") node.exact = { vendor, alias };
-    else node.suffix = { vendor, alias };
-  }
-  /**
-   * Resolve a host to a vendor. Returns null when nothing claims it, which the
-   * caller reports as an unknown vendor rather than guessing.
-   */
-  lookup(host) {
-    const normalised = normaliseHost(host);
-    if (!normalised) return null;
-    const labels = normalised.split(".").reverse();
-    let node = this.root;
-    let deepestSuffix = null;
-    let depth = 0;
-    for (const label of labels) {
-      node = node.children.get(label);
-      if (!node) break;
-      depth += 1;
-      if (node.suffix) deepestSuffix = node.suffix;
-      if (node.exact && depth === labels.length) return node.exact;
-    }
-    return deepestSuffix;
-  }
-  get size() {
-    let count = 0;
-    const visit2 = (node) => {
-      if (node.exact) count += 1;
-      if (node.suffix) count += 1;
-      for (const child of node.children.values()) visit2(child);
-    };
-    visit2(this.root);
-    return count;
-  }
-};
-function normaliseHost(host) {
-  let value = host.trim().toLowerCase();
-  if (!value) return null;
-  const at = value.lastIndexOf("@");
-  if (at >= 0) value = value.slice(at + 1);
-  const colon = value.indexOf(":");
-  if (colon >= 0) value = value.slice(0, colon);
-  value = value.replace(/\.$/, "");
-  return /^[a-z0-9.-]+$/.test(value) && value.includes(".") ? value : null;
-}
-function normalisePypiName(name) {
-  return name.toLowerCase().replace(/[-_.]+/g, "-");
-}
-var DPF_STATUS_ACTIVE = "Active";
-var DPF_STATUS_QUALIFIED = "Active - Re-certification under Review";
-var DPF_STATUS_NOT_LISTED = "not-listed";
-var fold = (status) => status.trim().replace(/\s+/g, " ").toLowerCase();
-function dpfStatusVerdict(observedStatus, accepted) {
-  const status = fold(observedStatus);
-  if (status === fold(DPF_STATUS_ACTIVE)) return { certified: true, kind: "active" };
-  if (status === fold(DPF_STATUS_QUALIFIED)) return { certified: accepted, kind: "qualified" };
-  if (status === fold(DPF_STATUS_NOT_LISTED)) return { certified: false, kind: "not-listed" };
-  if (status === "inactive" || status.startsWith("inactive - ")) {
-    return { certified: false, kind: "inactive" };
-  }
-  return { certified: false, kind: "unrecognised" };
-}
-function verifyTask(task) {
-  const key = [
-    task.vendorId ?? "",
-    task.subject ?? "",
-    task.fact,
-    task.reason,
-    task.current.url ?? ""
-  ].join("\0");
-  return { id: createHash("sha256").update(key).digest("hex").slice(0, 16), ...task };
-}
-function vendorTasks(entry, context) {
-  const tasks = [];
-  const vendorId = entry.id;
-  const dpfRecords = entry.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
-  for (const m2 of dpfRecords) {
-    const reason = dpfRecordReason(m2) ?? (context.stale ? "stale-entry" : null);
-    if (reason === null) continue;
-    tasks.push(
-      verifyTask({
-        vendorId,
-        fact: "dpf",
-        reason,
-        current: {
-          value: m2.observedStatus ?? (m2.dpfCertified === true ? "certified" : "not certified"),
-          asOf: m2.lastChecked ?? entry.lastVerified,
-          url: m2.url ?? null
-        },
-        where: m2.url ? [m2.url] : []
-      })
-    );
-  }
-  if (dpfRecords.length === 0 && context.dpfJurisdiction) {
-    tasks.push(
-      verifyTask({
-        vendorId,
-        fact: "dpf",
-        reason: "dpf-unknown",
-        current: { value: null, asOf: entry.lastVerified, url: null },
-        // The list itself, not a participant page: there is no record to point at.
-        where: ["https://www.dataprivacyframework.gov/list"]
-      })
-    );
-  }
-  if (context.stale) {
-    const dpa = entry.legal.dpa;
-    tasks.push(
-      verifyTask({
-        vendorId,
-        fact: "dpa",
-        reason: "stale-entry",
-        current: {
-          value: dpa.available ? dpa.type ?? "available" : "not available",
-          asOf: dpa.lastChecked ?? entry.lastVerified,
-          url: dpa.url ?? null
-        },
-        where: dpa.url ? [dpa.url] : []
-      })
-    );
-    const sub = entry.legal.subprocessors;
-    if (sub) {
-      tasks.push(
-        verifyTask({
-          vendorId,
-          fact: "subprocessors",
-          reason: "stale-entry",
-          current: { value: sub.listType ?? "published", asOf: entry.lastVerified, url: sub.url },
-          where: [sub.url]
-        })
-      );
-    }
-  }
-  return tasks;
-}
-function dpfRecordReason(m2) {
-  if (m2.observedStatus === void 0) {
-    return m2.dpfCertified === true ? "dpf-status-unobserved" : null;
-  }
-  const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
-  if (verdict.kind === "unrecognised") return "dpf-status-unrecognised";
-  if (verdict.kind === "qualified" && m2.acceptQualifiedStatus === void 0) {
-    return "dpf-status-qualified";
-  }
-  return null;
-}
-var KnowledgeBaseError = class extends Error {
-  constructor(file, issues) {
-    super(
-      issues.length === 1 ? `${file}: ${issues[0]}` : `${file}:
-${issues.map((issue) => `  - ${issue}`).join("\n")}`
-    );
-    this.file = file;
-    this.issues = issues;
-  }
-  file;
-  issues;
-  name = "KnowledgeBaseError";
-};
-var messageOf = (error) => error instanceof Error ? error.message : String(error);
-function readText(file) {
-  try {
-    return readFileSync(file, "utf8");
-  } catch (error) {
-    throw new KnowledgeBaseError(file, [`could not be read: ${messageOf(error)}`]);
-  }
-}
-var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var ANNOTATIONS = /* @__PURE__ */ new Set(["$schema", "$id", "$defs", "title", "description", "default"]);
-var TYPE_TESTS = /* @__PURE__ */ new Map([
-  ["object", isRecord],
-  ["array", Array.isArray],
-  ["string", (v2) => typeof v2 === "string"],
-  ["number", (v2) => typeof v2 === "number" && Number.isFinite(v2)],
-  ["integer", (v2) => typeof v2 === "number" && Number.isInteger(v2)],
-  ["boolean", (v2) => typeof v2 === "boolean"],
-  ["null", (v2) => v2 === null]
-]);
-var typeName = (value) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
-var sameJson = (a2, b2) => a2 === b2 || typeof a2 === "object" && a2 !== null && JSON.stringify(a2) === JSON.stringify(b2);
-var report2 = (at, out, message) => out.push(`${at === "" ? "(top level)" : at} ${message}`);
-function unsupported(keyword) {
-  throw new Error(
-    `knowledge base schema keyword "${keyword}" is not supported by the loader's checker; teach validate.ts about it`
-  );
-}
-function resolveRef(root, ref) {
-  if (!ref.startsWith("#/")) unsupported(`$ref ${ref}`);
-  let node = root;
-  for (const part of ref.slice(2).split("/")) {
-    node = isRecord(node) ? node[part.replace(/~1/g, "/").replace(/~0/g, "~")] : void 0;
-  }
-  if (!isRecord(node)) throw new Error(`knowledge base schema $ref ${ref} does not resolve`);
-  return node;
-}
-function compile(root, schema, byRef) {
-  const checks = [];
-  for (const [keyword, rule] of Object.entries(schema)) {
-    if (ANNOTATIONS.has(keyword)) continue;
-    switch (keyword) {
-      case "$ref": {
-        const ref = String(rule);
-        let target = byRef.get(ref);
-        if (!target) {
-          let compiled2;
-          target = (value, at, out) => compiled2?.(value, at, out);
-          byRef.set(ref, target);
-          compiled2 = compile(root, resolveRef(root, ref), byRef);
-        }
-        checks.push(target);
-        break;
-      }
-      case "type": {
-        const types = (Array.isArray(rule) ? rule : [rule]).map(String);
-        const tests = types.map((t2) => TYPE_TESTS.get(t2) ?? unsupported(`type: ${t2}`));
-        const expected = types.join(" or ");
-        checks.push((value, at, out) => {
-          if (!tests.some((test) => test(value))) {
-            report2(at, out, `must be ${expected} (got ${typeName(value)})`);
-          }
-        });
-        break;
-      }
-      case "const":
-        checks.push((value, at, out) => {
-          if (!sameJson(rule, value)) {
-            report2(at, out, `must be equal to constant ${JSON.stringify(rule)}`);
-          }
-        });
-        break;
-      case "enum": {
-        if (!Array.isArray(rule)) unsupported("enum");
-        const allowed = rule;
-        checks.push((value, at, out) => {
-          if (!allowed.some((candidate) => sameJson(candidate, value))) {
-            report2(
-              at,
-              out,
-              `must be equal to one of the allowed values (allowed: ${allowed.join(", ")})`
-            );
-          }
-        });
-        break;
-      }
-      case "required": {
-        if (!Array.isArray(rule)) unsupported("required");
-        const keys = rule.map(String);
-        checks.push((value, at, out) => {
-          if (!isRecord(value)) return;
-          for (const key of keys) {
-            if (!Object.hasOwn(value, key)) report2(at, out, `must have required property '${key}'`);
-          }
-        });
-        break;
-      }
-      case "properties": {
-        if (!isRecord(rule)) unsupported("properties");
-        const props = Object.entries(rule).map(([key, sub]) => {
-          if (!isRecord(sub)) unsupported(`properties.${key}`);
-          return [key, compile(root, sub, byRef)];
-        });
-        checks.push((value, at, out) => {
-          if (!isRecord(value)) return;
-          for (const [key, check] of props) {
-            if (Object.hasOwn(value, key)) check(value[key], `${at}/${key}`, out);
-          }
-        });
-        break;
-      }
-      case "additionalProperties": {
-        if (rule === true) break;
-        if (rule !== false) unsupported("additionalProperties (other than a boolean)");
-        const known = isRecord(schema.properties) ? schema.properties : {};
-        checks.push((value, at, out) => {
-          if (!isRecord(value)) return;
-          for (const key of Object.keys(value)) {
-            if (!Object.hasOwn(known, key)) {
-              report2(at, out, `must NOT have additional property '${key}'`);
-            }
-          }
-        });
-        break;
-      }
-      case "items": {
-        if (!isRecord(rule)) unsupported("items (other than a schema)");
-        const each = compile(root, rule, byRef);
-        checks.push((value, at, out) => {
-          if (!Array.isArray(value)) return;
-          for (let i2 = 0; i2 < value.length; i2++) each(value[i2], `${at}/${i2}`, out);
-        });
-        break;
-      }
-      case "minItems":
-        checks.push((value, at, out) => {
-          if (Array.isArray(value) && value.length < Number(rule)) {
-            report2(at, out, `must have at least ${rule} item${rule === 1 ? "" : "s"}`);
-          }
-        });
-        break;
-      case "minLength":
-        checks.push((value, at, out) => {
-          if (typeof value === "string" && Array.from(value).length < Number(rule)) {
-            report2(at, out, `must be at least ${rule} character${rule === 1 ? "" : "s"} long`);
-          }
-        });
-        break;
-      case "maxLength":
-        checks.push((value, at, out) => {
-          if (typeof value === "string" && Array.from(value).length > Number(rule)) {
-            report2(at, out, `must be at most ${rule} characters long`);
-          }
-        });
-        break;
-      case "pattern": {
-        const pattern = new RegExp(String(rule), "u");
-        checks.push((value, at, out) => {
-          if (typeof value === "string" && !pattern.test(value)) {
-            report2(at, out, `must match pattern "${rule}"`);
-          }
-        });
-        break;
-      }
-      case "oneOf": {
-        if (!Array.isArray(rule)) unsupported("oneOf");
-        const shapes = rule.map((sub) => {
-          if (!isRecord(sub)) unsupported("oneOf (other than schemas)");
-          return compile(root, sub, byRef);
-        });
-        checks.push((value, at, out) => {
-          const passing = shapes.filter((shape) => {
-            const scratch = [];
-            shape(value, at, scratch);
-            return scratch.length === 0;
-          });
-          if (passing.length !== 1) report2(at, out, "must match exactly one allowed shape");
-        });
-        break;
-      }
-      case "if": {
-        if (!isRecord(rule)) unsupported("if (other than a schema)");
-        if (!isRecord(schema.then)) unsupported("if without then");
-        const condition = compile(root, rule, byRef);
-        const consequence = compile(root, schema.then, byRef);
-        checks.push((value, at, out) => {
-          const scratch = [];
-          condition(value, at, scratch);
-          if (scratch.length === 0) consequence(value, at, out);
-        });
-        break;
-      }
-      case "then":
-        if (!Object.hasOwn(schema, "if")) unsupported("then without if");
-        break;
-      default:
-        unsupported(keyword);
-    }
-  }
-  return (value, at, out) => {
-    for (const check of checks) check(value, at, out);
-  };
-}
-var MAX_ISSUES = 8;
-function capped(issues) {
-  if (issues.length <= MAX_ISSUES) return issues;
-  return [...issues.slice(0, MAX_ISSUES), `... and ${issues.length - MAX_ISSUES} more`];
-}
-var compiled = /* @__PURE__ */ new Map();
-function checkerFor(schemaPath) {
-  const known = compiled.get(schemaPath);
-  if (known) return known;
-  const parsed = JSON.parse(readText(schemaPath));
-  if (!isRecord(parsed)) throw new Error(`knowledge base schema ${schemaPath} is not an object`);
-  const checker = compile(parsed, parsed, /* @__PURE__ */ new Map());
-  compiled.set(schemaPath, checker);
-  return checker;
-}
-function readValidated(file, conforms) {
-  let parsed;
-  try {
-    parsed = JSON.parse(readText(file));
-  } catch (error) {
-    if (error instanceof KnowledgeBaseError) throw error;
-    throw new KnowledgeBaseError(file, [`is not valid JSON: ${messageOf(error)}`]);
-  }
-  const issues = [];
-  if (!conforms(parsed, issues)) throw new KnowledgeBaseError(file, capped(issues));
-  return parsed;
-}
-var conformsTo = (schemaPath) => (value, issues) => {
-  checkerFor(schemaPath)(value, "", issues);
-  return issues.length === 0;
-};
-var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
-var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
-var STALE_AFTER_DAYS = 180;
-function isStale(entry, asOf) {
-  return Date.parse(entry.lastVerified) < asOf.getTime() - STALE_AFTER_DAYS * 864e5;
-}
-function loadKnowledgeBase(options = {}) {
-  const bundled = bundledKbPath();
-  if (bundled === void 0) {
-    throw new KnowledgeBaseError(fileURLToPath2(import.meta.url), [
-      "this tool's own knowledge base and schemas are missing from its installation; reinstall it"
-    ]);
-  }
-  const kbPath = options.kbPath ?? bundled;
-  const schemaDir = join2(bundled, "schema");
-  const vendorDir = join2(kbPath, "vendors");
-  let vendorFiles;
-  try {
-    vendorFiles = readdirSync2(vendorDir).filter((f3) => f3.endsWith(".json"));
-  } catch (error) {
-    throw new KnowledgeBaseError(vendorDir, [
-      `could not be listed: ${error instanceof Error ? error.message : String(error)}`
-    ]);
-  }
-  const vendors = vendorFiles.map((f3) => readVendor(join2(vendorDir, f3), schemaDir)).sort((a2, b2) => a2.id.localeCompare(b2.id));
-  const adequacy = readAdequacy(join2(kbPath, "adequacy-status.json"), schemaDir);
-  const version = readText(join2(kbPath, "kb.version")).trim();
-  const byId = new Map(vendors.map((v2) => [v2.id, v2]));
-  const packageIndex = /* @__PURE__ */ new Map();
-  const scopeIndex = [];
-  const hosts = new HostTrie();
-  for (const vendor of vendors) {
-    for (const [ecosystem, aliases] of Object.entries(vendor.aliases.packages)) {
-      for (const alias of aliases ?? []) {
-        const match = { vendor, alias };
-        if (alias.name.endsWith("/*")) {
-          scopeIndex.push({ scope: `${ecosystem}:${alias.name.slice(0, -1)}`, match });
-        } else {
-          packageIndex.set(`${ecosystem}:${alias.name}`, match);
-        }
-      }
-    }
-    for (const alias of vendor.aliases.hosts) hosts.add(vendor, alias);
-  }
-  const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v2) => v2.toUpperCase()));
-  const kb = {
-    version,
-    vendors,
-    byId,
-    adequacy,
-    /**
-     * Exact aliases win over wildcard scopes, and a name matched by more than
-     * one vendor's scope is refused rather than attributed.
-     *
-     * Returning the first matching scope is the same bug `findSinks()` already
-     * had: whichever entry happened to sort first silently shadowed the other.
-     * A package index is worse than a sink table to get wrong, because the
-     * output names a company. A wrong vendor is worse than no vendor, so the
-     * ambiguous case degrades to "unmatched" -- which is visible in
-     * `unmatched.packages` -- rather than to a confident misattribution.
-     *
-     * The validator rejects overlapping scopes outright, so this branch should
-     * be unreachable on the shipped knowledge base; it exists because a caller
-     * may pass its own `kbPath`.
-     */
-    lookupPackage(ecosystem, name) {
-      const key = `${ecosystem}:${ecosystem === "pypi" ? normalisePypiName(name) : name}`;
-      const exact = packageIndex.get(key);
-      if (exact) return exact;
-      const matched = scopeIndex.filter((entry) => key.startsWith(entry.scope));
-      if (matched.length === 0) return null;
-      if (new Set(matched.map((entry) => entry.match.vendor.id)).size > 1) return null;
-      return matched.reduce(
-        (best, entry) => entry.scope.length > best.scope.length ? entry : best
-      ).match;
-    },
-    lookupHost(host) {
-      return hosts.lookup(host);
-    },
-    /**
-     * A question like "is `boto3` a known vendor?" does not say which registry
-     * it means. Trying npm alone answered "no entry" for a vendor the knowledge
-     * base carries under PyPI. So every reading is tried -- a vendor id in any
-     * case, an npm name, a PyPI name, a host -- and when two of them name
-     * different vendors the query answers nothing: naming either would be a
-     * guess, the same refusal `lookupPackage` makes for two overlapping
-     * scopes. The first version let an id win over a package and a package
-     * over a host, silently.
-     */
-    findVendor(query) {
-      const lower = query.toLowerCase();
-      const readings = [
-        byId.get(query) ?? vendors.find((v2) => v2.id.toLowerCase() === lower),
-        kb.lookupPackage("npm", query)?.vendor,
-        kb.lookupPackage("pypi", query)?.vendor,
-        hosts.lookup(query)?.vendor
-      ].filter((v2) => v2 !== void 0);
-      const [first] = readings;
-      return first && readings.every((v2) => v2.id === first.id) ? first : null;
-    },
-    decisionFor(country) {
-      const upper = country.toUpperCase();
-      const decision = adequacy.decisions.find((d2) => d2.country.toUpperCase() === upper);
-      if (!decision) return null;
-      if (lapsed.has(upper) || lapsed.has(`${upper}:${decision.mechanism.toUpperCase()}`)) {
-        return { ...decision, status: "withdrawn" };
-      }
-      return decision;
-    },
-    staleEntries(asOf = /* @__PURE__ */ new Date()) {
-      return vendors.filter((v2) => isStale(v2, asOf));
-    },
-    verifyTasks(entry, asOf = /* @__PURE__ */ new Date()) {
-      return vendorTasks(entry, {
-        stale: isStale(entry, asOf),
-        dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
-          const decision = kb.decisionFor(j.country);
-          return decision?.mechanism === "DPF" && decision.status !== "withdrawn";
-        })
-      });
-    }
-  };
-  return kb;
-}
-function bundledKbPath() {
-  const here = dirname2(fileURLToPath2(import.meta.url));
-  const root = resolve3(here, "..", "..", "..");
-  const workspaceKb = isThisWorkspace(root, here) ? join2(root, "kb") : void 0;
-  const ownKb = join2(here, "..", "kb");
-  const candidates = basename2(here) === "src" ? [workspaceKb, ownKb] : [ownKb, workspaceKb];
-  for (const candidate of candidates) {
-    if (candidate === void 0) continue;
-    try {
-      readFileSync2(join2(candidate, "kb.version"), "utf8");
-      return resolve3(candidate);
-    } catch {
-    }
-  }
-  return void 0;
-}
-var WORKSPACE_LOADER_DIRS = /* @__PURE__ */ new Set([
-  "packages/kb-loader/src",
-  "packages/kb-loader/dist",
-  "packages/cli/dist",
-  "packages/mcp/dist"
-]);
-function isThisWorkspace(root, here) {
-  if (!WORKSPACE_LOADER_DIRS.has(relative2(root, here).split(sep3).join("/"))) return false;
-  try {
-    readFileSync2(join2(root, "pnpm-workspace.yaml"), "utf8");
-    readFileSync2(join2(root, "packages", "kb-loader", "src", "index.ts"), "utf8");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ../core/dist/index.js
 var import_yaml3 = __toESM(require_dist(), 1);
-import { isAbsolute as isAbsolute32 } from "path";
+import { isAbsolute as isAbsolute3 } from "path";
 import { statSync as statSync22 } from "fs";
 import { basename as basename22 } from "path";
 var import_yaml4 = __toESM(require_dist(), 1);
@@ -14605,23 +14805,114 @@ function isRuleId(value) {
 }
 var DISCLAIMER = "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.";
 var DISCLAIMER_SHORT = "Detection only - not a compliance assessment.";
+var FORBIDDEN_CLAIM_WORDS = [
+  "compliant",
+  "non-compliant",
+  "fully compliant",
+  "compliance certified",
+  "certified compliant",
+  "violate",
+  "violation",
+  "illegal",
+  "unlawful",
+  "guarantee",
+  "audit-ready"
+];
+var INFLECTIONS = "(?:s|es|d|ed|ing|ly|ions?)?";
+var DISCLAIMER_ALLOWLIST = [DISCLAIMER, DISCLAIMER_SHORT];
+function findForbiddenClaims(text) {
+  let haystack = text;
+  for (const allowed of DISCLAIMER_ALLOWLIST) {
+    haystack = haystack.split(allowed).join(" ");
+  }
+  haystack = haystack.replace(/https?:\/\/\S+/gi, " ");
+  const lower = haystack.toLowerCase();
+  return FORBIDDEN_CLAIM_WORDS.filter((word) => {
+    const pattern = new RegExp(
+      `(^|[^a-z0-9])${escapeRegExp(word)}${INFLECTIONS}([^a-z0-9]|$)`,
+      "i"
+    );
+    return pattern.test(lower);
+  });
+}
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function readRepoFile(root, path, options) {
+  const { explicit, maxBytes, fail } = options;
+  let link;
+  try {
+    link = lstatSync(path, { throwIfNoEntry: false });
+  } catch (error) {
+    if (error.code !== "ENOTDIR" || explicit) {
+      const code = error.code ?? "unknown error";
+      throw fail(`${path}: cannot be read (${code})`);
+    }
+  }
+  if (!link) {
+    if (explicit) throw fail(`${path}: no such file`);
+    return null;
+  }
+  let target;
+  try {
+    target = statSync2(path);
+  } catch {
+    throw fail(`${path}: is a symlink that does not resolve`);
+  }
+  if (target.isDirectory()) throw fail(`${path}: is a directory, not a file`);
+  if (!target.isFile()) throw fail(`${path}: is not a regular file`);
+  if (!explicit) {
+    const inside = relative3(realpathSync2(root), realpathSync2(path));
+    if (inside.startsWith("..") || isAbsolute2(inside)) {
+      throw fail(`${path}: resolves outside the repository; not read`);
+    }
+  }
+  let bytes;
+  let problem;
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) problem = `${path}: is not a regular file`;
+    else if (opened.size > maxBytes) {
+      problem = `${path}: is larger than ${maxBytes / 1048576} MB; not read`;
+    } else bytes = readFileSync3(fd);
+  } catch (error) {
+    const code = error.code ?? "unknown error";
+    throw fail(`${path}: cannot be read (${code})`);
+  } finally {
+    if (fd !== void 0) closeSync(fd);
+  }
+  if (problem !== void 0 || bytes === void 0) throw fail(problem ?? `${path}: not read`);
+  return decode(bytes, path, fail);
+}
+function decode(bytes, path, fail) {
+  if (bytes[0] === 255 && bytes[1] === 254 || bytes[0] === 254 && bytes[1] === 255) {
+    throw fail(`${path}: is UTF-16; save it as UTF-8`);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw fail(`${path}: is not valid UTF-8`);
+  }
+}
 var MAX_READ_BYTES = 32 * 1048576;
 function readInsideRoot(root, rel) {
-  const real = realpathSync3(join3(root, rel));
-  const inside = relative4(realpathSync3(root), real);
-  if (inside === ".." || inside.startsWith(`..${sep4}`) || isAbsolute3(inside)) {
+  const real = realpathSync22(join3(root, rel));
+  const inside = relative22(realpathSync22(root), real);
+  if (inside === ".." || inside.startsWith(`..${sep4}`) || isAbsolute22(inside)) {
     throw new Error("resolves outside the scan root; not read");
   }
-  const fd = openSync(real, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+  const fd = openSync2(real, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
   try {
-    const stat2 = fstatSync(fd);
+    const stat2 = fstatSync2(fd);
     if (!stat2.isFile()) throw new Error("is not a regular file; not read");
     if (stat2.size > MAX_READ_BYTES) {
       throw new Error(`is larger than ${MAX_READ_BYTES / 1048576} MB; not read`);
     }
-    return readFileSync3(fd, "utf8");
+    return readFileSync22(fd, "utf8");
   } finally {
-    closeSync(fd);
+    closeSync2(fd);
   }
 }
 function readErrorMessage(error) {
@@ -14727,59 +15018,21 @@ var ConfigError = class extends Error {
 };
 function loadConfig(root, explicitPath) {
   const path = explicitPath ?? join22(root, ".egressa.yml");
-  let link;
-  try {
-    link = lstatSync(path, { throwIfNoEntry: false });
-  } catch (error) {
-    if (error.code !== "ENOTDIR" || explicitPath !== void 0) {
-      const code = error.code ?? "unknown error";
-      throw new ConfigError(`${path}: cannot be read (${code})`);
-    }
-  }
-  if (!link) {
-    if (explicitPath !== void 0) throw new ConfigError(`${path}: no such file`);
-    return {};
-  }
-  let target;
-  try {
-    target = statSync2(path);
-  } catch {
-    throw new ConfigError(`${path}: is a symlink that does not resolve`);
-  }
-  if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
-  if (!target.isFile()) throw new ConfigError(`${path}: is not a regular file`);
-  if (explicitPath === void 0) {
-    const inside = relative3(realpathSync2(root), realpathSync2(path));
-    if (inside.startsWith("..") || isAbsolute2(inside)) {
-      throw new ConfigError(`${path}: resolves outside the repository; not read`);
-    }
-  }
-  let bytes;
-  let fd;
-  try {
-    fd = openSync2(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
-    const opened = fstatSync2(fd);
-    if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
-    if (opened.size > MAX_CONFIG_BYTES) {
-      throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1048576} MB; not read`);
-    }
-    bytes = readFileSync22(fd);
-  } catch (error) {
-    if (error instanceof ConfigError) throw error;
-    const code = error.code ?? "unknown error";
-    throw new ConfigError(`${path}: cannot be read (${code})`);
-  } finally {
-    if (fd !== void 0) closeSync2(fd);
-  }
+  const text = readRepoFile(root, path, {
+    explicit: explicitPath !== void 0,
+    maxBytes: MAX_CONFIG_BYTES,
+    fail: (message) => new ConfigError(message)
+  });
+  if (text === null) return {};
   let parsed;
   try {
-    parsed = (0, import_yaml.parse)(decode(bytes, path));
+    parsed = (0, import_yaml.parse)(text);
   } catch (error) {
     if (error instanceof ConfigError) throw error;
     const summary = (error.message.split("\n")[0] ?? "").replace(/:\s*$/, "");
     throw new ConfigError(`${path}: not valid YAML (${summary})`);
   }
-  const source = relative3(root, path).split(sep32).join("/") || path;
+  const source = relative4(root, path).split(sep32).join("/") || path;
   if (parsed === null || parsed === void 0) return { source };
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new ConfigError(
@@ -14889,16 +15142,6 @@ function editDistance(a2, b2) {
     previous = current;
   }
   return previous[b2.length] ?? 0;
-}
-function decode(bytes, path) {
-  if (bytes[0] === 255 && bytes[1] === 254 || bytes[0] === 254 && bytes[1] === 255) {
-    throw new ConfigError(`${path}: is UTF-16; save it as UTF-8`);
-  }
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    throw new ConfigError(`${path}: is not valid UTF-8`);
-  }
 }
 var EXPIRY = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2})))?$/;
 function expiryInstant(value) {
@@ -15018,6 +15261,230 @@ function expiredNote(finding, rule) {
       links: []
     }
   };
+}
+var FACTS_FILE = ".egressa/facts.json";
+var MAX_FACT_AGE_DAYS = 30;
+var FactsError = class extends Error {
+  name = "FactsError";
+};
+var MAX_FACTS_BYTES = 8 * 1048576;
+function loadFacts(root) {
+  const path = join32(root, FACTS_FILE);
+  const text = readRepoFile(root, path, {
+    explicit: false,
+    maxBytes: MAX_FACTS_BYTES,
+    fail: (message) => new FactsError(message.replace(path, FACTS_FILE))
+  });
+  return text === null ? null : parseFacts(text, FACTS_FILE);
+}
+function parseFacts(text, label) {
+  const errors = [];
+  const tree = parseTree2(text, errors, {
+    disallowComments: true,
+    allowTrailingComma: false,
+    allowEmptyContent: false
+  });
+  const first = errors[0];
+  if (first || !tree) {
+    const where = first ? ` at line ${lineOf(text, first.offset)}` : "";
+    const what = first ? printParseErrorCode(first.error) : "empty document";
+    throw new FactsError(`${label}: not valid JSON (${what}${where})`);
+  }
+  const keyProblem = keyProblemIn(tree);
+  if (keyProblem) {
+    throw new FactsError(
+      `${label}: ${keyProblem.problem} at line ${lineOf(text, keyProblem.offset)}`
+    );
+  }
+  const document = plainValue(tree);
+  const issues = bundledSchemaIssues("facts-1.0.0.json", null, document);
+  if (issues.length > 0) {
+    throw new FactsError(`${label}: ${safeIssue(issues[0])}`);
+  }
+  const { facts = [], localVendors = [] } = document;
+  const items = [];
+  for (const [i2, raw] of localVendors.entries()) {
+    const at = `localVendors[${i2}]`;
+    const problem = bundledSchemaIssues("facts-1.0.0.json", "localVendor", raw)[0] ?? bundledSchemaIssues("vendor-1.0.0.json", null, raw.entry)[0];
+    items.push(
+      problem ? { at, kind: "invalid", reason: safeIssue(problem) } : { at, kind: "local-vendor", local: raw }
+    );
+  }
+  for (const [i2, raw] of facts.entries()) {
+    const at = `facts[${i2}]`;
+    const kind = raw.fact;
+    const problem = bundledSchemaIssues("facts-1.0.0.json", "fact", raw)[0] ?? (kind === "dpa" || kind === "subprocessors" ? bundledSchemaIssues(
+      "facts-1.0.0.json",
+      `${kind}Value`,
+      raw.value
+    )[0] : void 0);
+    items.push(
+      problem ? { at, kind: "invalid", reason: safeIssue(problem) } : { at, kind: "fact", fact: raw }
+    );
+  }
+  return { source: label, items };
+}
+var DAY = 864e5;
+var MAX_ZONE_AHEAD_MS = 14 * 36e5;
+function checkFacts(parsed, kb, now) {
+  const out = [];
+  const localIds = /* @__PURE__ */ new Set();
+  const acceptedLocals = [];
+  for (const item of parsed.items) {
+    if (item.kind === "invalid") {
+      out.push({ at: item.at, state: "rejected", reason: item.reason });
+      continue;
+    }
+    if (item.kind !== "local-vendor") continue;
+    const { local } = item;
+    const id = local.entry.id;
+    const base = {
+      at: item.at,
+      kind: "local-entry",
+      ...PLAIN2.test(id) ? { vendor: id } : {}
+    };
+    const timing = timingProblem(local.retrievedAt, local.expires, now);
+    const reason = timing.reason ?? textProblem(local) ?? (kb.byId.has(id) ? "reuses the id of a shipped vendor" : void 0) ?? (localIds.has(id) ? "repeats the id of an earlier local vendor" : void 0) ?? entryIssues(local.entry)[0]?.message ?? collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
+      (issue) => issue.vendorId === id
+    )?.message;
+    if (reason) {
+      out.push({ ...base, state: "rejected", reason: safeIssue(reason) });
+      continue;
+    }
+    localIds.add(id);
+    acceptedLocals.push(local.entry);
+    out.push({
+      ...base,
+      local,
+      state: timing.expired ? "expired" : "current",
+      expiresOn: timing.expiresOn
+    });
+  }
+  const seen = /* @__PURE__ */ new Map();
+  for (const item of parsed.items) {
+    if (item.kind !== "fact") continue;
+    const { fact } = item;
+    const base = { at: item.at, vendor: fact.vendor, kind: fact.fact };
+    const timing = timingProblem(fact.source.retrievedAt, fact.expires, now);
+    const key = `${fact.vendor}|${fact.fact}`;
+    const reason = (kb.byId.has(fact.vendor) || localIds.has(fact.vendor) ? void 0 : "names a vendor that is neither in the knowledge base nor a local vendor in this file") ?? timing.reason ?? textProblem(fact) ?? dpfProblem(fact) ?? (seen.has(key) ? `repeats ${seen.get(key)} for the same vendor and fact` : void 0);
+    if (reason) {
+      out.push({ ...base, state: "rejected", reason });
+      continue;
+    }
+    seen.set(key, item.at);
+    out.push({
+      ...base,
+      fact,
+      state: timing.expired ? "expired" : "current",
+      expiresOn: timing.expiresOn
+    });
+  }
+  const order = new Map(parsed.items.map((item, i2) => [item.at, i2]));
+  out.sort((a2, b2) => (order.get(a2.at) ?? 0) - (order.get(b2.at) ?? 0));
+  return { source: parsed.source, items: out };
+}
+function timingProblem(retrievedAt, expires, now) {
+  const read = expiryInstant(retrievedAt);
+  if (read === null) return { reason: "retrievedAt is not a date", expired: false, expiresOn: "" };
+  if (read > now.getTime() + MAX_ZONE_AHEAD_MS) {
+    return { reason: "retrievedAt is in the future", expired: false, expiresOn: "" };
+  }
+  const cap = read + MAX_FACT_AGE_DAYS * DAY;
+  let end = cap;
+  if (expires !== void 0) {
+    const stated = expiryInstant(expires);
+    if (stated === null) return { reason: "expires is not a date", expired: false, expiresOn: "" };
+    if (stated > cap) {
+      return {
+        reason: `expires more than ${MAX_FACT_AGE_DAYS} days after retrievedAt`,
+        expired: false,
+        expiresOn: ""
+      };
+    }
+    end = stated;
+  }
+  const expiresOn = new Date(end).toISOString().slice(0, 10);
+  return { expired: now.getTime() >= end, expiresOn };
+}
+function dpfProblem(fact) {
+  if (fact.fact !== "dpf") {
+    return "acceptQualifiedStatus" in fact ? "acceptQualifiedStatus applies only to a dpf fact" : void 0;
+  }
+  const { observedStatus, participantUrl } = fact.value;
+  const notListed = dpfStatusVerdict(observedStatus, false).kind === "not-listed";
+  if (notListed !== participantUrl.endsWith("/list")) {
+    return notListed ? `"${DPF_STATUS_NOT_LISTED}" cites the list itself, not a participant record` : "a listed status cites a participant record, not the list";
+  }
+  const verdict = dpfStatusVerdict(observedStatus, fact.acceptQualifiedStatus !== void 0);
+  if (fact.acceptQualifiedStatus && verdict.kind !== "qualified") {
+    return `acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`;
+  }
+  return void 0;
+}
+function textProblem(value) {
+  for (const text of strings(value)) {
+    if (/[\u0000-\u001f\u007f]/.test(text.replace(/[\n\t]/g, " "))) {
+      return "contains a control character";
+    }
+    if (findForbiddenClaims(text).length > 0) {
+      return "uses a word this tool does not use about a vendor (see references/language-rules.md)";
+    }
+  }
+  return void 0;
+}
+function* strings(value) {
+  if (typeof value === "string") yield value;
+  else if (Array.isArray(value)) for (const v2 of value) yield* strings(v2);
+  else if (value !== null && typeof value === "object") {
+    for (const v2 of Object.values(value)) yield* strings(v2);
+  }
+}
+var PLAIN2 = /^[a-z0-9-]{1,64}$/;
+var UNSAFE_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+function keyProblemIn(node) {
+  const children = node.type === "object" ? (node.children ?? []).map((property) => property.children?.[1]) : node.type === "array" ? node.children ?? [] : [];
+  if (node.type === "object") {
+    const keys = /* @__PURE__ */ new Set();
+    for (const property of node.children ?? []) {
+      const key = String(property.children?.[0]?.value ?? "");
+      if (UNSAFE_KEYS.has(key)) return { problem: "a reserved key", offset: property.offset };
+      if (keys.has(key)) return { problem: "a repeated key", offset: property.offset };
+      keys.add(key);
+    }
+  }
+  for (const child of children) {
+    const inner = child ? keyProblemIn(child) : null;
+    if (inner) return inner;
+  }
+  return null;
+}
+function plainValue(node) {
+  switch (node.type) {
+    case "object": {
+      const out = {};
+      for (const property of node.children ?? []) {
+        const [key, value] = property.children ?? [];
+        if (key && value) out[String(key.value)] = plainValue(value);
+      }
+      return out;
+    }
+    case "array":
+      return (node.children ?? []).map(plainValue);
+    default:
+      return node.value;
+  }
+}
+function lineOf(text, offset) {
+  let line = 1;
+  for (let i2 = 0; i2 < offset && i2 < text.length; i2++) if (text.charCodeAt(i2) === 10) line++;
+  return line;
+}
+function safeIssue(message) {
+  return message.replace(
+    /(['"])([^'"]*)\1/g,
+    (whole, quote, text) => /^[\w.@/*:$-]{1,80}$/.test(text) ? whole : `${quote}(not shown)${quote}`
+  );
 }
 var LineIndex = class {
   constructor(text) {
@@ -16017,7 +16484,7 @@ function toInvocation(result) {
       // Located against the source root, like every result. A path that is the
       // machine's, or that climbs out of the root (an explicit --config), has
       // no location in the checkout to point at.
-      ...isAbsolute32(e2.file) || e2.file.startsWith("..") ? {} : {
+      ...isAbsolute3(e2.file) || e2.file.startsWith("..") ? {} : {
         locations: [
           { physicalLocation: { artifactLocation: { uri: e2.file, uriBaseId: "%SRCROOT%" } } }
         ]
@@ -18019,10 +18486,6 @@ var explainCommand = defineCommand({
   }
 });
 
-// src/commands/scan.ts
-import { statSync as statSync3, writeFileSync } from "fs";
-import { resolve as resolve4 } from "path";
-
 // src/emit.ts
 function writeOut(text) {
   return new Promise((resolve5, reject) => {
@@ -18047,6 +18510,66 @@ var EXIT = {
   /** Knowledge base could not be loaded. */
   KB: 4
 };
+
+// src/commands/facts.ts
+var factsCommand = defineCommand({
+  meta: { name: "facts", description: "Check a repository's .egressa/facts.json" },
+  args: {
+    action: { type: "positional", required: false, default: "check", description: "check" },
+    root: { type: "positional", required: false, default: ".", description: "Repository root" },
+    kb: { type: "string", description: "Path to a knowledge base directory" },
+    json: { type: "boolean", default: false }
+  },
+  async run({ args }) {
+    const action = String(args.action);
+    if (action !== "check") {
+      process.stderr.write(`egressa: unknown facts action "${action}"; use check
+`);
+      process.exit(EXIT.USAGE);
+    }
+    let kb;
+    try {
+      kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
+    } catch (error) {
+      if (!(error instanceof KnowledgeBaseError)) throw error;
+      process.stderr.write(`egressa: could not load the knowledge base: ${error.message}
+`);
+      process.exit(EXIT.KB);
+    }
+    let checked;
+    try {
+      const parsed = loadFacts(String(args.root));
+      checked = parsed ? checkFacts(parsed, kb, /* @__PURE__ */ new Date()) : null;
+    } catch (error) {
+      if (!(error instanceof FactsError)) throw error;
+      process.stderr.write(`egressa: ${error.message}
+`);
+      process.exit(EXIT.USAGE);
+    }
+    const text = args.json ? `${JSON.stringify(checked ?? { source: null, items: [] }, null, 2)}
+` : formatCheck(checked);
+    const rejected = checked?.items.some((i2) => i2.state === "rejected") ?? false;
+    await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
+  }
+});
+function formatCheck(checked) {
+  if (!checked) return "No .egressa/facts.json in this repository.\n";
+  if (checked.items.length === 0) return `${checked.source}: no facts.
+`;
+  const lines = checked.items.map((item) => {
+    const what = item.kind ?? "";
+    const detail = item.state === "rejected" ? item.reason ?? "" : item.state === "expired" ? `expired ${item.expiresOn}; the knowledge base's own fact applies` : `until ${item.expiresOn}`;
+    return `  ${item.at.padEnd(16)} ${(item.vendor ?? "-").padEnd(20)} ${what.padEnd(14)} ${item.state.padEnd(9)} ${detail}`;
+  });
+  const count = (state) => checked.items.filter((i2) => i2.state === state).length;
+  return `${checked.source}: ${count("current")} current, ${count("expired")} expired, ${count("rejected")} rejected
+${lines.join("\n")}
+`;
+}
+
+// src/commands/scan.ts
+import { statSync as statSync3, writeFileSync } from "fs";
+import { resolve as resolve4 } from "path";
 
 // src/format/human.ts
 var ESC = String.fromCharCode(27);
@@ -18541,16 +19064,16 @@ var vendorsCommand = defineCommand({
 // src/flags.ts
 function flagProblems(argv2, args) {
   const booleans = /* @__PURE__ */ new Set(["help"]);
-  const strings = /* @__PURE__ */ new Set();
+  const strings2 = /* @__PURE__ */ new Set();
   const short = /* @__PURE__ */ new Set(["h"]);
   for (const [name, def] of Object.entries(args)) {
     if (def.type === "positional") continue;
     if (def.type === "boolean") booleans.add(name).add(`no-${name}`);
-    else strings.add(name);
+    else strings2.add(name);
     for (const alias of ["alias" in def ? def.alias ?? [] : []].flat()) {
       if (alias.length === 1) short.add(alias);
       else if (def.type === "boolean") booleans.add(alias);
-      else strings.add(alias);
+      else strings2.add(alias);
     }
   }
   const problems = { unknown: [], missingValue: [] };
@@ -18560,7 +19083,7 @@ function flagProblems(argv2, args) {
     if (token.startsWith("--")) {
       const eq = token.indexOf("=");
       const name = eq === -1 ? token.slice(2) : token.slice(2, eq);
-      if (strings.has(name)) {
+      if (strings2.has(name)) {
         if (eq !== -1) continue;
         const next = argv2[i2 + 1];
         if (next === void 0 || next.startsWith("-")) problems.missingValue.push(`--${name}`);
@@ -18582,7 +19105,8 @@ var subCommands = {
   scan: scanCommand,
   vendors: vendorsCommand,
   explain: explainCommand,
-  schema: schemaCommand
+  schema: schemaCommand,
+  facts: factsCommand
 };
 var main = defineCommand({
   meta: {

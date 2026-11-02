@@ -23,6 +23,17 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Added
 
+- **`.egressa/facts.json` is read and checked, not yet applied.** A repository can record legal
+  facts it checked against a cited source (a DPF status, a DPA, a sub-processor list) and vendor
+  entries it drafted for destinations the knowledge base does not know. The file is untrusted input:
+  it goes through the reader `.egressa.yml` uses (no link out of the repository, no FIFO, 8 MB cap,
+  UTF-8 only), is parsed as strict JSON with repeated and prototype keys refused, and is checked
+  against the tool's bundled `kb/schema/facts-1.0.0.json`. Each fact is judged on its own: an https
+  source and a retrieval date are required, a DPF fact must cite www.dataprivacyframework.gov, a
+  fact stops counting 30 days after its source was read, and a fact naming an unknown vendor,
+  dated in the future or using a forbidden claim word is rejected by its JSON path without quoting
+  it. A local entry must pass the checks `pnpm kb:validate` runs and may not reuse a shipped id or
+  alias. `egressa facts check [root]` lists each item as current, expired or rejected.
 - **`pnpm kb:tasks`** lists the verification tasks the shipped knowledge base generates, as JSON,
   using the builder a scan uses. It reads no repository and reaches no network. `kb/KB_POLICY.md`
   describes the re-verification flow it feeds.

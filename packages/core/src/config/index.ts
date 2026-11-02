@@ -1,15 +1,6 @@
-import {
-  constants,
-  closeSync,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-} from 'node:fs';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
+import { readRepoFile } from '../discovery/read-repo-file.js';
 import { excludeProblem } from '../discovery/walk.js';
 import { isRuleId } from '../rules.js';
 import type { Finding } from '../types.js';
@@ -60,72 +51,15 @@ export class ConfigError extends Error {
  */
 export function loadConfig(root: string, explicitPath?: string): EgressaConfig {
   const path = explicitPath ?? join(root, '.egressa.yml');
-  let link: ReturnType<typeof lstatSync> | undefined;
-  try {
-    link = lstatSync(path, { throwIfNoEntry: false });
-  } catch (error) {
-    // A root that is not a directory has no config in it; scan() reports the
-    // root itself as a fatal error, which is the message that helps.
-    if ((error as NodeJS.ErrnoException).code !== 'ENOTDIR' || explicitPath !== undefined) {
-      const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
-      throw new ConfigError(`${path}: cannot be read (${code})`);
-    }
-  }
-  if (!link) {
-    // Asking for a file by name and scanning without it would be the silent
-    // widening the rest of this function exists to prevent.
-    if (explicitPath !== undefined) throw new ConfigError(`${path}: no such file`);
-    return {};
-  }
-  // A config that exists but cannot be read is an error, never "no config":
-  // treating it as absent brings back every finding the team suppressed with
-  // nothing to say why.
-  let target: ReturnType<typeof statSync>;
-  try {
-    target = statSync(path);
-  } catch {
-    throw new ConfigError(`${path}: is a symlink that does not resolve`);
-  }
-  if (target.isDirectory()) throw new ConfigError(`${path}: is a directory, not a file`);
-  // A FIFO or a device would block the synchronous read below, and on the MCP
-  // server that stalls every later tool call too.
-  if (!target.isFile()) throw new ConfigError(`${path}: is not a regular file`);
-
-  // The repository's own config must be the repository's own file. A link
-  // pointing elsewhere would have this read, and quote in an error, a file
-  // the caller never asked about -- and MCP returns that text to an agent.
-  // An explicit --config path is the caller's choice and is read as given.
-  if (explicitPath === undefined) {
-    const inside = relative(realpathSync(root), realpathSync(path));
-    if (inside.startsWith('..') || isAbsolute(inside)) {
-      throw new ConfigError(`${path}: resolves outside the repository; not read`);
-    }
-  }
-
-  // Read through the descriptor that was checked, so the file cannot be
-  // swapped for a FIFO between the check and the read; non-blocking, so
-  // opening one does not wait for a writer. The size cap keeps a scanned
-  // repository from handing the MCP server gigabytes to parse.
-  let bytes: Buffer;
-  let fd: number | undefined;
-  try {
-    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
-    const opened = fstatSync(fd);
-    if (!opened.isFile()) throw new ConfigError(`${path}: is not a regular file`);
-    if (opened.size > MAX_CONFIG_BYTES) {
-      throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1_048_576} MB; not read`);
-    }
-    bytes = readFileSync(fd);
-  } catch (error) {
-    if (error instanceof ConfigError) throw error;
-    const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
-    throw new ConfigError(`${path}: cannot be read (${code})`);
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+  const text = readRepoFile(root, path, {
+    explicit: explicitPath !== undefined,
+    maxBytes: MAX_CONFIG_BYTES,
+    fail: (message) => new ConfigError(message),
+  });
+  if (text === null) return {};
   let parsed: unknown;
   try {
-    parsed = parse(decode(bytes, path));
+    parsed = parse(text);
   } catch (error) {
     if (error instanceof ConfigError) throw error;
     // The parser's message quotes the offending lines after its first line.
@@ -295,21 +229,6 @@ function editDistance(a: string, b: string): number {
     previous = current;
   }
   return previous[b.length] ?? 0;
-}
-
-/**
- * UTF-8, or a ConfigError. A UTF-16 file -- what Windows PowerShell 5.1's `>`
- * writes -- parsed as one long string and was treated as no config at all.
- */
-function decode(bytes: Buffer, path: string): string {
-  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
-    throw new ConfigError(`${path}: is UTF-16; save it as UTF-8`);
-  }
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    throw new ConfigError(`${path}: is not valid UTF-8`);
-  }
 }
 
 const EXPIRY =

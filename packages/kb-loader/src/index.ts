@@ -5,7 +5,13 @@ import { HostTrie, normaliseHost } from './host-trie.js';
 import { normalisePypiName } from './pypi.js';
 import { type VerifyTask, vendorTasks } from './tasks.js';
 import type { AdequacyDecision, AdequacyStatus, PackageMatch, VendorEntry } from './types.js';
-import { KnowledgeBaseError, readAdequacy, readText, readVendor } from './validate.js';
+import {
+  KnowledgeBaseError,
+  readAdequacy,
+  readText,
+  readVendor,
+  schemaIssues,
+} from './validate.js';
 
 export * from './types.js';
 export { KnowledgeBaseError } from './validate.js';
@@ -57,6 +63,37 @@ export function knowledgeBaseTasks(kb: KnowledgeBase, asOf: Date): VerifyTask[] 
   return [...kb.vendors]
     .sort((a, b) => a.id.localeCompare(b.id))
     .flatMap((vendor) => kb.verifyTasks(vendor, asOf));
+}
+
+const bundledSchemas = new Map<string, Record<string, unknown>>();
+
+/**
+ * Every way `value` fails a schema this tool shipped, or one definition in it
+ * (`def`, a key under `$defs`). Always the bundled copy: a file a repository
+ * supplies is checked against the tool's schema, never against one it brings.
+ *
+ * Messages carry a JSON pointer built from the schema's own property names and
+ * array indices. The one place a message names something from the value is an
+ * unexpected key, which the caller must treat as untrusted text.
+ */
+export function bundledSchemaIssues(
+  file: 'facts-1.0.0.json' | 'vendor-1.0.0.json',
+  def: string | null,
+  value: unknown,
+): string[] {
+  const bundled = bundledKbPath();
+  if (bundled === undefined) {
+    throw new KnowledgeBaseError(fileURLToPath(import.meta.url), [
+      "this tool's own knowledge base and schemas are missing from its installation; reinstall it",
+    ]);
+  }
+  let schema = bundledSchemas.get(file);
+  if (!schema) {
+    schema = JSON.parse(readText(join(bundled, 'schema', file))) as Record<string, unknown>;
+    bundledSchemas.set(file, schema);
+  }
+  const target = def === null ? schema : { $defs: schema.$defs, $ref: `#/$defs/${def}` };
+  return schemaIssues(target, value);
 }
 
 function isStale(entry: VendorEntry, asOf: Date): boolean {

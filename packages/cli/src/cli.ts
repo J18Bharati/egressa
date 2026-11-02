@@ -1,5 +1,6 @@
 import { type ArgsDef, defineCommand, runMain } from 'citty';
 import { explainCommand } from './commands/explain.js';
+import { factsCommand } from './commands/facts.js';
 import { scanCommand } from './commands/scan.js';
 import { schemaCommand } from './commands/schema.js';
 import { vendorsCommand } from './commands/vendors.js';
@@ -12,6 +13,7 @@ const subCommands = {
   vendors: vendorsCommand,
   explain: explainCommand,
   schema: schemaCommand,
+  facts: factsCommand,
 };
 
 const main = defineCommand({

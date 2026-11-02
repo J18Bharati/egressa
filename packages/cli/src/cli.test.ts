@@ -855,3 +855,65 @@ describe('exit codes for a kb/stale-entry note', () => {
     expect(exitCodeFor(notesOnly, level)).toBe(code);
   });
 });
+
+describe('egressa facts check', () => {
+  const run = (args: string[]) => {
+    try {
+      const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, stdout, stderr: '' };
+    } catch (error) {
+      const e = error as { status: number; stdout: string; stderr: string };
+      return { code: e.status, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+    }
+  };
+  // The command judges expiry against the real clock, so the reading is dated today.
+  const today = new Date().toISOString().slice(0, 10);
+  const repo = (text: string) => {
+    const root = mkdtempSync(join(tmpdir(), 'egressa-facts-cli-'));
+    mkdirSync(join(root, '.egressa'));
+    writeFileSync(join(root, '.egressa', 'facts.json'), text);
+    return root;
+  };
+  const fact = (vendor: string) => ({
+    vendor,
+    fact: 'dpf',
+    value: {
+      observedStatus: 'Active',
+      organizationName: 'Notion Labs, Inc.',
+      participantUrl: 'https://www.dataprivacyframework.gov/participant/6134',
+    },
+    source: { url: 'https://www.dataprivacyframework.gov/participant/6134', retrievedAt: today },
+    verifiedBy: 'A Person',
+  });
+
+  it('says so and exits 0 when there is no file', () => {
+    const { code, stdout } = run(['facts', 'check', mkdtempSync(join(tmpdir(), 'egressa-'))]);
+    expect(code).toBe(EXIT.CLEAN);
+    expect(stdout).toMatch(/No \.egressa\/facts\.json/);
+  });
+
+  it('lists each item with its state, and exits 1 when one is rejected', () => {
+    const root = repo(JSON.stringify({ version: 1, facts: [fact('notion'), fact('nobody')] }));
+    const { code, stdout } = run(['facts', 'check', root]);
+    expect(code).toBe(EXIT.FINDINGS);
+    expect(stdout).toMatch(/1 current, 0 expired, 1 rejected/);
+    expect(stdout).toMatch(/facts\[0\]\s+notion\s+dpf\s+current/);
+    expect(stdout).toMatch(/facts\[1\]\s+nobody\s+dpf\s+rejected/);
+  });
+
+  it('exits 0 when every item is current, and prints JSON on request', () => {
+    const root = repo(JSON.stringify({ version: 1, facts: [fact('notion')] }));
+    const { code, stdout } = run(['facts', 'check', root, '--json']);
+    expect(code).toBe(EXIT.CLEAN);
+    expect(JSON.parse(stdout).items[0]).toMatchObject({ at: 'facts[0]', state: 'current' });
+  });
+
+  it('is a usage error, exit 2, when the file is not a facts document', () => {
+    const { code, stderr } = run(['facts', 'check', repo('{"version": 1,}')]);
+    expect(code).toBe(EXIT.USAGE);
+    expect(stderr).toMatch(/\.egressa\/facts\.json: not valid JSON/);
+  });
+});
