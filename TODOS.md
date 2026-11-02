@@ -171,7 +171,7 @@ outreach to people who never signed up. If yes, add the provisions to
 `references/legal-basis.md` first.
 
 **Why:** In the 2026-09-25 field test, an ad-hoc dispatch outside the skill's routing returned three
-substantive findings of this kind against a backend that emails debtors. One was an `opt_out`
+substantive findings of this kind against the codebase under test. One was an `opt_out`
 auto-action that no code path executes. No shipped checklist covers this. `opt-out-signals.md` is
 about GPC and similar signals owed by a business that sells or shares data, and it correctly stays
 silent without advertising trackers. The findings cited Art 21(1), which `legal-basis.md` does not

@@ -22,6 +22,9 @@ packages/*/kb/
 # root would otherwise commit the repository into itself.
 .claude/worktrees/
 
+# Per-user Claude Code settings: permissions and local paths, never shared.
+.claude/settings.local.json
+
 # Generated reports (make-pdf output and similar)
 /REPORT.pdf
 /*.pdf

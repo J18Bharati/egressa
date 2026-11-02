@@ -486,7 +486,7 @@ fixture repositories — note that the package denominator counts every declared
 frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 
 The approved design record lives in `private/designs/publish-first-linter-wedge.md`, gitignored and
-scrubbed from history because it names prospective customers and pricing: corrected ICP, the
+kept out of git as internal business material: corrected ICP, the
 "complementary not better" claim about code-based vendor discovery, why the sub-processor register
 framing was rejected, and the ordered publish steps. Read it before proposing product direction when
 it is present; a fresh clone will not have it.
