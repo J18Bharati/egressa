@@ -3,6 +3,24 @@
   "version": "0.2.0",
   "description": "Loads and indexes the Egressa vendor knowledge base. Code Apache-2.0; bundled data CC-BY-4.0.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egressa-dev/egressa.git",
+    "directory": "packages/kb-loader"
+  },
+  "homepage": "https://github.com/egressa-dev/egressa#readme",
+  "bugs": {
+    "url": "https://github.com/egressa-dev/egressa/issues"
+  },
+  "keywords": [
+    "gdpr",
+    "privacy",
+    "data-protection",
+    "data-transfer",
+    "cross-border",
+    "static-analysis",
+    "knowledge-base"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20.11"
@@ -15,10 +33,15 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "kb", "README.md"],
+  "files": ["dist", "!dist/**/*.map", "kb", "LICENSE", "NOTICE", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "node ../../scripts/copy-kb.mjs kb-loader"
   },
   "devDependencies": {
     "tsup": "^8.5.1"

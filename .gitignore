@@ -31,3 +31,7 @@ packages/*/kb/
 # file paths, dependency lists and call sites from a private codebase, so these
 # are never committed -- only the defects they surface are.
 /test-runs/
+
+# Licence files copied into each package by scripts/copy-kb.mjs (prepack and build)
+packages/*/LICENSE
+packages/*/NOTICE

@@ -3,6 +3,23 @@
   "version": "0.2.0",
   "description": "Engine for Egressa: detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egressa-dev/egressa.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/egressa-dev/egressa#readme",
+  "bugs": {
+    "url": "https://github.com/egressa-dev/egressa/issues"
+  },
+  "keywords": [
+    "gdpr",
+    "privacy",
+    "data-protection",
+    "data-transfer",
+    "cross-border",
+    "static-analysis"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20.11"
@@ -15,10 +32,15 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "README.md"],
+  "files": ["dist", "!dist/**/*.map", "LICENSE", "NOTICE", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "node ../../scripts/copy-kb.mjs core"
   },
   "dependencies": {
     "@egressa/kb": "workspace:^",
