@@ -14,7 +14,7 @@ describes the state of the repository rather than an artifact anyone can install
 
 ## [Unreleased]
 
-Knowledge base `2026.10.09`. Findings schema `1.1.0`, edited in place.
+Knowledge base `2026.11.02`. Findings schema `1.1.0`, edited in place.
 
 This section will become the first published release. The entries under **Fixed** and **Changed**,
 here and in the versions below, record defects and decisions in the repository before anything was
@@ -255,6 +255,22 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
   specialist for EU and adequate-country transfers, and a `_scanner` line in which that specialist
   accounts for every scanner finding. Step 4 checks the counts and names any specialist that returned
   no block.
+
+### Knowledge base — `2026.10.09` → `2026.11.02`
+
+- **`google-apis`: Google's shared API endpoints and OAuth.** The hosts the Gmail entry deliberately
+  left unmatched now name Google, without naming an API: `www.googleapis.com`,
+  `oauth2.googleapis.com` and `accounts.google.com`, exact matches only, plus the general client
+  packages (`googleapis`, `google-auth-library`, `google-api-python-client`, `google-auth`,
+  `google-auth-oauthlib`). Google's own Discovery Service lists seven APIs rooted at
+  `www.googleapis.com`, Identity Toolkit among them, which is why this is a separate entry rather
+  than an extension of the Gmail one. The legal facts are those of the Google APIs Terms of Service,
+  and the entry's notes record where an API's own terms take over. Gmail's dedicated host and package
+  stay with `google-gmail-api`; an unlisted Google Cloud endpoint such as `storage.googleapis.com`
+  stays unmatched.
+- **LangChain's AWS packages** (`langchain-aws` and `langgraph-checkpoint-aws` on PyPI,
+  `@langchain/aws` on npm) are AWS aliases of kind `framework-integration`: LangChain publishes them,
+  not AWS, so they name AWS at medium confidence rather than the high confidence of an official SDK.
 
 ### Knowledge base — `2026.09.21` → `2026.10.09`
 

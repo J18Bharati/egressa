@@ -637,7 +637,9 @@ describe('a Python service is scanned end to end', () => {
     write(
       root,
       'svc/requirements.txt',
-      'boto3==1.35.0\n    # via langchain-aws\nurllib3==2.2.0\n    # via boto3\nlangchain-aws==0.2.0\n    # via -r requirements.in\n',
+      // The declared parent must be in no knowledge base entry, so that the only
+      // way to a vendor is the transitive boto3 under it.
+      'boto3==1.35.0\n    # via acme-storage\nurllib3==2.2.0\n    # via boto3\nacme-storage==0.2.0\n    # via -r requirements.in\n',
     );
     for (const includeTransitive of [false, true]) {
       const result = scan({ root, toolVersion: '0.0.0', kbPath: 'kb', includeTransitive });
@@ -645,8 +647,23 @@ describe('a Python service is scanned end to end', () => {
       // urllib3 is in no knowledge base entry, so this is the transitive tail
       // staying out of unmatched, not an alias hiding it.
       expect(result.unmatched.packages).not.toContain('urllib3');
-      expect(result.unmatched.packages).toContain('langchain-aws');
+      expect(result.unmatched.packages).toContain('acme-storage');
     }
+  });
+
+  it('attributes a framework integration to its vendor below high confidence', () => {
+    // langchain-aws is LangChain's package for AWS services, not an AWS SDK, so
+    // it names AWS without the confidence an official SDK carries.
+    const root = mkdtempSync(join(tmpdir(), 'egressa-python-'));
+    write(
+      root,
+      'pyproject.toml',
+      '[project]\nname = "svc"\ndependencies = ["langchain-aws>=0.2"]\n',
+    );
+    const result = scan({ root, toolVersion: '0.0.0', kbPath: 'kb' });
+    const aws = result.findings.find((f) => f.vendor?.id === 'aws');
+    expect(aws?.confidence).toBe('medium');
+    expect(aws?.evidence[0]).toMatchObject({ kind: 'dependency', file: 'pyproject.toml' });
   });
 
   it('still attributes a vendor a compiled file declares', () => {

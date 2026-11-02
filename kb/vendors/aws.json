@@ -77,6 +77,11 @@
           "name": "aws-cdk-lib",
           "kind": "framework-integration",
           "detectTransitive": false
+        },
+        {
+          "name": "@langchain/aws",
+          "kind": "framework-integration",
+          "detectTransitive": false
         }
       ],
       "pypi": [
@@ -88,6 +93,16 @@
         {
           "name": "botocore",
           "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "langchain-aws",
+          "kind": "framework-integration",
+          "detectTransitive": false
+        },
+        {
+          "name": "langgraph-checkpoint-aws",
+          "kind": "framework-integration",
           "detectTransitive": false
         }
       ]
@@ -262,6 +277,24 @@
       "title": "AWS SDK for JavaScript v3 - client package READMEs for client-bedrock-runtime, client-textract, client-secrets-manager and client-cloudwatch",
       "publisher": "vendor",
       "accessedAt": "2026-09-21"
+    },
+    {
+      "url": "https://github.com/langchain-ai/langchain-aws",
+      "title": "langchain-aws repository README: LangChain and LangGraph components for AWS services, publishing langchain-aws and langgraph-checkpoint-aws",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://pypi.org/project/langchain-aws/",
+      "title": "langchain-aws on PyPI: an integration package connecting AWS and LangChain",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.npmjs.com/package/@langchain/aws",
+      "title": "@langchain/aws on npm: LangChain AWS integration, repository langchain-ai/langchainjs",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
     }
   ],
   "lastVerified": "2026-09-21",
@@ -526,5 +559,5 @@
       "lastChecked": "2026-09-21"
     }
   ],
-  "notes": "The Data Privacy Framework certification is held by Amazon.com, Inc., participant record 5776, with Amazon Web Services listed among its covered entities rather than certified under its own name. This follows the same shape as Okta and Auth0, and Twilio and Segment, already recorded in this knowledge base. AWS states on its own EU-US Data Privacy Framework page that it adheres to the Framework principles. Region identifiers are recorded from the AWS Regions documentation and are never derived from the identifier itself: three Regions whose identifier begins eu- are outside the EEA, namely London in the United Kingdom and Zurich in Switzerland, and the GovCloud Regions are in the United States despite their distinct identifiers. A Region is a customer configuration setting and the scanner can only report one when it appears in the repository; where it does not, the jurisdictions above are reported unnarrowed. The npm scope @aws-sdk/ is registered as a wildcard alias, @aws-sdk/*, so a client package published under it is attributed to AWS without being enumerated; AWS publishes one package per service under that scope and the list changes with every new service. The exact names are kept beside it because the wildcard records only that the namespace is AWS, while an exact entry records that the package is an official SDK. The four client constructors BedrockRuntimeClient, TextractClient, SecretsManagerClient and CloudWatchClient, and their packages, were read from the README of each client package in the AWS SDK for JavaScript v3 source repository cited above; each README instantiates its client as new <Name>Client({ region: ... }), which is the option recorded as regionOption. The unscoped names aws-sdk and aws-cdk-lib are outside that namespace and stay enumerated individually."
+  "notes": "The Data Privacy Framework certification is held by Amazon.com, Inc., participant record 5776, with Amazon Web Services listed among its covered entities rather than certified under its own name. This follows the same shape as Okta and Auth0, and Twilio and Segment, already recorded in this knowledge base. AWS states on its own EU-US Data Privacy Framework page that it adheres to the Framework principles. Region identifiers are recorded from the AWS Regions documentation and are never derived from the identifier itself: three Regions whose identifier begins eu- are outside the EEA, namely London in the United Kingdom and Zurich in Switzerland, and the GovCloud Regions are in the United States despite their distinct identifiers. A Region is a customer configuration setting and the scanner can only report one when it appears in the repository; where it does not, the jurisdictions above are reported unnarrowed. The npm scope @aws-sdk/ is registered as a wildcard alias, @aws-sdk/*, so a client package published under it is attributed to AWS without being enumerated; AWS publishes one package per service under that scope and the list changes with every new service. The exact names are kept beside it because the wildcard records only that the namespace is AWS, while an exact entry records that the package is an official SDK. The four client constructors BedrockRuntimeClient, TextractClient, SecretsManagerClient and CloudWatchClient, and their packages, were read from the README of each client package in the AWS SDK for JavaScript v3 source repository cited above; each README instantiates its client as new <Name>Client({ region: ... }), which is the option recorded as regionOption. The unscoped names aws-sdk and aws-cdk-lib are outside that namespace and stay enumerated individually. The LangChain packages langchain-aws and langgraph-checkpoint-aws on PyPI and @langchain/aws on npm are published by LangChain, not by AWS, as LangChain components for AWS services such as Amazon Bedrock; they are recorded as framework-integration rather than official-sdk, so a dependency on one is attributed to AWS without the high confidence an official SDK carries."
 }

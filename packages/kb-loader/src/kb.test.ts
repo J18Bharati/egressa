@@ -87,6 +87,20 @@ describe('loadKnowledgeBase', () => {
     expect(kb.lookupHost('www.google-analytics.com')?.vendor.id).toBe('google-analytics');
   });
 
+  it('keeps Gmail-only aliases with Gmail and shared Google endpoints apart', () => {
+    // www.googleapis.com is the rootUrl of Calendar, Drive, Identity Toolkit and
+    // others, so it must not be filed under the Gmail entry's terms; Gmail's own
+    // endpoint and package must not drift to the shared entry either.
+    expect(kb.lookupHost('gmail.googleapis.com')?.vendor.id).toBe('google-gmail-api');
+    expect(kb.lookupPackage('npm', '@googleapis/gmail')?.vendor.id).toBe('google-gmail-api');
+    expect(kb.lookupHost('www.googleapis.com')?.vendor.id).toBe('google-apis');
+    expect(kb.lookupHost('oauth2.googleapis.com')?.vendor.id).toBe('google-apis');
+    expect(kb.lookupPackage('npm', 'googleapis')?.vendor.id).toBe('google-apis');
+    // Exact patterns only: an unlisted Google Cloud endpoint stays unmatched
+    // rather than inheriting the API terms.
+    expect(kb.lookupHost('storage.googleapis.com')).toBeNull();
+  });
+
   it('matches subdomains through suffix patterns', () => {
     expect(kb.lookupHost('o4507.ingest.sentry.io')?.vendor.id).toBe('sentry');
   });

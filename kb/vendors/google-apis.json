@@ -1,0 +1,165 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "google-apis",
+  "name": "Google LLC",
+  "product": "Google APIs (shared endpoints and OAuth)",
+  "category": "other",
+  "homepage": "https://developers.google.com/terms",
+  "aliases": {
+    "packages": {
+      "npm": [
+        {
+          "name": "googleapis",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "google-auth-library",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ],
+      "pypi": [
+        {
+          "name": "google-api-python-client",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "google-auth",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        },
+        {
+          "name": "google-auth-oauthlib",
+          "kind": "official-sdk",
+          "detectTransitive": false
+        }
+      ]
+    },
+    "hosts": [
+      {
+        "pattern": "www.googleapis.com",
+        "match": "exact",
+        "purpose": "api",
+        "note": "The Google API Discovery Service lists seven preferred APIs whose rootUrl is https://www.googleapis.com/: Calendar, Discovery, Drive, Groups Settings, Identity Toolkit, OAuth2 and Site Verification. Host matching cannot see the path, so a request here is attributed to Google without naming the API."
+      },
+      {
+        "pattern": "oauth2.googleapis.com",
+        "match": "exact",
+        "purpose": "auth",
+        "note": "Token and revocation endpoints in Google's OAuth 2.0 for web server applications guide."
+      },
+      {
+        "pattern": "accounts.google.com",
+        "match": "exact",
+        "purpose": "auth",
+        "note": "Authorization endpoint (https://accounts.google.com/o/oauth2/v2/auth) in the same guide; the user's browser is sent here."
+      }
+    ]
+  },
+  "processing": {
+    "jurisdictions": [
+      {
+        "country": "US",
+        "role": "primary",
+        "note": "The Google APIs Terms of Service define \"Google\" as Google LLC, 1600 Amphitheatre Parkway, Mountain View, California, unless additional terms for a given API say otherwise, and select the laws of California. This records the contracting party; none of the pages checked states where requests to these endpoints are processed."
+      },
+      {
+        "country": "IE",
+        "role": "primary",
+        "note": "The Google APIs Terms of Service apply the Google Controller-Controller Data Protection Terms to the extent data protection law requires. Section 5.3 of those terms (version 11) states that Controller SCCs are not required for European Controller Personal Data transferred to Google, because the address of Google Ireland Limited, the applicable Google End Controller, is in an Adequate Country."
+      }
+    ],
+    "euRegion": {
+      "available": false,
+      "notes": "Each API in the Discovery Service lists a single rootUrl for these endpoints, and the OAuth 2.0 guide names one authorization and one token endpoint. No region an API caller can select was found for them. Data residency settings on the products behind them, such as Google Workspace data regions, belong to the account administrator and are not visible from the calling code.",
+      "docUrl": "https://developers.google.com/identity/protocols/oauth2/web-server"
+    }
+  },
+  "legal": {
+    "dpa": {
+      "available": false
+    },
+    "transferMechanisms": [
+      {
+        "mechanism": "DPF",
+        "dpfCertified": true,
+        "url": "https://policies.google.com/privacy/frameworks?hl=en",
+        "lastChecked": "2026-11-02"
+      }
+    ]
+  },
+  "dataCategories": [
+    {
+      "category": "email",
+      "typical": true
+    },
+    {
+      "category": "name",
+      "typical": true
+    },
+    {
+      "category": "content",
+      "typical": false
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://developers.google.com/terms",
+      "title": "Google APIs Terms of Service (last modified 9 November 2021)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://business.safety.google/controllerterms/",
+      "title": "Google Controller-Controller Data Protection Terms (version 11)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://policies.google.com/privacy/frameworks?hl=en",
+      "title": "Google Privacy Policy: data transfer frameworks",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+      "title": "Using OAuth 2.0 for Web Server Applications: authorization, token and revocation endpoints",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://www.googleapis.com/discovery/v1/apis",
+      "title": "Google API Discovery Service: directory of APIs and their discovery documents (rootUrl per API)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/googleapis/google-api-nodejs-client",
+      "title": "Google APIs Node.js client repository, publisher of googleapis",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/googleapis/google-cloud-node/tree/main/core/packages/google-auth-library-nodejs",
+      "title": "Repository of google-auth-library, as named in its npm metadata",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/googleapis/google-api-python-client",
+      "title": "Google API Python client repository, publisher of google-api-python-client",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/google-auth",
+      "title": "Repository of google-auth and google-auth-oauthlib, as named in their PyPI metadata",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-02"
+    }
+  ],
+  "lastVerified": "2026-11-02",
+  "notes": "This entry covers Google endpoints and client libraries shared by many Google APIs, so a finding against it names Google but not which API. Its legal facts are those of the Google APIs Terms of Service, under which Google and the API caller are independent controllers; no processor terms under GDPR Art 28 were found for that relationship, which is why dpa is recorded as unavailable. Those terms yield to additional terms for a given API: Identity Toolkit, one of the APIs served from www.googleapis.com, is offered as part of Google Cloud Identity Platform and Firebase Authentication, whose own terms apply instead. Gmail's dedicated endpoint gmail.googleapis.com and package @googleapis/gmail stay with the google-gmail-api entry, which carries the Gmail-specific facts. The client libraries listed here also authenticate Google Cloud services, so a dependency on them shows that Google is called, not under which terms."
+}

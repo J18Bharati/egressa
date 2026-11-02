@@ -109,7 +109,7 @@ Not in the knowledge base
   No entry exists for these, so no jurisdiction can be reported.
 
 1 finding across 1 vendor (1 file, 2 manifests, 34ms)
-knowledge base 2026.10.09 (17 vendors, adequacy status as of 2026-09-06)
+knowledge base 2026.11.02 (18 vendors, adequacy status as of 2026-09-06)
 Detection only - not a compliance assessment.
 ```
 
