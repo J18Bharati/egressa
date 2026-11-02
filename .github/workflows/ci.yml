@@ -5,11 +5,21 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only by default; the one job that uploads code scanning results asks for more.
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes the older run moot. Runs on main
+# are never cancelled, so a merge is always tested in full.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   verify:
     # The native parser binding and Windows path handling are the two things
     # most likely to break, and both break silently, so the matrix is not
-    # optional.
+    # optional. Node 20 is the engines floor (>=20.11); 24 is what release.yml uses.
     strategy:
       fail-fast: false
       matrix:
@@ -17,39 +27,48 @@ jobs:
         node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # No `version:` input: pnpm/action-setup reads packageManager from
+      # package.json and refuses to start when the two disagree.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm schema:check
-      - run: pnpm test
+      # lint + typecheck + kb:validate + schema:check + test. kb:validate was
+      # missing here, and kb-validate.yml only runs on kb/** changes, so a
+      # validator regression elsewhere went unseen.
+      - run: pnpm verify
       - run: pnpm build
 
   self-scan:
     # Egressa scans its own repository. Its fixtures deliberately contain
     # vendor references, so this asserts the scan runs and emits valid SARIF,
     # not that the result is empty.
+    #
+    # A pull request from a fork gets a read-only token, so the upload would fail
+    # with a permissions error rather than say anything about the change. The
+    # scan itself still runs on the matrix above.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Scan
         run: node packages/cli/dist/cli.js scan . --format sarif --out egressa.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: egressa.sarif
           category: egressa

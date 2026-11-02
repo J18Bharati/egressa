@@ -35,19 +35,37 @@ runs:
   steps:
     - name: Scan
       shell: bash
+      # Inputs travel through the environment, never spliced into the script:
+      # an expression inside `run:` is pasted into the shell text, so an input
+      # containing a quote or `$(...)` would run as code in the caller's job.
+      env:
+        EGRESSA_PATH: ${{ inputs.path }}
+        EGRESSA_VERSION: ${{ inputs.version }}
+        EGRESSA_FAIL_ON: ${{ inputs.fail-on }}
+        EGRESSA_ADEQUACY: ${{ inputs.assume-adequacy-lapsed }}
       run: |
-        extra=""
-        if [ -n "${{ inputs.assume-adequacy-lapsed }}" ]; then
-          extra="--assume-adequacy-lapsed ${{ inputs.assume-adequacy-lapsed }}"
+        set -euo pipefail
+        target="$(cd "$EGRESSA_PATH" && pwd)"
+        extra=()
+        if [ -n "$EGRESSA_ADEQUACY" ]; then
+          extra=(--assume-adequacy-lapsed "$EGRESSA_ADEQUACY")
         fi
-        npx -y egressa@${{ inputs.version }} scan "${{ inputs.path }}" \
-          --format sarif --out egressa.sarif $extra
-        npx -y egressa@${{ inputs.version }} scan "${{ inputs.path }}" \
-          --fail-on "${{ inputs.fail-on }}" $extra
+        # The scanned repository is untrusted input. npm reads a project .npmrc
+        # from the working directory, so a `registry=` line in it would redirect
+        # this download. Leave the workspace, and name the registry outright.
+        cd "$RUNNER_TEMP"
+        egressa() { npx -y --registry=https://registry.npmjs.org/ "egressa@${EGRESSA_VERSION}" "$@"; }
+        # `${extra[@]+...}` because macOS runners ship bash 3.2, where an empty
+        # array under `set -u` is an unbound variable.
+        egressa scan "$target" --format sarif --out "$GITHUB_WORKSPACE/egressa.sarif" \
+          ${extra[@]+"${extra[@]}"}
+        egressa scan "$target" --fail-on "$EGRESSA_FAIL_ON" ${extra[@]+"${extra[@]}"}
 
     - name: Upload SARIF
-      if: always() && inputs.upload-sarif == 'true'
-      uses: github/codeql-action/upload-sarif@v3
+      # Needs `security-events: write` on the calling job. Skipped when the first
+      # scan never produced a file, so a crash is not buried under a second error.
+      if: always() && inputs.upload-sarif == 'true' && hashFiles('egressa.sarif') != ''
+      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: egressa.sarif
         category: egressa
