@@ -402,6 +402,15 @@ two vendors both claim the name — the same refusal `findSinks()` makes, which 
 not have until a wildcard existed to expose it. `kb:validate` rejects the overlap in the data too,
 naming the owning vendor, so the runtime branch should be unreachable on a shipped knowledge base.
 
+**The knowledge base is validated at load, against the tool's own schemas.** `--kb` points at a
+directory a user chose, so `kb-loader/src/validate.ts` checks every file against
+`kb/schema/*.json` from the tool's bundled copy, never the `--kb` directory, so a knowledge base
+cannot ship a permissive schema to vouch for itself. It is a small schema-driven checker rather
+than Ajv: Ajv cost ~150 ms per CLI start and ~285 KB per binary. It **fails closed**, so a schema
+keyword it does not implement throws at compile time, and a differential test holds it to Ajv's
+verdict over every single-edit mutation of the shipped data. A failure is a `KnowledgeBaseError`
+and only that is exit 4; anything else `scan()` throws is exit 3.
+
 Exposure is **computed, not authored** — `packages/core/src/exposure/rules.ts` is a versioned rule
 table, and `kb/ratings/exposure-overrides.json` holds only overrides with mandatory rationale.
 `kb/adequacy-status.json` is separate and EC-sourced, which is what makes

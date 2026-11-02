@@ -139,25 +139,33 @@ describe('the union types agree with the published schema', () => {
 });
 
 describe('a bad --kb is a knowledge base failure at the command line', () => {
-  it('exits 4 and names the file', () => {
-    const dir = scratchKb();
-    const file = editVendor(dir, 'stripe', (e) => {
-      e.legal.transferMechanisms[0].mechanism = 'handshake';
-    });
-    let code = 0;
-    let stderr = '';
-    try {
-      execFileSync(
-        'npx',
-        ['tsx', 'packages/cli/src/cli.ts', 'scan', 'fixtures/repos/clean-eu-only', '--kb', dir],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-    } catch (error) {
-      const e = error as { status: number; stderr: string };
-      code = e.status;
-      stderr = e.stderr;
-    }
-    expect(code).toBe(4);
-    expect(stderr).toContain(file);
-  }, 60_000);
+  // `vendors` loaded the knowledge base with no handler, so a bad one printed
+  // a stack trace and exited 1, which a CI job reads as "findings".
+  it.each([
+    ['scan', 'fixtures/repos/clean-eu-only'],
+    ['vendors', 'list'],
+  ])(
+    '%s exits 4 and names the file',
+    (command, operand) => {
+      const dir = scratchKb();
+      const file = editVendor(dir, 'stripe', (e) => {
+        e.legal.transferMechanisms[0].mechanism = 'handshake';
+      });
+      let code = 0;
+      let stderr = '';
+      try {
+        execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', command, operand, '--kb', dir], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (error) {
+        const e = error as { status: number; stderr: string };
+        code = e.status;
+        stderr = e.stderr;
+      }
+      expect(code).toBe(4);
+      expect(stderr).toContain(file);
+    },
+    60_000,
+  );
 });

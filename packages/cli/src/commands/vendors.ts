@@ -1,6 +1,7 @@
-import { loadKnowledgeBase } from '@egressa/kb';
+import { KnowledgeBaseError, loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
 import { writeOutAndExit } from '../emit.js';
+import { EXIT } from '../exit-codes.js';
 
 /**
  * Makes the knowledge base usable without running a scan. This is what turns
@@ -21,7 +22,14 @@ export const vendorsCommand = defineCommand({
     json: { type: 'boolean', default: false },
   },
   async run({ args }) {
-    const kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
+    let kb: ReturnType<typeof loadKnowledgeBase>;
+    try {
+      kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
+    } catch (error) {
+      if (!(error instanceof KnowledgeBaseError)) throw error;
+      process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
+      process.exit(EXIT.KB);
+    }
     const action = String(args.action);
     const query = args.query ? String(args.query) : undefined;
 

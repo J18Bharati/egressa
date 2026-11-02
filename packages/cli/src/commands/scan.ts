@@ -13,6 +13,7 @@ import {
   toSarif,
 } from '@egressa/core';
 import type { Confidence, Severity } from '@egressa/core';
+import { KnowledgeBaseError } from '@egressa/kb';
 import { defineCommand } from 'citty';
 import { writeOut } from '../emit.js';
 import { EXIT } from '../exit-codes.js';
@@ -172,10 +173,17 @@ export const scanCommand = defineCommand({
           : {}),
       });
     } catch (error) {
+      // Only a knowledge base failure is exit 4. Anything else scan() throws is
+      // an internal error, and labelling it a KB problem sends the reader to
+      // the wrong place.
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
+        process.exit(EXIT.KB);
+      }
       process.stderr.write(
-        `egressa: could not load the knowledge base: ${(error as Error).message}\n`,
+        `egressa: internal error: ${error instanceof Error ? error.message : String(error)}\n`,
       );
-      process.exit(EXIT.KB);
+      process.exit(EXIT.INTERNAL);
     }
 
     const output = render(result, String(args.format), args.color !== false);

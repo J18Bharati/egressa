@@ -12265,11 +12265,11 @@ import {
   fstatSync as fstatSync2,
   lstatSync,
   openSync as openSync2,
-  readFileSync as readFileSync2,
+  readFileSync as readFileSync22,
   realpathSync as realpathSync2,
   statSync as statSync2
 } from "fs";
-import { isAbsolute as isAbsolute2, join as join2, relative as relative3, sep as sep3 } from "path";
+import { isAbsolute as isAbsolute2, join as join22, relative as relative3, sep as sep3 } from "path";
 import { relative as relative2, sep as sep22 } from "path";
 
 // ../../node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby/dist/index.mjs
@@ -13949,9 +13949,11 @@ var ParseErrorCode;
 var import_yaml2 = __toESM(require_dist(), 1);
 
 // ../kb-loader/dist/index.js
-import { readFileSync, readdirSync as readdirSync2 } from "fs";
-import { dirname as dirname2, join, resolve as resolve3 } from "path";
+import { readFileSync as readFileSync2, readdirSync as readdirSync2 } from "fs";
+import { dirname as dirname2, join as join2, resolve as resolve3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
+import { readFileSync } from "fs";
+import { join } from "path";
 var HostTrie = class {
   root = { children: /* @__PURE__ */ new Map() };
   add(vendor, alias) {
@@ -14012,14 +14014,270 @@ function normaliseHost(host) {
 function normalisePypiName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
+var KnowledgeBaseError = class extends Error {
+  constructor(file, issues) {
+    super(
+      issues.length === 1 ? `${file}: ${issues[0]}` : `${file}:
+${issues.map((issue) => `  - ${issue}`).join("\n")}`
+    );
+    this.file = file;
+    this.issues = issues;
+  }
+  file;
+  issues;
+  name = "KnowledgeBaseError";
+};
+var messageOf = (error) => error instanceof Error ? error.message : String(error);
+function readText(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    throw new KnowledgeBaseError(file, [`could not be read: ${messageOf(error)}`]);
+  }
+}
+var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var ANNOTATIONS = /* @__PURE__ */ new Set(["$schema", "$id", "$defs", "title", "description", "default"]);
+var TYPE_TESTS = /* @__PURE__ */ new Map([
+  ["object", isRecord],
+  ["array", Array.isArray],
+  ["string", (v2) => typeof v2 === "string"],
+  ["number", (v2) => typeof v2 === "number" && Number.isFinite(v2)],
+  ["integer", (v2) => typeof v2 === "number" && Number.isInteger(v2)],
+  ["boolean", (v2) => typeof v2 === "boolean"],
+  ["null", (v2) => v2 === null]
+]);
+var typeName = (value) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+var sameJson = (a2, b2) => a2 === b2 || typeof a2 === "object" && a2 !== null && JSON.stringify(a2) === JSON.stringify(b2);
+var report2 = (at, out, message) => out.push(`${at === "" ? "(top level)" : at} ${message}`);
+function unsupported(keyword) {
+  throw new Error(
+    `knowledge base schema keyword "${keyword}" is not supported by the loader's checker; teach validate.ts about it`
+  );
+}
+function resolveRef(root, ref) {
+  if (!ref.startsWith("#/")) unsupported(`$ref ${ref}`);
+  let node = root;
+  for (const part of ref.slice(2).split("/")) {
+    node = isRecord(node) ? node[part.replace(/~1/g, "/").replace(/~0/g, "~")] : void 0;
+  }
+  if (!isRecord(node)) throw new Error(`knowledge base schema $ref ${ref} does not resolve`);
+  return node;
+}
+function compile(root, schema, byRef) {
+  const checks = [];
+  for (const [keyword, rule] of Object.entries(schema)) {
+    if (ANNOTATIONS.has(keyword)) continue;
+    switch (keyword) {
+      case "$ref": {
+        const ref = String(rule);
+        let target = byRef.get(ref);
+        if (!target) {
+          let compiled2;
+          target = (value, at, out) => compiled2?.(value, at, out);
+          byRef.set(ref, target);
+          compiled2 = compile(root, resolveRef(root, ref), byRef);
+        }
+        checks.push(target);
+        break;
+      }
+      case "type": {
+        const types = (Array.isArray(rule) ? rule : [rule]).map(String);
+        const tests = types.map((t2) => TYPE_TESTS.get(t2) ?? unsupported(`type: ${t2}`));
+        const expected = types.join(" or ");
+        checks.push((value, at, out) => {
+          if (!tests.some((test) => test(value))) {
+            report2(at, out, `must be ${expected} (got ${typeName(value)})`);
+          }
+        });
+        break;
+      }
+      case "const":
+        checks.push((value, at, out) => {
+          if (!sameJson(rule, value)) {
+            report2(at, out, `must be equal to constant ${JSON.stringify(rule)}`);
+          }
+        });
+        break;
+      case "enum": {
+        if (!Array.isArray(rule)) unsupported("enum");
+        const allowed = rule;
+        checks.push((value, at, out) => {
+          if (!allowed.some((candidate) => sameJson(candidate, value))) {
+            report2(
+              at,
+              out,
+              `must be equal to one of the allowed values (allowed: ${allowed.join(", ")})`
+            );
+          }
+        });
+        break;
+      }
+      case "required": {
+        if (!Array.isArray(rule)) unsupported("required");
+        const keys = rule.map(String);
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const key of keys) {
+            if (!Object.hasOwn(value, key)) report2(at, out, `must have required property '${key}'`);
+          }
+        });
+        break;
+      }
+      case "properties": {
+        if (!isRecord(rule)) unsupported("properties");
+        const props = Object.entries(rule).map(([key, sub]) => {
+          if (!isRecord(sub)) unsupported(`properties.${key}`);
+          return [key, compile(root, sub, byRef)];
+        });
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const [key, check] of props) {
+            if (Object.hasOwn(value, key)) check(value[key], `${at}/${key}`, out);
+          }
+        });
+        break;
+      }
+      case "additionalProperties": {
+        if (rule === true) break;
+        if (rule !== false) unsupported("additionalProperties (other than a boolean)");
+        const known = isRecord(schema.properties) ? schema.properties : {};
+        checks.push((value, at, out) => {
+          if (!isRecord(value)) return;
+          for (const key of Object.keys(value)) {
+            if (!Object.hasOwn(known, key)) {
+              report2(at, out, `must NOT have additional property '${key}'`);
+            }
+          }
+        });
+        break;
+      }
+      case "items": {
+        if (!isRecord(rule)) unsupported("items (other than a schema)");
+        const each = compile(root, rule, byRef);
+        checks.push((value, at, out) => {
+          if (!Array.isArray(value)) return;
+          for (let i2 = 0; i2 < value.length; i2++) each(value[i2], `${at}/${i2}`, out);
+        });
+        break;
+      }
+      case "minItems":
+        checks.push((value, at, out) => {
+          if (Array.isArray(value) && value.length < Number(rule)) {
+            report2(at, out, `must have at least ${rule} item${rule === 1 ? "" : "s"}`);
+          }
+        });
+        break;
+      case "minLength":
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && Array.from(value).length < Number(rule)) {
+            report2(at, out, `must be at least ${rule} character${rule === 1 ? "" : "s"} long`);
+          }
+        });
+        break;
+      case "maxLength":
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && Array.from(value).length > Number(rule)) {
+            report2(at, out, `must be at most ${rule} characters long`);
+          }
+        });
+        break;
+      case "pattern": {
+        const pattern = new RegExp(String(rule), "u");
+        checks.push((value, at, out) => {
+          if (typeof value === "string" && !pattern.test(value)) {
+            report2(at, out, `must match pattern "${rule}"`);
+          }
+        });
+        break;
+      }
+      case "oneOf": {
+        if (!Array.isArray(rule)) unsupported("oneOf");
+        const shapes = rule.map((sub) => {
+          if (!isRecord(sub)) unsupported("oneOf (other than schemas)");
+          return compile(root, sub, byRef);
+        });
+        checks.push((value, at, out) => {
+          const passing = shapes.filter((shape) => {
+            const scratch = [];
+            shape(value, at, scratch);
+            return scratch.length === 0;
+          });
+          if (passing.length !== 1) report2(at, out, "must match exactly one allowed shape");
+        });
+        break;
+      }
+      case "if": {
+        if (!isRecord(rule)) unsupported("if (other than a schema)");
+        if (!isRecord(schema.then)) unsupported("if without then");
+        const condition = compile(root, rule, byRef);
+        const consequence = compile(root, schema.then, byRef);
+        checks.push((value, at, out) => {
+          const scratch = [];
+          condition(value, at, scratch);
+          if (scratch.length === 0) consequence(value, at, out);
+        });
+        break;
+      }
+      case "then":
+        if (!Object.hasOwn(schema, "if")) unsupported("then without if");
+        break;
+      default:
+        unsupported(keyword);
+    }
+  }
+  return (value, at, out) => {
+    for (const check of checks) check(value, at, out);
+  };
+}
+var MAX_ISSUES = 8;
+function capped(issues) {
+  if (issues.length <= MAX_ISSUES) return issues;
+  return [...issues.slice(0, MAX_ISSUES), `... and ${issues.length - MAX_ISSUES} more`];
+}
+var compiled = /* @__PURE__ */ new Map();
+function checkerFor(schemaPath) {
+  const known = compiled.get(schemaPath);
+  if (known) return known;
+  const parsed = JSON.parse(readText(schemaPath));
+  if (!isRecord(parsed)) throw new Error(`knowledge base schema ${schemaPath} is not an object`);
+  const checker = compile(parsed, parsed, /* @__PURE__ */ new Map());
+  compiled.set(schemaPath, checker);
+  return checker;
+}
+function readValidated(file, conforms) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readText(file));
+  } catch (error) {
+    if (error instanceof KnowledgeBaseError) throw error;
+    throw new KnowledgeBaseError(file, [`is not valid JSON: ${messageOf(error)}`]);
+  }
+  const issues = [];
+  if (!conforms(parsed, issues)) throw new KnowledgeBaseError(file, capped(issues));
+  return parsed;
+}
+var conformsTo = (schemaPath) => (value, issues) => {
+  checkerFor(schemaPath)(value, "", issues);
+  return issues.length === 0;
+};
+var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
+var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
 var STALE_AFTER_DAYS = 180;
 function loadKnowledgeBase(options = {}) {
   const kbPath = options.kbPath ?? defaultKbPath();
-  const vendors = readdirSync2(join(kbPath, "vendors")).filter((f3) => f3.endsWith(".json")).map((f3) => JSON.parse(readFileSync(join(kbPath, "vendors", f3), "utf8"))).sort((a2, b2) => a2.id.localeCompare(b2.id));
-  const adequacy = JSON.parse(
-    readFileSync(join(kbPath, "adequacy-status.json"), "utf8")
-  );
-  const version = readFileSync(join(kbPath, "kb.version"), "utf8").trim();
+  const schemaDir = join2(bundledKbPath() ?? kbPath, "schema");
+  const vendorDir = join2(kbPath, "vendors");
+  let vendorFiles;
+  try {
+    vendorFiles = readdirSync2(vendorDir).filter((f3) => f3.endsWith(".json"));
+  } catch (error) {
+    throw new KnowledgeBaseError(vendorDir, [
+      `could not be listed: ${error instanceof Error ? error.message : String(error)}`
+    ]);
+  }
+  const vendors = vendorFiles.map((f3) => readVendor(join2(vendorDir, f3), schemaDir)).sort((a2, b2) => a2.id.localeCompare(b2.id));
+  const adequacy = readAdequacy(join2(kbPath, "adequacy-status.json"), schemaDir);
+  const version = readText(join2(kbPath, "kb.version")).trim();
   const byId = new Map(vendors.map((v2) => [v2.id, v2]));
   const packageIndex = /* @__PURE__ */ new Map();
   const scopeIndex = [];
@@ -14109,15 +14367,20 @@ function loadKnowledgeBase(options = {}) {
   };
   return kb;
 }
-function defaultKbPath() {
+function bundledKbPath() {
   const here = dirname2(fileURLToPath2(import.meta.url));
-  for (const candidate of [join(here, "..", "kb"), join(here, "..", "..", "..", "kb")]) {
+  for (const candidate of [join2(here, "..", "kb"), join2(here, "..", "..", "..", "kb")]) {
     try {
-      readFileSync(join(candidate, "kb.version"), "utf8");
+      readFileSync2(join2(candidate, "kb.version"), "utf8");
       return resolve3(candidate);
     } catch {
     }
   }
+  return void 0;
+}
+function defaultKbPath() {
+  const found = bundledKbPath();
+  if (found) return found;
   throw new Error("Could not locate the knowledge base. Pass kbPath explicitly.");
 }
 
@@ -14205,6 +14468,9 @@ var RULES = {
   }
 };
 var RULE_IDS = Object.keys(RULES);
+function isRuleId(value) {
+  return RULE_IDS.some((id) => id === value);
+}
 var DISCLAIMER = "Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.";
 var DISCLAIMER_SHORT = "Detection only - not a compliance assessment.";
 var MAX_READ_BYTES = 32 * 1048576;
@@ -14328,7 +14594,7 @@ var ConfigError = class extends Error {
   name = "ConfigError";
 };
 function loadConfig(root, explicitPath) {
-  const path = explicitPath ?? join2(root, ".egressa.yml");
+  const path = explicitPath ?? join22(root, ".egressa.yml");
   let link;
   try {
     link = lstatSync(path, { throwIfNoEntry: false });
@@ -14365,7 +14631,7 @@ function loadConfig(root, explicitPath) {
     if (opened.size > MAX_CONFIG_BYTES) {
       throw new ConfigError(`${path}: is larger than ${MAX_CONFIG_BYTES / 1048576} MB; not read`);
     }
-    bytes = readFileSync2(fd);
+    bytes = readFileSync22(fd);
   } catch (error) {
     if (error instanceof ConfigError) throw error;
     const code = error.code ?? "unknown error";
@@ -14405,7 +14671,7 @@ function loadConfig(root, explicitPath) {
     throw new ConfigError(`${path}: includeTransitive must be true or false`);
   }
   const failOn = config.failOn;
-  if (failOn !== void 0 && failOn !== null && !FAIL_ON_LEVELS.includes(failOn)) {
+  if (failOn !== void 0 && failOn !== null && !isFailOnLevel(failOn)) {
     throw new ConfigError(`${path}: failOn must be one of ${FAIL_ON_LEVELS.join(", ")}`);
   }
   const suppressions = config.suppressions;
@@ -14448,6 +14714,9 @@ function loadConfig(root, explicitPath) {
 }
 var MAX_CONFIG_BYTES = 8 * 1048576;
 var FAIL_ON_LEVELS = ["none", "note", "warning", "error"];
+function isFailOnLevel(value) {
+  return FAIL_ON_LEVELS.some((level) => level === value);
+}
 var TOP_LEVEL_KEYS = [
   "version",
   "exclude",
@@ -14567,7 +14836,7 @@ function suppressionProblems(findings, config, vendorIds, narrowedBy) {
       );
       continue;
     }
-    if (rule.rule !== void 0 && !RULE_IDS.includes(rule.rule)) {
+    if (rule.rule !== void 0 && !isRuleId(rule.rule)) {
       problems.push(
         PLAIN.test(rule.rule) ? `${at} names rule "${rule.rule}", which is not a rule` : `${at} names a rule that does not exist`
       );
@@ -15029,7 +15298,7 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
   };
   const wellFormed = (entry) => entry.startsWith("-") || SOURCE_ENTRY.test(entry) || packageEntry(entry) !== null;
   const annotated = found.filter((f3) => f3.via !== null).length;
-  const compiled = header || found.length > 0 && annotated === found.length && found.every((f3) => f3.via?.every(wellFormed)) && found.some((f3) => f3.via?.some(isSource));
+  const compiled2 = header || found.length > 0 && annotated === found.length && found.every((f3) => f3.via?.every(wellFormed)) && found.some((f3) => f3.via?.some(isSource));
   const errors = [];
   const unannotated = header && annotated === 0 && found.length > 0;
   if (unannotated) {
@@ -15045,9 +15314,9 @@ function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
     const via = f3.via ?? [];
     const excludedParent = via.some((entry) => omitted.has(packageEntry(entry) ?? ""));
     const unrecognised = parents.length === 0 && via.some((entry) => !wellFormed(entry));
-    const doubtful = compiled && !unannotated && !via.some(isSource) && (excludedParent || unrecognised);
+    const doubtful = compiled2 && !unannotated && !via.some(isSource) && (excludedParent || unrecognised);
     if (doubtful) unsure.push(f3.name);
-    const direct = !unannotated && (!compiled || f3.via === null || via.some(isSource) || doubtful);
+    const direct = !unannotated && (!compiled2 || f3.via === null || via.some(isSource) || doubtful);
     const transitiveVia = direct ? [] : (f3.via ?? []).map(packageEntry).filter((name) => name !== null);
     return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, transitiveVia);
   });
@@ -17097,7 +17366,9 @@ function buildFinding(ruleId, vendor, signals, classified, region, staleVendorId
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
   const transfer = vendor ? toTransferFacts(vendor) : null;
-  const unmappedRegions = signals.filter((s2) => isUnmappedRegion(vendor, s2.region)).map((s2) => s2.region);
+  const unmappedRegions = signals.flatMap(
+    (s2) => s2.region !== void 0 && isUnmappedRegion(vendor, s2.region) ? [s2.region] : []
+  );
   const exposure = vendor && unmappedRegions.length > 0 ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure : classified?.exposure ?? null;
   return {
     id: fingerprint(
@@ -17450,12 +17721,12 @@ var explainCommand = defineCommand({
       return;
     }
     const id = String(args.rule);
-    const rule = RULES[id];
-    if (!rule) {
+    if (!isRuleId(id)) {
       process.stderr.write(`egressa: unknown rule "${id}"
 `);
       process.exit(2);
     }
+    const rule = RULES[id];
     process.stdout.write(
       [
         rule.id,
@@ -17846,11 +18117,16 @@ var scanCommand = defineCommand({
         ...args["assume-adequacy-lapsed"] ? { assumeAdequacyLapsed: String(args["assume-adequacy-lapsed"]).split(",") } : {}
       });
     } catch (error) {
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}
+`);
+        process.exit(EXIT.KB);
+      }
       process.stderr.write(
-        `egressa: could not load the knowledge base: ${error.message}
+        `egressa: internal error: ${error instanceof Error ? error.message : String(error)}
 `
       );
-      process.exit(EXIT.KB);
+      process.exit(EXIT.INTERNAL);
     }
     const output = render(result, String(args.format), args.color !== false);
     const out = args.out ? String(args.out) : void 0;
@@ -17886,7 +18162,7 @@ function exitCodeFor(result, failOn) {
   return triggered ? EXIT.FINDINGS : EXIT.CLEAN;
 }
 function parseFailOn(value) {
-  if (FAIL_ON_LEVELS.includes(value)) return value;
+  if (isFailOnLevel(value)) return value;
   process.stderr.write(`egressa: --fail-on must be one of ${FAIL_ON_LEVELS.join(", ")}
 `);
   process.exit(EXIT.USAGE);
@@ -17937,7 +18213,15 @@ var vendorsCommand = defineCommand({
     json: { type: "boolean", default: false }
   },
   async run({ args }) {
-    const kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
+    let kb;
+    try {
+      kb = loadKnowledgeBase(args.kb ? { kbPath: String(args.kb) } : {});
+    } catch (error) {
+      if (!(error instanceof KnowledgeBaseError)) throw error;
+      process.stderr.write(`egressa: could not load the knowledge base: ${error.message}
+`);
+      process.exit(EXIT.KB);
+    }
     const action = String(args.action);
     const query = args.query ? String(args.query) : void 0;
     if (action === "list") {
