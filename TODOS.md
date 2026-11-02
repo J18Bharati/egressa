@@ -90,7 +90,7 @@ processing, as opposed to regions a customer has to select, and re-author Twilio
 US1 is the default and IE1 and AU1 are chosen by the customer. AWS lists only what a default customer
 reaches. Under Twilio's convention AWS would be a `warning`; under AWS's, Twilio would be a `note`. The
 first `warning` on a real repository (field test 3) rests on `decision:AU:none`, for a client that sets
-no region at all. That is A12 in `docs/reviews/2026-09-26-field-test-3-triage.md`.
+no region at all. That is A12 in the private field test 3 triage notes.
 
 **Context:** `regionSelected` matters only once a region is detected (`exposure/rules.ts:92`), so
 marking AU selectable does not change the default set alone. The convention belongs in
@@ -177,7 +177,7 @@ about GPC and similar signals owed by a business that sells or shares data, and 
 silent without advertising trackers. The findings cited Art 21(1), which `legal-basis.md` does not
 carry. Under this skill's rules, nothing may be cited until it does.
 
-**Context:** F2 in `docs/reviews/2026-09-25-live-run-triage.md`. The triage first recommended
+**Context:** F2 in the private 2026-09-25 live-run triage notes. The triage first recommended
 routing `opt-out-signals.md` on `SCOPE_OPT_OUT`. That was wrong, because the checklist's own scope
 rule would then emit nothing. `SCOPE_OPT_OUT` is now documented as a context gate, and
 `scope-gates.test.ts` fails on any gate that is neither routed nor listed as context. A new
@@ -350,12 +350,12 @@ The schema edit is only free until the first release: nothing has ever been publ
 `findings-1.1.0.json` can change in place today, and after a release a meaning change needs a new
 schema file. That makes this cheaper now than it will ever be again.
 
-Raised as T5.3 in `docs/reviews/2026-09-21-external-run-triage.md`, where it was recorded as
+Raised as T5.3 in the private 2026-09-21 external-run triage notes, where it was recorded as
 renderer-only. It is not — the engineering review caught that SARIF flattens it too, and the type
 turns out to discard `role` before any renderer sees it.
 
 The same change should carry the **evaluated** jurisdiction set (A11 in
-`docs/reviews/2026-09-26-field-test-3-triage.md`). `transfer.jurisdictions` is never narrowed by a
+the private field test 3 triage notes). `transfer.jurisdictions` is never narrowed by a
 region. Only `exposure.inputs` records `narrowedTo:`, which `human.ts` string-parses back out. So in
 markdown and SARIF, a `us-east-2` finding reads identically to the vendor default, including "EEA",
 and the `[unmapped]` marker exists only in human output. Add the evaluated set and the region to the
@@ -527,7 +527,7 @@ that branch, but the branch edited the render path. SARIF and JSON escape by con
   `constraints*.txt` is skipped by name today.
 - The `kb:validate` pypi rule has no negative test.
 
-Field test 3 (`docs/reviews/2026-09-26-field-test-3-triage.md`, A13 and B11) added:
+Field test 3 (A13 and B11 in its private triage notes) added:
 - `requirements-constraints.txt` is read, because `isRequirementsFile` checks only a `constraints`
   prefix. Fix this one first: it is the only precision item here.
 - A wheel filename (`twilio-9.0.0-py3-none-any.whl`) and a name split by `\` continuation both reach
@@ -565,7 +565,7 @@ Two reported shapes are still guesses about what pip-compile writes: a line-styl
 **Pros:** Closes the last generator the reader supports without real output; settles A15.
 **Cons:** pip-tools cannot be installed offline, so this needs one networked install by hand.
 
-**Context:** `docs/reviews/2026-09-27-field-test-4-triage.md`, A14 and A15. The script builds stub
+**Context:** the private field test 4 triage notes, A14 and A15. The script builds stub
 wheels with fixed timestamps and serves them from a file index, so pip-compile can run offline once
 pip-tools itself is installed.
 
@@ -651,7 +651,7 @@ digest on the `ok` line.
 
 **Why:** Field test 3 ran it against a cached `node:20-slim` five months old. A "clean container" check
 that uses whatever image happens to be cached is not testing a current Node 20, and the pull path was
-never exercised. That is G4 in `docs/reviews/2026-09-26-field-test-3-triage.md`.
+never exercised. That is G4 in the private field test 3 triage notes.
 
 **Effort:** S
 **Priority:** P3
@@ -707,13 +707,13 @@ there is no harness to design. `scan-transfers.sh` is what the transfers special
 to, and per the revised dispatch contract the transfers specialist always runs — so a silent
 failure there reproduces T0.1's exact shape in the one specialist nothing else gates. Highest
 value single assertion: `reconcile-aws.sh` makes no network call without `EGRESSA_ALLOW_AWS=1`.
-Raised by the engineering review in `docs/reviews/2026-09-21-external-run-triage.md`.
+Raised by the engineering review in the private 2026-09-21 external-run triage notes.
 
 While there, make `scan-transfers.sh` print which binary tier it resolved. The tiers are now the
 checkout the skill lives in, the degraded bundle, `PATH`, and opt-in `npx` -- never the scan target,
 since `untrusted-input-hardening`. On 2026-09-25 it resolved through the skill's own checkout, a
 tier that an installed copy does not have, and nothing in the output said so (F3 in
-`docs/reviews/2026-09-25-live-run-triage.md`).
+the private 2026-09-25 live-run triage notes).
 
 **Effort:** M
 **Priority:** P2

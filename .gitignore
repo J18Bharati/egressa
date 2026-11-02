@@ -35,3 +35,13 @@ packages/*/kb/
 # Licence files copied into each package by scripts/copy-kb.mjs (prepack and build)
 packages/*/LICENSE
 packages/*/NOTICE
+
+# Confidential working material: field-test triage written against private
+# codebases, and the internal design record (customer names, pricing). Kept
+# locally under private/ and scrubbed from history; never committed.
+/private/
+docs/reviews/*
+docs/designs/*
+
+# Output of the nightly link check, regenerated each run.
+/link-report.md

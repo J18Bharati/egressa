@@ -389,7 +389,7 @@ describe('a filename cannot be read as an option', () => {
   });
 });
 
-// F1 in docs/reviews/2026-09-25-live-run-triage.md. The gate knew only the
+// F1 in the private 2026-09-25 live-run triage notes. The gate knew only the
 // dedicated replay vendors, so `Sentry.replayIntegration()` recording a tenth of
 // all sessions never dispatched the specialist -- while the engine matched
 // @sentry/nuxt in the same run. Replay configured inside a general SDK is a
@@ -449,7 +449,7 @@ describe('session replay inside a general SDK routes the specialist', () => {
   });
 });
 
-// F2 in docs/reviews/2026-09-25-live-run-triage.md. SCOPE_OPT_OUT was computed,
+// F2 in the private 2026-09-25 live-run triage notes. SCOPE_OPT_OUT was computed,
 // not routed, and not listed as context -- an orphan nobody could tell was
 // deliberate. Every gate scope.sh emits must now be named in SKILL.md, either in
 // the dispatch table or in the context-only list.

@@ -485,9 +485,15 @@ The knowledge base holds 17 vendors. `pnpm kb:coverage` reports the matched frac
 fixture repositories — note that the package denominator counts every declared dependency including
 frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 
-`docs/designs/publish-first-linter-wedge.md` is the approved design record: corrected ICP, the
+The approved design record lives in `private/designs/publish-first-linter-wedge.md`, gitignored and
+scrubbed from history because it names prospective customers and pricing: corrected ICP, the
 "complementary not better" claim about code-based vendor discovery, why the sub-processor register
-framing was rejected, and the ordered publish steps. Read it before proposing product direction.
+framing was rejected, and the ordered publish steps. Read it before proposing product direction when
+it is present; a fresh clone will not have it.
+
+`private/` also holds the field-test triage notes (`private/reviews/`) that `TODOS.md` and some test
+comments cite by date. They were written against private codebases, so they never enter git:
+`.gitignore` covers `private/`, `docs/reviews/*` and `docs/designs/*`.
 
 `TODOS.md` tracks actionable engineering work, and is deliberately not the roadmap: the roadmap
 records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is that
