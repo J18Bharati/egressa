@@ -3,118 +3,172 @@
 > Egressa detects third-party data-egress patterns in source code and their cross-border transfer
 > exposure. It does not assess or certify GDPR compliance.
 
-Point it at a JavaScript or TypeScript repository. It tells you which third-party vendors your code
-references, where those vendors process data, and what your exposure is if EU-US adequacy lapses.
+Egressa reads a repository and lists the third-party vendors its code calls or depends on, where
+each vendor processes data according to a sourced knowledge base, and which transfer mechanism that
+rests on. It reads JavaScript and TypeScript call sites, npm and Python dependency manifests, and
+the regions declared in Terraform, Serverless, Vercel and `fly.toml` configuration.
 
-**Nothing is published to npm yet.** Today it installs as a Claude Code plugin, which brings both
-skills and the write-time hook:
+## Who it is for
 
-```
-/plugin marketplace add egressa-dev/egressa
-/plugin install egressa@egressa
-```
+A B2B company of roughly 2 to 10 people, with no compliance function, that has sent a customer its
+sub-processor list and been asked to say when that list changes.
 
-Or from a checkout:
+The list is written once and then goes stale without anyone noticing: someone adds an SDK or a call
+to a new API, and the document stays as it was. A questionnaire tool that drafts answers from your
+previous answers will repeat the stale version. Egressa derives the vendor list from the code
+itself, so running it on every pull request tells you when a code change changed the answer.
 
-```bash
-pnpm install && pnpm build
-node packages/cli/dist/cli.js scan .
-```
-
-Once published, `npx egressa scan .` will be the one-liner. The commands below show the CLI as
-`egressa` for readability.
-
-No account, no API key, no telemetry, no network calls. Runs entirely offline against a knowledge
-base shipped alongside the binary.
+It is one input to that list, not the list. Source code shows a class of sub-processor that
+inventories built from an identity provider, procurement records or a self-declared form are likely
+to miss: the SDKs and API calls your product embeds. That is our reasoning from how those tools
+describe their own discovery, not something any of them documents. A scanner that loads your live
+website will see the client-side part of it too, so the difference is clearest for server-side and
+build-time integrations. Egressa does not replace those inventories, and vendors called only from
+backend code outside the scanned repository, or behind runtime configuration, are invisible to it.
 
 ## What it cannot see
 
-Read this before trusting a clean scan.
+Read this before trusting a clean scan. A clean scan means that no known vendor was matched by the
+analyzers that ran, and nothing more.
 
 - **Server-side proxying.** If your frontend calls your own backend and the backend calls the
   vendor, the transfer is invisible unless that backend is in the scanned repository. This is the
-  largest structural blind spot and no static scanner can close it.
-- **Runtime-configured destinations.** A host that arrives from an environment variable is reported
-  as `transfer/unresolved-egress`, naming the variable. Egressa never guesses a host.
-- **Vendors not in the knowledge base**, reported as `transfer/unknown-vendor-egress`. The knowledge
-  base is a curated seed set of 17 vendors, not a census. The transfer triage skill will research an
-  unknown vendor from primary sources and draft a knowledge base request; it will not research an
-  unresolved *host*, because that answer is in your deployment configuration rather than on the web.
-- **Non-JavaScript surfaces** — tag managers, CSP headers, native mobile, infrastructure config.
-- **Call sites, when the native parser is unavailable** on the platform. The scan falls back to
-  dependency manifests alone and says so (`engine.degraded`). A vendor called by URL with no SDK
-  installed is invisible in that mode, so a clean degraded scan means very little.
+  largest gap, and no static scanner can close it.
+- **Runtime-configured destinations.** A host that comes from an environment variable or runtime
+  configuration is reported as `transfer/unresolved-egress`, naming the variable. Egressa never
+  guesses a host.
+- **Constants imported from another file.** Analysis is single-file, so
+  `import { API_BASE } from './config'` followed by `fetch(API_BASE)` is unresolved.
+- **Vendors not in the knowledge base.** The knowledge base is a curated set, not a census: 17
+  vendors in version `2026.10.09`, and `egressa vendors list` prints the current roster. An unknown
+  *host* is a `transfer/unknown-vendor-egress` finding. An unknown *package* is only listed under
+  "Not in the knowledge base". It is not a finding, so `--fail-on` never fires on it. SendGrid in
+  the example below is one.
+- **Anything the parsers do not read:** Python call sites (Python dependencies are read, calls are
+  not), HTML `<script src>` tags, tag manager containers, CSP headers, native mobile code and CDK
+  stacks. A region in infrastructure configuration is read only when it is a literal.
+- **Call sites, when the native parser is unavailable** on your platform. The scan falls back to
+  dependency manifests and says so (`scan.engine.degraded` in JSON). A vendor called by URL with
+  no SDK declared is invisible in that mode, so a clean degraded scan tells you very little.
 
-A finding means your code *references* a vendor. It does not mean personal data was sent, that the
-data was personal, or that sending it was unlawful. See [docs/CLAIMS.md](docs/CLAIMS.md).
+A finding means your code references a vendor. It does not mean that personal data was sent, that
+the data was personal, or anything about whether sending it was lawful. The full list, with the test
+case behind each entry, is in [docs/LIMITATIONS.md](docs/LIMITATIONS.md); what a finding claims is
+in [docs/CLAIMS.md](docs/CLAIMS.md).
 
-## Scoping what gets scanned
+<!-- Update this section, the Action note under "Watching for changes", and SECURITY.md's
+     reporting note at the first release. -->
+## Status: not released yet
 
-`node_modules` is never walked, in any mode. Beyond that, four mechanisms decide what's read, and
-they combine rather than compete:
-
-- **`.gitignore`** is honoured automatically.
-- **`.egressaignore`**, same syntax, for anything you want out of a scan without taking it out of
-  version control.
-- **`exclude:` in `.egressa.yml`** — a list of globs, the natural place for a team's standing
-  exclusions: a deprecated tree, generated output, a vendored copy nobody wants findings against.
-- **`--exclude <glob>`**, repeatable on the command line, for narrowing a single run. It's added to
-  whatever `exclude:` already lists, not swapped in for it — the common case is "also skip this,
-  just this once," not "stop honouring what the team committed."
-
-`.egressa.yml` is applied by the engine, so the MCP server honours it exactly as the CLI does: its
-excludes, and its suppressions, which mark a finding suppressed rather than remove it. The findings
-document and the MCP summary both name the file in `scan.config`, because an agent scanning someone else's repository should
-be able to say that the repository scoped its own scan.
-
-The file is read strictly. An unknown key, a YAML merge key (`<<:`), a file that is not UTF-8 or not
-a mapping, a symlink that does not resolve and anything that is not a regular file are all usage
-errors (CLI exit 2, MCP tool error),
-never "no config": a misspelled `expiry:` used to leave a temporary suppression in place for good.
-`expires` is an ISO date such as `2027-01-31`, which ends the suppression at the start of that day in
-UTC, as Trivy, OSV-Scanner and OWASP Dependency-Check do, or a time with its zone, such as
-`2027-01-31T17:00Z`.
+Nothing is published to npm, and the GitHub repository `egressa-dev/egressa` that the plugin, the
+Action and the issue links refer to has not been created. **Until the first release, the only path
+that works is a checkout:**
 
 ```bash
-egressa scan . --exclude 'legacy/**' --exclude '**/*.generated.ts'
+pnpm install
+pnpm build
+node packages/cli/dist/cli.js scan path/to/your/repo
 ```
 
-## The surfaces
+This needs Node 20.11 or later and pnpm 9. The commands below are written as `egressa`; from a
+checkout, that is `node packages/cli/dist/cli.js`.
 
-One engine. All of these consume the same versioned findings schema.
+After the first release, these are the install paths. None of them works today.
 
-| | |
+| Surface | Command | Needs |
+|---|---|---|
+| CLI | `npx egressa scan .` | npm release |
+| GitHub Action | `uses: egressa-dev/egressa@v1` (see below) | npm release, repository, `v1` tag |
+| Claude Code plugin | `/plugin marketplace add egressa-dev/egressa`, then `/plugin install egressa@egressa` | repository |
+| MCP server | `claude mcp add egressa -- npx -y @egressa/mcp@latest` | npm release |
+
+The scanner needs no account, no API key and no network. It runs offline against the knowledge base
+shipped beside it, and there is no telemetry.
+
+## Example
+
+Output of the built CLI against a fixture in this repository, copied from a real run:
+
+```
+$ egressa scan fixtures/repos/express-stripe-sendgrid --no-color
+i Stripe, LLC
+    processing: US, IE
+    EU region:  not documented
+    relies on an adequacy decision that could be withdrawn
+    verified:   2026-09-06
+    src/pay.ts:8  api.stripe.com
+    package-lock.json:8  stripe [dependency]
+    package.json:7  stripe [dependency]
+    Stripe, LLC data processing agreement: https://stripe.com/legal/dpa
+    Stripe, LLC sub-processors: https://stripe.com/legal/service-providers
+
+Not in the knowledge base
+  @sendgrid/mail
+  express
+  vitest
+  No entry exists for these, so no jurisdiction can be reported.
+
+1 finding across 1 vendor (1 file, 2 manifests, 34ms)
+knowledge base 2026.10.09 (17 vendors, adequacy status as of 2026-09-06)
+Detection only - not a compliance assessment.
+```
+
+`i` marks a note and `!` a warning. Nothing defaults to an error. Stripe was found three ways: a
+call to `api.stripe.com` in `src/pay.ts`, and the `stripe` dependency in both manifests. "Relies on
+an adequacy decision that could be withdrawn" means the transfer currently rests on the EU-US Data
+Privacy Framework, whose certification list the knowledge base records Stripe on. The SendGrid
+package is in the code but has no entry, so it is listed rather than reported.
+
+Other output formats: `--format json`, `--format sarif` or `--format markdown`, with `--out <file>`
+to write to a file. `egressa explain transfer/unresolved-egress` explains a rule, and
+`egressa vendors show stripe` prints an entry with its sources. `egressa scan --help` lists every
+flag.
+
+## Watching for changes
+
+There is no baseline or diff command yet. Today, watching for changes means running the scan on
+every pull request. With the GitHub Action, after the first release:
+
+```yaml
+name: egressa
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  egressa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: egressa-dev/egressa@v1
+        with:
+          version: <released version>  # defaults to latest; pin it
+          fail-on: warning
+```
+
+The Action uploads SARIF to GitHub code scanning. Each finding carries a fingerprint built from the
+vendor, the rule, the file and the matched host or package, so an unchanged finding keeps its alert
+from run to run and a newly added vendor arrives as a new alert. Scanning pushes to `main` as well
+gives code scanning a base branch to compare pull requests against. How these alerts render on a
+live repository has not been checked yet; that check is part of the first release.
+
+`--fail-on` works by level, not by novelty: any finding at or above the level fails the job, old or
+new. The two third-country rules are warnings. Every other rule is a note, including a vendor
+covered by the Data Privacy Framework, an unknown host and an unresolved one. So `--fail-on warning`
+fails on a vendor with no adequacy decision behind its transfer, and not on a DPF-certified one,
+which shows up only as a new alert. The Action defaults `fail-on` to `warning`; the CLI defaults to
+`none`.
+
+| Exit code | Meaning |
 |---|---|
-| **CLI** | `egressa scan .` — human, JSON, SARIF or markdown output. Not on npm yet; build from a checkout |
-| **GitHub Action** | `uses: egressa-dev/egressa@v1` — findings appear as PR annotations via code scanning |
-| **MCP server** | `claude mcp add egressa -- npx -y @egressa/mcp@latest` — once published; see [docs/mcp.md](docs/mcp.md) |
-| **Transfer triage skill** | Triages the findings a scanner cannot judge alone, and researches vendors the knowledge base does not know — see [skill/egressa](skill/egressa/SKILL.md) |
-| **Privacy review skill** | A wider review pass the engine does not perform: trackers firing before consent, personal data in logs, session replay recording inputs, storage with no expiry, opt-out signals. See [skill/privacy-review](skill/privacy-review/SKILL.md) |
-
-| **Plugin** | `/plugin marketplace add egressa-dev/egressa` then `/plugin install egressa@egressa` — installs both skills and the write-time hook in one step |
-
-The last one is a different kind of thing from the others and the difference matters. The engine is a
-parser with a sourced knowledge base, and its answers are reproducible. The review skill is a set of
-checklists an agent applies by reading code, so its findings carry an extra axis — whether the
-question is settled by the source at all — and anything that is not settled ends in a question for
-you rather than an instruction. Neither surface scores anything.
-
-## The write-time hook
-
-The plugin registers a `PreToolUse` hook on `Write` and `Edit`. When a tracker init, a
-session-replay init, or a non-essential storage write is about to be added to a source file, it
-names the provision that pattern engages and asks the question that decides it.
-
-**It never blocks an edit.** It emits no permission decision and cannot return the exit code that
-would stop a tool call — a test asserts both, because the temptation to block "just the bad one"
-will come back. The tool detects; it does not adjudicate, which is the same reason nothing in the
-scanner defaults to `error`.
-
-It also stays quiet unless it is confident. Storage that is strictly necessary — session, CSRF,
-load balancer, a preference the user set — is exempt in the text of Art 5(3) itself and is never
-reported. Neither is an edit that already carries its own consent check, a test file, a fixture, or
-this repository's own checklists, which necessarily contain every pattern it looks for. Each
-finding is reported once per file per session.
+| 0 | Scan ran; nothing at or above `--fail-on` |
+| 1 | Findings at or above `--fail-on` |
+| 2 | Usage or configuration error, including an unknown flag or a bad `.egressa.yml` |
+| 3 | Internal error |
+| 4 | The knowledge base could not be loaded |
 
 ## What breaks if adequacy falls
 
@@ -122,25 +176,83 @@ The EU-US Data Privacy Framework is in force and under legal challenge. To see y
 were withdrawn:
 
 ```bash
-npx egressa scan . --assume-adequacy-lapsed US:DPF
+egressa scan . --assume-adequacy-lapsed US:DPF
 ```
 
-That flag rewrites one decision's status in `kb/adequacy-status.json` and lets the ordinary rule
-table re-rate everything. A vendor covered today becomes a third-country transfer, and the
-distinction between vendors that document an EU region and those that do not becomes the thing that
-matters.
+The flag marks that one decision as withdrawn and lets the ordinary rule table re-rate everything.
+On the fixture above, Stripe moves from `i` to `!`, its rule changes from
+`transfer/adequate-country-egress` to `transfer/third-country-egress`, and the footer adds
+`hypothetical: treating US:DPF as withdrawn`. Whether a vendor documents an EU region then becomes
+the distinction that matters.
 
-Note that the framework covers only organisations that self-certified and appear on the DPF list —
-it is not blanket US adequacy. Two US vendors in the same repository can therefore carry different
-rules, and they do.
+The framework covers only organisations that self-certified and appear on the DPF list. It is not
+blanket US adequacy, so two US vendors in the same repository can carry different rules.
 
-## Licensing
+## Scoping a scan, and accepting a finding
+
+`node_modules` is never read, in any mode, and neither are installed Python packages. Beyond that,
+four mechanisms decide what is read, and they add up rather than override each other:
+
+- `.gitignore`, honoured automatically.
+- `.egressaignore`, same syntax, for anything you want out of a scan but in version control.
+- `exclude:` in `.egressa.yml`, for a team's standing exclusions.
+- `--exclude <glob>`, repeatable, for one run. It adds to `exclude:`, it does not replace it.
+
+```yaml
+# .egressa.yml
+version: 1
+exclude:
+  - 'legacy/**'
+suppressions:
+  - vendor: stripe
+    rule: transfer/adequate-country-egress
+    reason: Reviewed with counsel; DPF-certified and DPA signed
+    acceptedBy: jane@example.com
+    expires: 2027-01-31
+```
+
+A suppression marks a finding `(suppressed)` rather than removing it, and every suppression needs a
+`reason`. `expires` is an ISO date, which ends the suppression at the start of that day in UTC, or a
+time with its zone, such as `2027-01-31T17:00Z`. The file is read strictly: an unknown key, a YAML
+merge key, a file that is not UTF-8 or not a mapping, and a symlink that does not resolve are all
+usage errors (exit 2), never "no config". A suppression that matches nothing is reported as a
+warning. The MCP server applies the same file the same way, and both name it in `scan.config`.
+
+## The other surfaces
+
+The CLI, the MCP server and the skills' scan step all run the same engine and produce the same
+versioned findings schema ([`schemas/`](schemas/)).
+
+- **MCP server** (`@egressa/mcp`): scanning and knowledge base lookups for any MCP client. No write
+  tools, no network calls. See [docs/mcp.md](docs/mcp.md).
+- **Transfer triage skill** ([skill/egressa](skill/egressa/SKILL.md)): a Claude Code skill that
+  works through the findings a scanner cannot judge alone, and researches an unknown vendor from
+  primary sources to draft a knowledge base request. It does not research an unresolved host,
+  because that answer is in your deployment configuration.
+- **Privacy review skill** ([skill/privacy-review](skill/privacy-review/SKILL.md)): a wider review
+  the engine does not perform: trackers firing before consent, personal data in logs, session
+  replay recording inputs, storage with no expiry, and opt-out signals. Its checklists are applied
+  by an agent reading code, so each finding also says whether the source can settle the question at
+  all. Anything it cannot settle ends in a question for you rather than an instruction.
+- **Write-time hook**, installed with the plugin: when a tracker init, a session-replay init or a
+  non-essential storage write is about to be added to a source file, it names the provision that
+  pattern engages and asks the question that decides it. It never blocks an edit, stays quiet on
+  strictly necessary storage, on tests and fixtures, and on an edit that already carries a consent
+  check, and reports each pattern once per file per session. [SECURITY.md](SECURITY.md) describes
+  exactly what it reads and writes.
+
+None of these produces a score or a grade.
+
+## Licensing and corrections
 
 Code is Apache-2.0. The vendor knowledge base in [`kb/`](kb/) is licensed separately under
-CC-BY-4.0 so anyone — including competing tools — can build on it. It is independently authored
-from vendor and regulator primary sources; see [kb/PROVENANCE.md](kb/PROVENANCE.md).
+CC-BY-4.0, so anyone, including competing tools, can build on it. It is authored from vendor and
+regulator primary sources; see [kb/PROVENANCE.md](kb/PROVENANCE.md). Vendor names are used
+nominatively; see [TRADEMARKS.md](TRADEMARKS.md).
 
-Every knowledge base entry cites its sources and carries a `lastVerified` date. If an entry is
-wrong, [open a correction](.github/ISSUE_TEMPLATE/vendor-correction.yml) — factual corrections with
-a primary source are merged the same day, and the entry is marked disputed immediately. See
-[kb/KB_POLICY.md](kb/KB_POLICY.md).
+Every entry cites its sources and carries a `lastVerified` date. If an entry is wrong, open a
+[correction](.github/ISSUE_TEMPLATE/vendor-correction.yml). Under
+[kb/KB_POLICY.md](kb/KB_POLICY.md), a correction with a primary source is merged the same day, and
+an entry is marked `disputed` as soon as a good-faith objection is raised.
+
+Security reports: [SECURITY.md](SECURITY.md). Release history: [CHANGELOG.md](CHANGELOG.md).
