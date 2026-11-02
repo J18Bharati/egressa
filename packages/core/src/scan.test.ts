@@ -233,3 +233,23 @@ describe('the document says which config it applied', () => {
     expect(validateFindings(result)).toBe(true);
   });
 });
+
+describe('scan: loopback and documentation hosts', () => {
+  it('does not report a reserved name as an unknown vendor, and still reports a real one', () => {
+    const root = mkdtempSync(join(tmpdir(), 'egressa-reserved-'));
+    writeFileSync(
+      join(root, 'a.ts'),
+      [
+        "fetch('http://localhost:3000/api');",
+        "fetch('http://127.0.0.1:8080/x');",
+        "fetch('https://api.example.com/v1');",
+        "fetch('https://unknown-vendor.io/v1');",
+      ].join('\n'),
+    );
+    const result = scan({ ...base, root, includeCallsites: true });
+    expect(result.scan.engine.callsite).toBe('oxc');
+    expect(result.unmatched.hosts).toEqual(['unknown-vendor.io']);
+    const matched = result.findings.flatMap((f) => f.evidence.map((e) => e.matchedOn));
+    expect(matched).toEqual(['unknown-vendor.io']);
+  });
+});

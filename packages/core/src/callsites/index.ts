@@ -211,6 +211,10 @@ export function analyzeFile(
   // base URL or `allowAbsoluteUrls`.
   const defaultsTaint = collectDefaultsTaint(program);
 
+  // The modules this file imports, by specifier. Read only to gate the
+  // catch-all option sink; nothing is resolved through them.
+  const imported = collectImportedModules(program);
+
   // Pass 2: find sinks and resolve their destination.
   walk(program, (node) => {
     const isNew = node.type === 'NewExpression';
@@ -318,9 +322,17 @@ export function analyzeFile(
           // not a call site.
           if (sink.matchAny && argument.type !== 'ObjectExpression') continue;
           if (context.referencesRead) context.referencesRead.length = 0;
-          const resolution = resolveArgument(argument, configKeys, bindings, 0, context);
+          const matched = sink.matchAny
+            ? resolveCatchAll(argument, configKeys, bindings, context, (key) =>
+                importsAny(imported, sink.optionModules?.[key] ?? []),
+              )
+            : {
+                resolution: resolveArgument(argument, configKeys, bindings, 0, context),
+                kind: sinkKind(sink),
+              };
+          const { resolution } = matched;
           if (resolution.kind !== 'resolved') continue;
-          const hitKind = sinkKind(sink);
+          const hitKind = matched.kind;
           const hit = toHit(resolution, node, index, filePath, 'high', hitKind);
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
@@ -1480,6 +1492,79 @@ function walk(node: unknown, visit: (node: Node) => void): void {
     if (key === 'type' || key === 'start' || key === 'end') continue;
     walk(candidate[key], visit);
   }
+}
+
+/**
+ * Resolve a catch-all sink's config object one option at a time, so the kind
+ * of the hit follows the option that actually named the host.
+ *
+ * The option is a call site only where the file imports a module whose default
+ * export takes it. Anywhere else the object still names a destination -- an
+ * in-house HTTP factory, a Playwright `newPage({ baseURL })`, a test asserting
+ * on a config -- but nothing says that a vendor's client sends to it, so it is
+ * a `reference`, which `toHit` caps at medium confidence. It is not dropped:
+ * `createHttpClient('github', { baseURL: 'https://api.github.com' })` does name
+ * where data goes, and the vendor attribution is still decided by the host.
+ */
+function resolveCatchAll(
+  argument: Node,
+  configKeys: string[],
+  bindings: Map<string, Binding>,
+  context: ResolveContext,
+  declaredByImport: (key: string) => boolean,
+): { resolution: HostResolution; kind: SinkKind } {
+  let last: HostResolution = { kind: 'not-a-url' };
+  for (const key of configKeys) {
+    const resolution = resolveArgument(argument, [key], bindings, 0, context);
+    if (resolution.kind === 'resolved') {
+      return { resolution, kind: declaredByImport(key) ? 'callsite' : 'reference' };
+    }
+    if (resolution.kind !== 'not-a-url') last = resolution;
+  }
+  return { resolution: last, kind: 'reference' };
+}
+
+/** Whether `imported` holds one of `modules`, or a subpath of one. */
+function importsAny(imported: Set<string>, modules: string[]): boolean {
+  for (const module of modules) {
+    if (imported.has(module)) return true;
+    for (const specifier of imported) if (specifier.startsWith(`${module}/`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Every module specifier the file names in an import form: `import`, a
+ * re-export with a source, `require('x')`, `import('x')` and TypeScript's
+ * `import x = require('x')`. Only string literals count; a computed specifier
+ * names nothing.
+ */
+function collectImportedModules(program: Node): Set<string> {
+  const modules = new Set<string>();
+  const add = (source: unknown): void => {
+    const node = source as Node | undefined;
+    if (node && node.type === 'Literal' && typeof node.value === 'string') modules.add(node.value);
+  };
+  walk(program, (node) => {
+    switch (node.type) {
+      case 'ImportDeclaration':
+      case 'ExportAllDeclaration':
+      case 'ExportNamedDeclaration':
+      case 'ImportExpression':
+        add(node.source);
+        return;
+      case 'TSExternalModuleReference':
+        add(node.expression);
+        return;
+      case 'CallExpression': {
+        const callee = node.callee as Node | undefined;
+        const args = node.arguments as Node[] | undefined;
+        if (callee?.type === 'Identifier' && callee.name === 'require') add(args?.[0]);
+        return;
+      }
+    }
+  });
+  return modules;
 }
 
 /** Convert file hits into engine signals. Host matching happens in scan(). */

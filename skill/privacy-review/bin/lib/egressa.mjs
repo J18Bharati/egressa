@@ -16208,17 +16208,46 @@ function vendorConstructorSinks(vendors) {
 }
 function dedupeCatchAll(sinks) {
   const named = sinks.filter((s2) => !s2.matchAny);
-  const options = new Set(sinks.filter((s2) => s2.matchAny).flatMap((s2) => s2.configKeys ?? []));
+  const catchAll = sinks.filter((s2) => s2.matchAny);
+  const options = new Set(catchAll.flatMap((s2) => s2.configKeys ?? []));
   if (options.size === 0) return named;
-  return [...named, { argIndex: 0, anyArg: true, matchAny: true, configKeys: [...options] }];
+  return [
+    ...named,
+    {
+      argIndex: 0,
+      anyArg: true,
+      matchAny: true,
+      configKeys: [...options],
+      optionModules: mergeOptionModules(catchAll.map((s2) => s2.optionModules ?? {}))
+    }
+  ];
+}
+function mergeOptionModules(maps) {
+  const merged = /* @__PURE__ */ new Map();
+  for (const map of maps) {
+    for (const [option, modules] of Object.entries(map)) {
+      const set = merged.get(option) ?? /* @__PURE__ */ new Set();
+      for (const module of modules) set.add(module);
+      merged.set(option, set);
+    }
+  }
+  return Object.fromEntries([...merged].map(([option, set]) => [option, [...set].sort()]));
 }
 function clientConstructorSinks(specs) {
   const seen = /* @__PURE__ */ new Set();
   const anyCallOptions = /* @__PURE__ */ new Set();
+  const optionModules = /* @__PURE__ */ new Map();
   const sinks = [];
   for (const spec of specs) {
     const name = spec.export ?? "default";
     const configKeys = spec.hostOption ? [spec.hostOption] : [];
+    if (name === "default" && spec.module) {
+      for (const configKey of configKeys) {
+        const set = optionModules.get(configKey) ?? /* @__PURE__ */ new Set();
+        set.add(spec.module);
+        optionModules.set(configKey, set);
+      }
+    }
     const key = `${name}|${configKeys.join(",")}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -16232,7 +16261,15 @@ function clientConstructorSinks(specs) {
     sinks.push({ property: name, ...shape });
   }
   if (anyCallOptions.size > 0) {
-    sinks.push({ argIndex: 0, anyArg: true, matchAny: true, configKeys: [...anyCallOptions] });
+    sinks.push({
+      argIndex: 0,
+      anyArg: true,
+      matchAny: true,
+      configKeys: [...anyCallOptions],
+      optionModules: Object.fromEntries(
+        [...optionModules].map(([option, set]) => [option, [...set].sort()])
+      )
+    });
   }
   return sinks;
 }
@@ -16294,6 +16331,7 @@ function analyzeFile(text, filePath, extraSinks = []) {
     if (literal2) bindings.set(name, { ...literal2, declaredAt: node.start });
   }
   const defaultsTaint = collectDefaultsTaint(program);
+  const imported = collectImportedModules(program);
   walk2(program, (node) => {
     const isNew = node.type === "NewExpression";
     if (node.type !== "CallExpression" && !isNew) return;
@@ -16354,9 +16392,19 @@ function analyzeFile(text, filePath, extraSinks = []) {
           if (!argument2) continue;
           if (sink.matchAny && argument2.type !== "ObjectExpression") continue;
           if (context.referencesRead) context.referencesRead.length = 0;
-          const resolution2 = resolveArgument(argument2, configKeys, bindings, 0, context);
+          const matched = sink.matchAny ? resolveCatchAll(
+            argument2,
+            configKeys,
+            bindings,
+            context,
+            (key) => importsAny(imported, sink.optionModules?.[key] ?? [])
+          ) : {
+            resolution: resolveArgument(argument2, configKeys, bindings, 0, context),
+            kind: sinkKind(sink)
+          };
+          const { resolution: resolution2 } = matched;
           if (resolution2.kind !== "resolved") continue;
-          const hitKind = sinkKind(sink);
+          const hitKind = matched.kind;
           const hit = toHit(resolution2, node, index, filePath, "high", hitKind);
           const withRegion = regionFromArguments(args, sink.regionKeys ?? [], bindings, context);
           if (withRegion) hit.region = withRegion;
@@ -17106,6 +17154,61 @@ function walk2(node, visit2) {
     walk2(candidate[key], visit2);
   }
 }
+function resolveCatchAll(argument, configKeys, bindings, context, declaredByImport) {
+  let last = { kind: "not-a-url" };
+  for (const key of configKeys) {
+    const resolution = resolveArgument(argument, [key], bindings, 0, context);
+    if (resolution.kind === "resolved") {
+      return { resolution, kind: declaredByImport(key) ? "callsite" : "reference" };
+    }
+    if (resolution.kind !== "not-a-url") last = resolution;
+  }
+  return { resolution: last, kind: "reference" };
+}
+function importsAny(imported, modules) {
+  for (const module of modules) {
+    if (imported.has(module)) return true;
+    for (const specifier of imported) if (specifier.startsWith(`${module}/`)) return true;
+  }
+  return false;
+}
+function collectImportedModules(program) {
+  const modules = /* @__PURE__ */ new Set();
+  const add = (source) => {
+    const node = source;
+    if (node && node.type === "Literal" && typeof node.value === "string") modules.add(node.value);
+  };
+  walk2(program, (node) => {
+    switch (node.type) {
+      case "ImportDeclaration":
+      case "ExportAllDeclaration":
+      case "ExportNamedDeclaration":
+      case "ImportExpression":
+        add(node.source);
+        return;
+      case "TSExternalModuleReference":
+        add(node.expression);
+        return;
+      case "CallExpression": {
+        const callee = node.callee;
+        const args = node.arguments;
+        if (callee?.type === "Identifier" && callee.name === "require") add(args?.[0]);
+        return;
+      }
+    }
+  });
+  return modules;
+}
+var RESERVED_SUFFIXES = ["localhost", "test", "example", "invalid"];
+var RESERVED_DOMAINS = ["example.com", "example.net", "example.org"];
+function isReservedHost(host) {
+  const value = host.toLowerCase().replace(/\.$/, "");
+  if (value === "[::1]" || value === "::1") return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(value)) return true;
+  const label = value.slice(value.lastIndexOf(".") + 1);
+  if (RESERVED_SUFFIXES.includes(label)) return true;
+  return RESERVED_DOMAINS.some((d2) => value === d2 || value.endsWith(`.${d2}`));
+}
 function regionsFromKeyLiterals(text, filePath, keys, provider, options) {
   const { language, insideBlockNamed } = options;
   const index = new LineIndex(text);
@@ -17608,6 +17711,7 @@ function scan(options) {
           continue;
         }
         const match = kb.lookupHost(hit.host);
+        if (!match && !hit.vendorId && isReservedHost(hit.host)) continue;
         if (!match) {
           unmatchedHosts.add(hit.host);
         }

@@ -62,6 +62,17 @@ export interface SinkDefinition {
    */
   matchAny?: boolean;
   /**
+   * For a catch-all sink: the modules whose default export takes each option.
+   *
+   * Matching on the option alone made any call with a `{ baseURL }` literal a
+   * call site at high confidence -- `expect(x).toEqual({ baseURL })` in a test,
+   * Playwright's `browser.newPage({ baseURL })`, an in-house HTTP factory. The
+   * option says a destination is named; only an import of a module that
+   * declares the option says the vendor's client is the one being configured.
+   * Without that import the hit is a `reference`. See `analyzeFile`.
+   */
+  optionModules?: Record<string, string[]>;
+  /**
    * Config keys carrying a region identifier rather than a host.
    *
    * `new S3Client({ region: 'eu-west-1' })` names a jurisdiction and no host at
@@ -180,9 +191,11 @@ export interface ClientConstructorSpec {
   /**
    * The package the constructor comes from.
    *
-   * Not used for matching -- the analysis is single-file and does not resolve
-   * imports -- but carried so the shape matches the knowledge base entry and a
-   * caller can pass entries through unchanged.
+   * Named sinks do not use it: the analysis does not resolve imports, and an
+   * export name is already specific. The catch-all sink for a default export
+   * does, as a gate rather than a resolution -- a call configured with the
+   * option counts as this SDK's call site only in a file that imports this
+   * module. See `SinkDefinition.optionModules`.
    */
   module?: string | undefined;
   export?: string | undefined;
@@ -234,18 +247,50 @@ export function vendorConstructorSinks(vendors: VendorConstructors[]): SinkDefin
  */
 function dedupeCatchAll(sinks: SinkDefinition[]): SinkDefinition[] {
   const named = sinks.filter((s) => !s.matchAny);
-  const options = new Set(sinks.filter((s) => s.matchAny).flatMap((s) => s.configKeys ?? []));
+  const catchAll = sinks.filter((s) => s.matchAny);
+  const options = new Set(catchAll.flatMap((s) => s.configKeys ?? []));
   if (options.size === 0) return named;
-  return [...named, { argIndex: 0, anyArg: true, matchAny: true, configKeys: [...options] }];
+  return [
+    ...named,
+    {
+      argIndex: 0,
+      anyArg: true,
+      matchAny: true,
+      configKeys: [...options],
+      optionModules: mergeOptionModules(catchAll.map((s) => s.optionModules ?? {})),
+    },
+  ];
+}
+
+function mergeOptionModules(maps: Record<string, string[]>[]): Record<string, string[]> {
+  const merged = new Map<string, Set<string>>();
+  for (const map of maps) {
+    for (const [option, modules] of Object.entries(map)) {
+      const set = merged.get(option) ?? new Set<string>();
+      for (const module of modules) set.add(module);
+      merged.set(option, set);
+    }
+  }
+  return Object.fromEntries([...merged].map(([option, set]) => [option, [...set].sort()]));
 }
 
 export function clientConstructorSinks(specs: ClientConstructorSpec[]): SinkDefinition[] {
   const seen = new Set<string>();
   const anyCallOptions = new Set<string>();
+  const optionModules = new Map<string, Set<string>>();
   const sinks: SinkDefinition[] = [];
   for (const spec of specs) {
     const name = spec.export ?? 'default';
     const configKeys = spec.hostOption ? [spec.hostOption] : [];
+    // Recorded before the dedupe: two SDKs whose default export takes the same
+    // option (`baseURL` for OpenAI and Anthropic) each make it a call site.
+    if (name === 'default' && spec.module) {
+      for (const configKey of configKeys) {
+        const set = optionModules.get(configKey) ?? new Set<string>();
+        set.add(spec.module);
+        optionModules.set(configKey, set);
+      }
+    }
     const key = `${name}|${configKeys.join(',')}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -266,7 +311,15 @@ export function clientConstructorSinks(specs: ClientConstructorSpec[]): SinkDefi
   }
 
   if (anyCallOptions.size > 0) {
-    sinks.push({ argIndex: 0, anyArg: true, matchAny: true, configKeys: [...anyCallOptions] });
+    sinks.push({
+      argIndex: 0,
+      anyArg: true,
+      matchAny: true,
+      configKeys: [...anyCallOptions],
+      optionModules: Object.fromEntries(
+        [...optionModules].map(([option, set]) => [option, [...set].sort()]),
+      ),
+    });
   }
   return sinks;
 }

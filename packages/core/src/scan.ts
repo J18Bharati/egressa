@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { type KnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import { analyzeFile, parserAvailable } from './callsites/index.js';
+import { isReservedHost } from './callsites/reserved-host.js';
 import { vendorConstructorSinks } from './callsites/sinks.js';
 import { DISCLAIMER } from './claims.js';
 import { type EgressaConfig, applySuppressions, suppressionProblems } from './config/index.js';
@@ -219,6 +220,10 @@ export function scan(options: ScanOptions): ScanResult {
         }
 
         const match = kb.lookupHost(hit.host);
+        // A loopback or documentation name cannot be a third party. Dropped
+        // only when nothing attributed it, so a vendor's client pointed at a
+        // local proxy still names the vendor.
+        if (!match && !hit.vendorId && isReservedHost(hit.host)) continue;
         if (!match) {
           unmatchedHosts.add(hit.host);
         }

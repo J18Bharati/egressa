@@ -143,6 +143,13 @@ says which PostHog cloud is in use. Two rules keep it safe — a knowledge base 
 `findSinks()` returns every matching sink rather than the first, because two vendors both export
 `init` and whichever sorted first used to silently shadow the other.
 
+A default-export constructor (`new OpenAI({ baseURL })`) is matched on its option alone, since the
+export can be imported under any name, so the merged catch-all sink carries `optionModules`: which
+modules declared each option. `analyzeFile` reports a `callsite` only when the file imports one of
+them (`collectImportedModules`: import, re-export, `require`, dynamic `import()`, `import x =
+require()`; exact or subpath), and a `reference` otherwise. Without that gate every test assertion
+and mock expectation carrying a `baseURL` literal was a high-confidence call site.
+
 **A region is resolved from data, never from its prefix.** `kb/vendors/<id>.json` carries a
 `regions[]` map with a citation per entry, and `exposure/regions.ts` matches it exactly. Three AWS
 regions whose identifier begins `eu-` are outside the EEA — London is in the United Kingdom,

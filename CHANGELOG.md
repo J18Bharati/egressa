@@ -45,6 +45,18 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Fixed
 
+- **Any call carrying a `baseURL` literal was a high-confidence call site.** An SDK whose default
+  export takes its destination as an option (`new OpenAI({ baseURL })`) is matched on the option
+  alone, so a test assertion, a mock expectation, a Playwright page or an in-house HTTP factory
+  matched too. A sample of 21 public repositories found 14 such call sites in one of them. The option
+  is now a call site only when the file imports a module that declares it (an import, re-export,
+  `require`, dynamic `import()` or `import x = require()`, matching exactly or by subpath), and a
+  `reference`, capped at medium, otherwise.
+- **Loopback and documentation hosts were reported as unknown vendors.** `localhost` and names under
+  it, `127.x.x.x`, `[::1]`, `example.com`/`.net`/`.org` and the `.test`, `.example` and `.invalid`
+  names are reserved by RFC 2606 and RFC 6761, so no third party can hold them, and they are no
+  longer reported. A hit a vendor's client attributed keeps the vendor, and private address ranges
+  are still reported.
 - **A request on an axios client reported the client's base URL, even when the request URL was
   absolute.** `axios.create({ baseURL: 'https://api.stripe.com' })` followed by
   `api.get('https://evil.example/x')` was Stripe at high confidence; axios sends it to

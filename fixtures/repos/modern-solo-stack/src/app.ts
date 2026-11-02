@@ -23,7 +23,7 @@ export async function chargeAndLog(customerEmail: string) {
   });
 
   // Clerk's frontend API, on the vendor's own domain.
-  await fetch('https://clerk.example.com/v1/client', { method: 'GET' });
+  await fetch('https://clerk.acme.internal/v1/client', { method: 'GET' });
 
   return { charge, customerEmail };
 }

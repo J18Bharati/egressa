@@ -197,11 +197,34 @@ Two consequences are deliberate false negatives:
 - **An in-process dispatcher is indistinguishable from a transfer.** Nothing in the source says
   whether `app.handle(new Request(host))` crosses a network. The analyzer reports the weaker claim
   rather than guessing either way, so a genuinely local dispatch still appears as a reference to
-  whatever host the literal names -- including `localhost`. Scope those out with `--exclude` or
-  `.egressaignore` rather than expecting the engine to recognise a test.
+  whatever host the literal names. Scope those out with `--exclude` or `.egressaignore` rather than
+  expecting the engine to recognise a test. The one exception is a name a standard reserves:
+  `localhost` and names under it, `127.x.x.x`, `[::1]`, `example.com`/`.net`/`.org` and the
+  `.test`, `.example` and `.invalid` top-level names (RFC 2606, RFC 6761) are not reported as an
+  unknown vendor at all, from a call site or a reference, since no third party can hold them. A
+  hit a vendor's client already attributed keeps the vendor. Private address ranges are still
+  reported: `10.0.0.5` can be a vendor's appliance inside a network.
 
 A consumer that renders a `reference` the way it renders a `callsite` re-creates the whole defect.
 The distinction is carried by the type, not by the wording.
+
+### A config object that only looks like a client
+
+An SDK whose default export takes its destination as an option -- `new OpenAI({ baseURL })`,
+`new Anthropic({ baseURL })` -- is matched on the option alone, whatever the call is named, because
+the default export can be imported under any name. That match also fires on every other call that
+happens to carry the same key: a test assertion, a mock expectation, a Playwright page, an in-house
+HTTP factory. A field test of 21 public repositories found it reporting `localhost` and test hosts
+as call sites at high confidence.
+
+The option is now a call site only when the file imports a module that declares it: an ESM import,
+a re-export, `require('x')`, a dynamic `import('x')` or `import x = require('x')`, matching the
+module exactly or one of its subpaths (`openai/...`). Otherwise the hit is demoted to a `reference`,
+capped at medium, and the vendor attribution is unchanged.
+
+The deliberate consequence: a client built in one file from an SDK imported in another is a
+reference, not a call site. The import gate is per file, for the same reason module-scope constants
+are: cross-module resolution is out of scope.
 
 ### Requests through axios
 

@@ -186,6 +186,8 @@ const RESOLVES: Case[] = [
     kind: 'reference',
   },
   {
+    // Resolution still names the host; scan() then drops it as a reserved name
+    // (callsites/reserved-host.ts), which scan.test.ts covers.
     name: 'new Request to localhost in a test dispatch',
     code: `app.handle(new Request('http://localhost/api/users'));`,
     host: 'localhost',
@@ -1215,6 +1217,26 @@ describe('golden table: knowledge base client constructors', () => {
     ]);
   });
 
+  it('is a call site only where the file imports the module that takes the option', () => {
+    const kindOf = (code: string) =>
+      analyzeFile(code, 'input.ts', sinks).hits.map((h) => [h.kind, h.confidence]);
+    const init = "posthog.init(KEY, { api_host: 'https://eu.i.posthog.com' });";
+    expect(kindOf(`import posthog from 'posthog-js';\n${init}`)).toEqual([['callsite', 'high']]);
+    expect(kindOf(`const posthog = require('posthog-js');\n${init}`)).toEqual([
+      ['callsite', 'high'],
+    ]);
+    expect(kindOf(`import ph from 'posthog-js/dist/module';\n${init}`)).toEqual([
+      ['callsite', 'high'],
+    ]);
+    expect(kindOf(`const { default: ph } = await import('posthog-js');\n${init}`)).toEqual([
+      ['callsite', 'high'],
+    ]);
+    // No import: the option names a host, nothing says PostHog's client sends.
+    expect(kindOf(init)).toEqual([['reference', 'medium']]);
+    // A different package whose name merely starts the same is not the module.
+    expect(kindOf(`import x from 'posthog-js-extra';\n${init}`)).toEqual([['reference', 'medium']]);
+  });
+
   it("does not let one vendor's option name shadow another's", () => {
     // Both PostHog and Sentry initialise through `init`. Whichever sink sorts
     // first must not consume the call and resolve nothing.
@@ -1247,6 +1269,58 @@ describe('golden table: knowledge base client constructors', () => {
     expect(
       analyzeFile("logger.info('https://api.stripe.com/v1');", 'input.ts', sinks).hits,
     ).toEqual([]);
+  });
+});
+
+describe('golden table: a config object that only looks like a client', () => {
+  // OpenAI and Anthropic both record a default export configured by `baseURL`.
+  // Matching on the option alone made every `{ baseURL }` literal a call site
+  // at high confidence: test assertions, Playwright pages, in-house factories.
+  // Found in a random sample of public repositories; the host string was right
+  // every time, the claim that a vendor's client sent to it was not.
+  const sinks = vendorConstructorSinks([
+    {
+      vendorId: 'openai',
+      constructors: [{ module: 'openai', export: 'default', hostOption: 'baseURL' }],
+    },
+    {
+      vendorId: 'anthropic',
+      constructors: [{ module: '@anthropic-ai/sdk', export: 'default', hostOption: 'baseURL' }],
+    },
+  ]);
+  const kinds = (code: string) =>
+    analyzeFile(code, 'input.ts', sinks).hits.map((h) => [h.host, h.kind, h.confidence]);
+
+  it.each([
+    ['a test assertion', "expect(provider.args).toEqual({ baseURL: 'http://localhost:8080' });"],
+    [
+      'a mock expectation',
+      "expect(axiosCreate).toHaveBeenCalledWith({ baseURL: 'https://api.gupshup.io' });",
+    ],
+    ['a Playwright page', "page = await browser.newPage({ baseURL: 'http://localhost:4200' });"],
+    [
+      'an in-house HTTP factory',
+      "const http = createHttpClient('github', { baseURL: 'https://api.github.com' });",
+    ],
+  ])('demotes %s to a reference when no SDK taking the option is imported', (_, code) => {
+    const [hit] = kinds(code);
+    expect(hit?.[1]).toBe('reference');
+    expect(hit?.[2]).toBe('medium');
+  });
+
+  it('keeps a call site for either SDK that declares the option', () => {
+    const call = "const client = new Client({ baseURL: 'https://gateway.example.com/v1' });";
+    expect(kinds(`import OpenAI from 'openai';\n${call}`)).toEqual([
+      ['gateway.example.com', 'callsite', 'high'],
+    ]);
+    expect(kinds(`import Anthropic from '@anthropic-ai/sdk';\n${call}`)).toEqual([
+      ['gateway.example.com', 'callsite', 'high'],
+    ]);
+  });
+
+  it('records which modules declared each option on the merged catch-all', () => {
+    const catchAll = sinks.find((s) => s.matchAny);
+    expect(catchAll?.optionModules).toEqual({ baseURL: ['@anthropic-ai/sdk', 'openai'] });
   });
 });
 

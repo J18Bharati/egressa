@@ -120,7 +120,7 @@ describe('fixture: modern-solo-stack', () => {
   it('leaves a customer-domain vendor host unattributed rather than guessing', () => {
     // Clerk's frontend API is served from the customer's own domain, so no host
     // pattern can match it. The package alias still identifies the vendor.
-    expect(result.unmatched.hosts).toContain('clerk.example.com');
+    expect(result.unmatched.hosts).toContain('clerk.acme.internal');
     expect(find('clerk')).toBeDefined();
   });
 });
