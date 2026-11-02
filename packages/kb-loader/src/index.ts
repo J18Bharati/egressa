@@ -3,15 +3,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostTrie, normaliseHost } from './host-trie.js';
 import { normalisePypiName } from './pypi.js';
-import type {
-  AdequacyDecision,
-  AdequacyStatus,
-  PackageAlias,
-  PackageMatch,
-  VendorEntry,
-} from './types.js';
+import type { AdequacyDecision, AdequacyStatus, PackageMatch, VendorEntry } from './types.js';
+import { KnowledgeBaseError, readAdequacy, readText, readVendor } from './validate.js';
 
 export * from './types.js';
+export { KnowledgeBaseError } from './validate.js';
 export { HostTrie, normaliseHost } from './host-trie.js';
 export { normalisePypiName } from './pypi.js';
 
@@ -49,16 +45,25 @@ export interface LoadOptions {
 export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
   const kbPath = options.kbPath ?? defaultKbPath();
 
-  const vendors: VendorEntry[] = readdirSync(join(kbPath, 'vendors'))
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => JSON.parse(readFileSync(join(kbPath, 'vendors', f), 'utf8')) as VendorEntry)
+  // The schemas that vouch for the data are the ones this tool shipped with.
+  const schemaDir = join(bundledKbPath() ?? kbPath, 'schema');
+
+  const vendorDir = join(kbPath, 'vendors');
+  let vendorFiles: string[];
+  try {
+    vendorFiles = readdirSync(vendorDir).filter((f) => f.endsWith('.json'));
+  } catch (error) {
+    throw new KnowledgeBaseError(vendorDir, [
+      `could not be listed: ${error instanceof Error ? error.message : String(error)}`,
+    ]);
+  }
+  const vendors: VendorEntry[] = vendorFiles
+    .map((f) => readVendor(join(vendorDir, f), schemaDir))
     .sort((a, b) => a.id.localeCompare(b.id));
 
-  const adequacy = JSON.parse(
-    readFileSync(join(kbPath, 'adequacy-status.json'), 'utf8'),
-  ) as AdequacyStatus;
+  const adequacy: AdequacyStatus = readAdequacy(join(kbPath, 'adequacy-status.json'), schemaDir);
 
-  const version = readFileSync(join(kbPath, 'kb.version'), 'utf8').trim();
+  const version = readText(join(kbPath, 'kb.version')).trim();
 
   // Index by vendor identity, with per-ecosystem aliases pointing at it. Keying
   // on vendor rather than package name is what makes adding another ecosystem a
@@ -70,7 +75,7 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
 
   for (const vendor of vendors) {
     for (const [ecosystem, aliases] of Object.entries(vendor.aliases.packages)) {
-      for (const alias of (aliases ?? []) as PackageAlias[]) {
+      for (const alias of aliases ?? []) {
         const match: PackageMatch = { vendor, alias };
         if (alias.name.endsWith('/*')) {
           scopeIndex.push({ scope: `${ecosystem}:${alias.name.slice(0, -1)}`, match });
@@ -174,7 +179,7 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
  * The bundled knowledge base. In the published package this sits alongside dist/;
  * in the workspace it is the repo's kb/ directory.
  */
-function defaultKbPath(): string {
+function bundledKbPath(): string | undefined {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const candidate of [join(here, '..', 'kb'), join(here, '..', '..', '..', 'kb')]) {
     try {
@@ -184,5 +189,11 @@ function defaultKbPath(): string {
       // try the next candidate
     }
   }
+  return undefined;
+}
+
+function defaultKbPath(): string {
+  const found = bundledKbPath();
+  if (found) return found;
   throw new Error('Could not locate the knowledge base. Pass kbPath explicitly.');
 }
