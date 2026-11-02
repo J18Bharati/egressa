@@ -194,6 +194,8 @@ export type FactState =
   | 'current'
   /** Past its expiry: ignored, and the knowledge base's own fact stands. */
   | 'expired'
+  /** A local entry whose id the shipped knowledge base now has. The shipped entry is used. */
+  | 'superseded'
   /** Not used, for the reason given. */
   | 'rejected';
 
@@ -244,11 +246,21 @@ export function checkFacts(parsed: ParsedFacts, kb: KnowledgeBase, now: Date): F
       kind: 'local-entry' as const,
       ...(PLAIN.test(id) ? { vendor: id } : {}),
     };
+    // Shipped wins. Once a contributed entry ships, the local copy says so
+    // rather than failing, so the team knows it can delete it.
+    if (kb.byId.has(id)) {
+      out.push({
+        ...base,
+        state: 'superseded',
+        reason:
+          'the knowledge base has an entry with this id, which is used instead; this one can be deleted',
+      });
+      continue;
+    }
     const timing = timingProblem(local.retrievedAt, local.expires, now);
     const reason =
       timing.reason ??
       textProblem(local) ??
-      (kb.byId.has(id) ? 'reuses the id of a shipped vendor' : undefined) ??
       (localIds.has(id) ? 'repeats the id of an earlier local vendor' : undefined) ??
       entryIssues(local.entry)[0]?.message ??
       collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(

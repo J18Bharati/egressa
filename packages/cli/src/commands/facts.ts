@@ -1,4 +1,4 @@
-import { type FactsCheck, FactsError, checkFacts, loadFacts } from '@egressa/core';
+import { FactsError, type OverlayItem, applyOverlay, checkFacts, loadFacts } from '@egressa/core';
 import { KnowledgeBaseError, loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
 import { writeOutAndExit } from '../emit.js';
@@ -18,6 +18,11 @@ export const factsCommand = defineCommand({
     root: { type: 'positional', required: false, default: '.', description: 'Repository root' },
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
     json: { type: 'boolean', default: false },
+    'trust-facts': {
+      type: 'boolean',
+      default: false,
+      description: 'Show the states a scan with --trust-facts would apply',
+    },
   },
   async run({ args }) {
     const action = String(args.action);
@@ -33,36 +38,61 @@ export const factsCommand = defineCommand({
       process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
       process.exit(EXIT.KB);
     }
-    let checked: FactsCheck | null;
+    let checked: { source: string; items: OverlayItem[] } | null;
     try {
       const parsed = loadFacts(String(args.root));
-      checked = parsed ? checkFacts(parsed, kb, new Date()) : null;
+      checked = parsed
+        ? applyOverlay(kb, checkFacts(parsed, kb, new Date()), {
+            trustFacts: args['trust-facts'] === true,
+          })
+        : null;
     } catch (error) {
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}\n`);
       process.exit(EXIT.USAGE);
     }
     const text = args.json
-      ? `${JSON.stringify(checked ?? { source: null, items: [] }, null, 2)}\n`
+      ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicItem) } : { source: null, items: [] }, null, 2)}\n`
       : formatCheck(checked);
     const rejected = checked?.items.some((i) => i.state === 'rejected') ?? false;
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
   },
 });
 
-export function formatCheck(checked: FactsCheck | null): string {
+/** What `--json` prints for an item: its state and provenance, not the whole local entry. */
+function publicItem(item: OverlayItem) {
+  const { local: _local, ...rest } = item;
+  return rest;
+}
+
+const STATES = [
+  'applied',
+  'redundant',
+  'loosening-not-trusted',
+  'superseded',
+  'expired',
+  'rejected',
+] as const;
+
+export function formatCheck(checked: { source: string; items: OverlayItem[] } | null): string {
   if (!checked) return 'No .egressa/facts.json in this repository.\n';
   if (checked.items.length === 0) return `${checked.source}: no facts.\n`;
   const lines = checked.items.map((item) => {
-    const what = item.kind ?? '';
     const detail =
-      item.state === 'rejected'
+      item.state === 'rejected' || item.state === 'superseded'
         ? (item.reason ?? '')
         : item.state === 'expired'
           ? `expired ${item.expiresOn}; the knowledge base's own fact applies`
-          : `until ${item.expiresOn}`;
-    return `  ${item.at.padEnd(16)} ${(item.vendor ?? '-').padEnd(20)} ${what.padEnd(14)} ${item.state.padEnd(9)} ${detail}`;
+          : item.state === 'redundant'
+            ? 'says what the knowledge base says; can be deleted'
+            : item.state === 'loosening-not-trusted'
+              ? 'would loosen a finding; applied only with --trust-facts'
+              : `${item.effect ?? 'neutral'}, until ${item.expiresOn}`;
+    return `  ${item.at.padEnd(16)} ${(item.vendor ?? '-').padEnd(20)} ${(item.kind ?? '').padEnd(14)} ${item.state.padEnd(22)} ${detail}`;
   });
-  const count = (state: string) => checked.items.filter((i) => i.state === state).length;
-  return `${checked.source}: ${count('current')} current, ${count('expired')} expired, ${count('rejected')} rejected\n${lines.join('\n')}\n`;
+  const counts = STATES.map((state) => {
+    const n = checked.items.filter((i) => i.state === state).length;
+    return n > 0 ? `${n} ${state}` : null;
+  }).filter((x) => x !== null);
+  return `${checked.source}: ${counts.join(', ')}\n${lines.join('\n')}\n`;
 }

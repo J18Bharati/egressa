@@ -361,7 +361,7 @@ describe('checkFacts: local vendors', () => {
     ]);
   });
 
-  it('refuses a draft reusing a shipped id or a shipped host', () => {
+  it('supersedes a draft with a shipped id, and refuses one claiming a shipped host', () => {
     expect(
       states(
         doc(
@@ -375,7 +375,7 @@ describe('checkFacts: local vendors', () => {
           ],
         ),
       )[0],
-    ).toMatch(/rejected:reuses the id of a shipped vendor/);
+    ).toMatch(/superseded:the knowledge base has an entry with this id/);
     expect(
       states(
         doc(

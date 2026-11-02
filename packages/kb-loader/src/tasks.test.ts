@@ -28,7 +28,7 @@ function withDpf(
   for (const m of copy.legal.transferMechanisms) if (m.mechanism === 'DPF') edit(m);
   return copy;
 }
-const fresh = { stale: false, dpfJurisdiction: true };
+const fresh = { asOf: new Date('2026-11-03'), stale: false, dpfJurisdiction: true };
 const reasons = (id: string, asOf: Date) =>
   kb.verifyTasks(entry(id), asOf).map((t) => `${t.fact}:${t.reason}`);
 

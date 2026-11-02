@@ -107,7 +107,7 @@ describe('classifyExposure: audit trail and versioning', () => {
   });
 
   it('stamps the rules version that produced the rating', () => {
-    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.2.0');
+    expect(classifyExposure(vendor('sentry'), kb).exposure.rulesVersion).toBe('1.3.0');
   });
 
   it('treats an under-challenge decision as in force rather than predicting an outcome', () => {

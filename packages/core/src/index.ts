@@ -3,6 +3,7 @@ export * from './rules.js';
 export * from './claims.js';
 export * from './config/index.js';
 export * from './facts/load.js';
+export * from './facts/overlay.js';
 export * from './manifests/index.js';
 export * from './discovery/walk.js';
 export * from './exposure/rules.js';

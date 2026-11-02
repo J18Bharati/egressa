@@ -166,6 +166,35 @@ export interface TransferFacts {
   lastVerified: string;
   /** Set when a good-faith objection has been raised; surfaced in all output. */
   disputed?: { issueUrl: string; raisedAt: string; summary: string } | null;
+  /**
+   * Facts the scanned repository supplied in `.egressa/facts.json` that changed
+   * what this finding was computed from. Present only when there are some, so
+   * a scan without the file is byte-identical to one before the file existed.
+   */
+  repositoryFacts?: RepositoryFactRef[];
+}
+
+/** What applying a repository fact did to the vendor's DPF certification. */
+export type FactEffect = 'loosens' | 'tightens' | 'neutral';
+
+/**
+ * One repository-supplied fact, as provenance. Everything a reader needs to
+ * check it by hand: where it is in the file, what page it cites, when that page
+ * was read and by whom, and until when it counts.
+ */
+export interface RepositoryFactRef {
+  fact: 'dpf' | 'dpa' | 'subprocessors' | 'local-entry';
+  file: string;
+  /** JSON path in `file`, such as `facts[0]`. */
+  at: string;
+  /** The page the fact cites. Absent for a local entry, whose sources are in the entry. */
+  sourceUrl?: string;
+  retrievedAt: string;
+  verifiedBy: string;
+  expiresOn: string;
+  effect: FactEffect;
+  /** For a `dpf` fact, the status as recorded, verbatim. */
+  observedStatus?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +241,8 @@ export interface VendorRef {
   id: string;
   name: string;
   category: string;
+  /** `local` when the entry came from the scanned repository's facts file, not the knowledge base. */
+  origin?: 'local';
 }
 
 export interface Suppression {
@@ -253,6 +284,12 @@ export interface Finding {
    * draft an entry. Absent when there is nothing to check.
    */
   verification?: VerifyTask[];
+  /**
+   * The rule this finding had before repository facts were applied, present
+   * only when they changed it. A changed rule changes `id`, as an assumed lapse
+   * or a region does, so this is what links the new alert to the old one.
+   */
+  baselineRuleId?: RuleId;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,4 +384,24 @@ export interface ScanResult {
   findings: Finding[];
   unmatched: UnmatchedBlock;
   errors: ScanError[];
+  /** Present when the repository has a `.egressa/facts.json` and it was read. */
+  facts?: FactsSummary;
+}
+
+/** What the repository's facts file did to this scan, in counts. */
+export interface FactsSummary {
+  source: string;
+  /** Whether the caller allowed facts that loosen a finding (`--trust-facts`). */
+  trusted: boolean;
+  applied: number;
+  redundant: number;
+  notTrusted: number;
+  superseded: number;
+  expired: number;
+  rejected: number;
+  localVendors: number;
+  /** Findings computed from at least one repository fact. */
+  findingsDependingOnFacts: number;
+  /** Findings whose rule a repository fact made less severe. */
+  loosened: number;
 }

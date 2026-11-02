@@ -21,11 +21,13 @@ export * from './dpf-status.js';
 export { collisionIssues, entryIssues, type EntryIssue } from './checks.js';
 export * from './tasks.js';
 
-/** Entries older than this are reported as kb/stale-entry rather than as current. */
-export const STALE_AFTER_DAYS = 180;
+import { STALE_AFTER_DAYS } from './staleness.js';
+export { STALE_AFTER_DAYS } from './staleness.js';
 
 export interface KnowledgeBase {
   version: string;
+  /** What the knowledge base was built with, so a rebuilt copy can keep it. */
+  assumeAdequacyLapsed: readonly string[];
   vendors: VendorEntry[];
   byId: Map<string, VendorEntry>;
   adequacy: AdequacyStatus;
@@ -131,6 +133,31 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
   const adequacy: AdequacyStatus = readAdequacy(join(kbPath, 'adequacy-status.json'), schemaDir);
 
   const version = readText(join(kbPath, 'kb.version')).trim();
+  return buildKnowledgeBase({
+    version,
+    vendors,
+    adequacy,
+    assumeAdequacyLapsed: options.assumeAdequacyLapsed ?? [],
+  });
+}
+
+export interface KnowledgeBaseParts {
+  version: string;
+  vendors: VendorEntry[];
+  adequacy: AdequacyStatus;
+  assumeAdequacyLapsed: readonly string[];
+}
+
+/**
+ * Indexes already-validated entries into a knowledge base. `loadKnowledgeBase`
+ * reads and validates the files and calls this; a repository overlay calls it
+ * again with its copy-on-write entries, so an overlaid knowledge base answers
+ * lookups through exactly the same code, rather than through a second index
+ * that could drift from the first.
+ */
+export function buildKnowledgeBase(parts: KnowledgeBaseParts): KnowledgeBase {
+  const { version, adequacy } = parts;
+  const vendors = [...parts.vendors].sort((a, b) => a.id.localeCompare(b.id));
 
   // Index by vendor identity, with per-ecosystem aliases pointing at it. Keying
   // on vendor rather than package name is what makes adding another ecosystem a
@@ -154,10 +181,11 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
     for (const alias of vendor.aliases.hosts) hosts.add(vendor, alias);
   }
 
-  const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v) => v.toUpperCase()));
+  const lapsed = new Set(parts.assumeAdequacyLapsed.map((v) => v.toUpperCase()));
 
   const kb: KnowledgeBase = {
     version,
+    assumeAdequacyLapsed: parts.assumeAdequacyLapsed,
     vendors,
     byId,
     adequacy,
@@ -240,6 +268,7 @@ export function loadKnowledgeBase(options: LoadOptions = {}): KnowledgeBase {
 
     verifyTasks(entry, asOf = new Date()) {
       return vendorTasks(entry, {
+        asOf,
         stale: isStale(entry, asOf),
         dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
           const decision = kb.decisionFor(j.country);

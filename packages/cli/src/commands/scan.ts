@@ -4,11 +4,14 @@ import {
   ConfigError,
   type EgressaConfig,
   FAIL_ON_LEVELS,
+  FactsError,
   type FailOnLevel,
+  type ParsedFacts,
   type ScanResult,
   excludeProblem,
   isFailOnLevel,
   loadConfig,
+  loadFacts,
   scan,
   toSarif,
 } from '@egressa/core';
@@ -89,6 +92,12 @@ export const scanCommand = defineCommand({
     },
     kb: { type: 'string', description: 'Path to a knowledge base directory' },
     config: { type: 'string', description: 'Path to .egressa.yml' },
+    'trust-facts': {
+      type: 'boolean',
+      default: false,
+      description:
+        'Apply facts in .egressa/facts.json that would loosen a finding. Only for a repository you own',
+    },
     exclude: {
       type: 'string',
       description:
@@ -127,6 +136,16 @@ export const scanCommand = defineCommand({
       process.stderr.write(`egressa: ${where}${message}\n`);
       process.exit(EXIT.USAGE);
     }
+    // The same rule for the facts file: it is the repository's, so a file that
+    // cannot be read as one is the repository's problem to fix, exit 2.
+    let facts: ParsedFacts | null;
+    try {
+      facts = loadFacts(root);
+    } catch (error) {
+      if (!(error instanceof FactsError)) throw error;
+      process.stderr.write(`egressa: ${error.message}\n`);
+      process.exit(EXIT.USAGE);
+    }
     // citty collects a repeated string flag into an array itself (a second
     // occurrence of --exclude turns the value from a string into string[]);
     // it never appears as an array after exactly one occurrence, so this has
@@ -156,6 +175,8 @@ export const scanCommand = defineCommand({
         toolVersion: TOOL_VERSION,
         ...(args.kb ? { kbPath: String(args.kb) } : {}),
         config,
+        facts,
+        trustFacts: args['trust-facts'] === true,
         ...(exclude.length > 0 ? { exclude } : {}),
         // Only when typed, either way: an untyped flag would otherwise override
         // what the config says, and MCP's `includeTransitive: false` already can.

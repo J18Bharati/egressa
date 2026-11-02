@@ -19,7 +19,7 @@ import { type AppliedRegion, declaresRegionNarrowing } from './regions.js';
  * Bump EXPOSURE_RULES_VERSION whenever the mapping below changes, so a stored
  * finding records which version produced it.
  */
-export const EXPOSURE_RULES_VERSION = '1.2.0';
+export const EXPOSURE_RULES_VERSION = '1.3.0';
 
 const EEA_MEMBERS = new Set([
   'AT',
@@ -224,7 +224,7 @@ function covers(decision: AdequacyDecision, vendor: VendorEntry): boolean {
  * the shipped data to that already; this holds a `--kb` directory, which is
  * schema-checked only at load, to the same rule.
  */
-function vendorIsDpfCertified(vendor: VendorEntry): boolean {
+export function vendorIsDpfCertified(vendor: VendorEntry): boolean {
   return vendor.legal.transferMechanisms.some(
     (m) =>
       m.mechanism === 'DPF' &&

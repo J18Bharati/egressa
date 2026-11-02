@@ -12,6 +12,7 @@
  */
 import { createHash } from 'node:crypto';
 import { dpfStatusVerdict } from './dpf-status.js';
+import { STALE_AFTER_DAYS } from './staleness.js';
 import type { VendorEntry } from './types.js';
 
 export const VERIFY_FACTS = ['dpf', 'dpa', 'subprocessors', 'local-entry'] as const;
@@ -25,7 +26,8 @@ export type VerifyFact = (typeof VERIFY_FACTS)[number];
  * status behind it. `dpf-status-qualified`: the observed status is the
  * qualified one and nobody has accepted it. `dpf-status-unrecognised`: the
  * status is not in the closed table. `unknown-vendor`: a destination matched
- * no entry.
+ * no entry. `overlay-expired`: a fact the repository recorded has passed its
+ * expiry, so the knowledge base's own fact is used until it is read again.
  */
 export const VERIFY_REASONS = [
   'stale-entry',
@@ -34,6 +36,7 @@ export const VERIFY_REASONS = [
   'dpf-status-qualified',
   'dpf-status-unrecognised',
   'unknown-vendor',
+  'overlay-expired',
 ] as const;
 export type VerifyReason = (typeof VERIFY_REASONS)[number];
 
@@ -54,6 +57,7 @@ export interface VerifyTask {
 
 /** Inputs the entry alone cannot answer. */
 export interface VendorTaskContext {
+  asOf: Date;
   stale: boolean;
   /** Whether any of the entry's jurisdictions relies on an in-force DPF decision. */
   dpfJurisdiction: boolean;
@@ -72,8 +76,10 @@ export function verifyTask(task: Omit<VerifyTask, 'id'>): VerifyTask {
 
 /**
  * The tasks one entry generates. A fresh entry yields only the records that
- * are themselves in doubt; a stale one yields every legal fact it carries, each
- * under its most specific reason.
+ * are themselves in doubt; a stale one yields every legal fact it carries that
+ * has not itself been re-checked within the threshold, each under its most
+ * specific reason. A record re-read last week is not stale because the rest of
+ * its entry is.
  */
 export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): VerifyTask[] {
   const tasks: VerifyTask[] = [];
@@ -81,7 +87,9 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
   const dpfRecords = entry.legal.transferMechanisms.filter((m) => m.mechanism === 'DPF');
 
   for (const m of dpfRecords) {
-    const reason = dpfRecordReason(m) ?? (context.stale ? 'stale-entry' : null);
+    const reason =
+      dpfRecordReason(m) ??
+      (context.stale && !recent(m.lastChecked, context) ? 'stale-entry' : null);
     if (reason === null) continue;
     tasks.push(
       verifyTask({
@@ -110,7 +118,7 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
     );
   }
 
-  if (context.stale) {
+  if (context.stale && !recent(entry.legal.dpa.lastChecked, context)) {
     const dpa = entry.legal.dpa;
     tasks.push(
       verifyTask({
@@ -125,6 +133,8 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
         where: dpa.url ? [dpa.url] : [],
       }),
     );
+  }
+  if (context.stale) {
     const sub = entry.legal.subprocessors;
     if (sub) {
       tasks.push(
@@ -139,6 +149,12 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
     }
   }
   return tasks;
+}
+
+/** Checked within the staleness threshold of `asOf`. */
+function recent(lastChecked: string | undefined, context: VendorTaskContext): boolean {
+  if (lastChecked === undefined) return false;
+  return Date.parse(lastChecked) >= context.asOf.getTime() - STALE_AFTER_DAYS * 86_400_000;
 }
 
 function dpfRecordReason(

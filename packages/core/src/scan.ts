@@ -8,6 +8,8 @@ import { DISCLAIMER } from './claims.js';
 import { type EgressaConfig, applySuppressions, suppressionProblems } from './config/index.js';
 import { readErrorMessage, readInsideRoot } from './discovery/read-inside.js';
 import { excludeProblem, walk } from './discovery/walk.js';
+import { type ParsedFacts, checkFacts } from './facts/load.js';
+import { type Overlay, applyOverlay } from './facts/overlay.js';
 import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
 import { confidenceForDependency } from './merge/confidence.js';
@@ -15,6 +17,7 @@ import { mergeSignals } from './merge/index.js';
 import { FINDINGS_SCHEMA_VERSION } from './types.js';
 import type {
   Confidence,
+  FactsSummary,
   Finding,
   ScanError,
   ScanResult,
@@ -46,6 +49,18 @@ export interface ScanOptions {
   minConfidence?: Confidence;
   onlyVendor?: string[];
   assumeAdequacyLapsed?: string[];
+  /**
+   * The repository's `.egressa/facts.json`, already parsed by `loadFacts`.
+   * Checked and applied here, so every surface gets the same answer; loading
+   * stays with the caller, as for `config`.
+   */
+  facts?: ParsedFacts | null;
+  /**
+   * Apply facts that would loosen a finding. Only for a repository the caller
+   * owns: without it, a repository can make its findings stricter but never
+   * clear them. Never inferred from the repository itself.
+   */
+  trustFacts?: boolean;
   /** Fixed clock, so snapshot tests are stable. */
   now?: Date;
 }
@@ -85,7 +100,7 @@ export function scan(options: ScanOptions): ScanResult {
   const startedAt = now;
   const started = Date.now();
 
-  const kb =
+  const shipped =
     options.kb ??
     loadKnowledgeBase({
       ...(options.kbPath ? { kbPath: options.kbPath } : {}),
@@ -93,6 +108,15 @@ export function scan(options: ScanOptions): ScanResult {
         ? { assumeAdequacyLapsed: options.assumeAdequacyLapsed }
         : {}),
     });
+
+  // Applied before anything is matched, so a local entry's hosts and packages
+  // are found by the same lookups as a shipped one.
+  const overlay = options.facts
+    ? applyOverlay(shipped, checkFacts(options.facts, shipped, now), {
+        trustFacts: options.trustFacts === true,
+      })
+    : null;
+  const kb = overlay?.kb ?? shipped;
 
   const errors: ScanError[] = [];
   const signals: Signal[] = [];
@@ -266,12 +290,28 @@ export function scan(options: ScanOptions): ScanResult {
     ? ({ callsite: degraded ? 'unavailable' : 'oxc', degraded } as const)
     : ({ callsite: 'disabled', degraded: false } as const);
 
+  // A local entry was drafted by the repository, not reviewed for the
+  // knowledge base, so nothing it matches is reported above medium -- however
+  // the entry labels its own aliases.
+  if (overlay) {
+    for (const signal of signals) {
+      if (
+        signal.vendorId &&
+        overlay.localIds.has(signal.vendorId) &&
+        signal.confidence === 'high'
+      ) {
+        signal.confidence = 'medium';
+      }
+    }
+  }
+
   const filtered = signals.filter((signal) => {
     if (onlyVendor && (!signal.vendorId || !onlyVendor.includes(signal.vendorId))) return false;
     return meetsConfidence(signal.confidence, minConfidence);
   });
 
-  const merged = mergeSignals(filtered, { kb, now });
+  const merged = mergeSignals(filtered, { kb, now, ...(overlay ? { overlay } : {}) });
+  const reclassified = merged.filter((f) => f.baselineRuleId !== undefined).length;
   const narrowedBy = [
     ...(onlyVendor ? ['only some vendors were scanned'] : []),
     ...(minConfidence !== 'low' ? [`findings below ${minConfidence} confidence were dropped`] : []),
@@ -282,6 +322,10 @@ export function scan(options: ScanOptions): ScanResult {
     ...(options.exclude?.length ? ['the caller excluded paths'] : []),
     // A what-if run rewrites rule ids, so a rule suppression can stop matching.
     ...(options.assumeAdequacyLapsed?.length ? ['adequacy decisions were assumed withdrawn'] : []),
+    // A fact that changes a rule changes a finding's id, as an assumed lapse does.
+    ...(reclassified > 0
+      ? [`repository facts changed ${reclassified} classification${reclassified === 1 ? '' : 's'}`]
+      : []),
     // The config asked for transitive dependencies and the caller turned them off.
     ...(!includeTransitive && config.includeTransitive === true
       ? ['transitive dependencies were left out']
@@ -303,11 +347,12 @@ export function scan(options: ScanOptions): ScanResult {
     disclaimer: DISCLAIMER,
     tool: { name: 'egressa', version: toolVersion },
     kb: {
-      version: kb.version,
-      entryCount: kb.vendors.length,
+      // The shipped knowledge base: local entries are counted under `facts`.
+      version: shipped.version,
+      entryCount: shipped.vendors.length,
       license: 'CC-BY-4.0',
-      adequacyStatusAsOf: kb.adequacy.asOf,
-      staleEntryCount: kb.staleEntries(now).length,
+      adequacyStatusAsOf: shipped.adequacy.asOf,
+      staleEntryCount: shipped.staleEntries(now).length,
     },
     scan: {
       root,
@@ -332,6 +377,30 @@ export function scan(options: ScanOptions): ScanResult {
       packages: [...unmatchedPackages].sort(),
     },
     errors,
+    ...(overlay ? { facts: factsSummary(overlay, findings) } : {}),
+  };
+}
+
+function factsSummary(overlay: Overlay, findings: Finding[]): FactsSummary {
+  const count = (state: string) => overlay.items.filter((i) => i.state === state).length;
+  const active = findings.filter((f) => !f.suppressed);
+  return {
+    source: overlay.source,
+    trusted: overlay.trusted,
+    applied: count('applied'),
+    redundant: count('redundant'),
+    notTrusted: count('loosening-not-trusted'),
+    superseded: count('superseded'),
+    expired: count('expired'),
+    rejected: count('rejected'),
+    localVendors: overlay.localIds.size,
+    findingsDependingOnFacts: active.filter((f) => (f.transfer?.repositoryFacts?.length ?? 0) > 0)
+      .length,
+    loosened: active.filter(
+      (f) =>
+        f.baselineRuleId !== undefined &&
+        (f.transfer?.repositoryFacts ?? []).some((r) => r.effect === 'loosens'),
+    ).length,
   };
 }
 

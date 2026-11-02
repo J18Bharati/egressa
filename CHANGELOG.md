@@ -23,17 +23,33 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
 
 ### Added
 
-- **`.egressa/facts.json` is read and checked, not yet applied.** A repository can record legal
-  facts it checked against a cited source (a DPF status, a DPA, a sub-processor list) and vendor
-  entries it drafted for destinations the knowledge base does not know. The file is untrusted input:
-  it goes through the reader `.egressa.yml` uses (no link out of the repository, no FIFO, 8 MB cap,
-  UTF-8 only), is parsed as strict JSON with repeated and prototype keys refused, and is checked
-  against the tool's bundled `kb/schema/facts-1.0.0.json`. Each fact is judged on its own: an https
-  source and a retrieval date are required, a DPF fact must cite www.dataprivacyframework.gov, a
-  fact stops counting 30 days after its source was read, and a fact naming an unknown vendor,
-  dated in the future or using a forbidden claim word is rejected by its JSON path without quoting
-  it. A local entry must pass the checks `pnpm kb:validate` runs and may not reuse a shipped id or
-  alias. `egressa facts check [root]` lists each item as current, expired or rejected.
+- **Repository facts: `.egressa/facts.json` is read, checked and applied.** A repository can record
+  legal facts it checked against a cited source (a DPF status, a DPA, a sub-processor list) and
+  vendor entries it drafted for destinations the knowledge base does not know.
+  - *Untrusted input.* The file goes through the reader `.egressa.yml` uses (no link out of the
+    repository, no FIFO, 8 MB cap, UTF-8 only), is parsed as strict JSON with repeated and prototype
+    keys refused, and is checked against the tool's bundled `kb/schema/facts-1.0.0.json`.
+  - *Per fact.* An https source and a retrieval date are required, a DPF fact must cite
+    www.dataprivacyframework.gov, and a fact stops counting 30 days after its source was read. A fact
+    naming an unknown vendor, dated in the future or using a forbidden claim word is rejected by its
+    JSON path without quoting it. A local entry must pass the checks `pnpm kb:validate` runs and may
+    not reuse a shipped alias; one whose id the knowledge base now has is `superseded`.
+  - *What a fact may change.* DPF records, read through the same closed status table as shipped
+    data; the DPA and sub-processor links; and nothing else. A shipped vendor's jurisdictions,
+    regions, hosts, packages, name and category, and every adequacy decision, are out of reach.
+  - *Trust gate.* A fact that would make a vendor certified, and so loosen a finding, applies only
+    with `--trust-facts` (MCP `trustFacts: true`), which is for a repository you own. Without it the
+    shipped answer stands and the fact is counted `loosening-not-trusted`. Facts that tighten apply
+    regardless. `--assume-adequacy-lapsed` still wins.
+  - *Provenance.* A finding computed from a fact carries `transfer.repositoryFacts` (file, JSON path,
+    cited URL, retrieval date, who checked it, expiry, effect) and `factSource:` exposure inputs; a
+    changed rule carries `baselineRuleId`, and since the rule is part of the fingerprint the finding
+    gets a new `id`, as an assumed lapse does. A local vendor is `origin: local`, never above medium
+    confidence and never DPF certified by its own claim. The document carries a `facts` block of
+    counts. An expired fact reverts to the knowledge base and leaves an `overlay-expired` task.
+  - With no facts file, output is unchanged. Exposure rules are `1.3.0`.
+  - `egressa facts check [root] [--trust-facts]` lists each item as applied, redundant,
+    loosening-not-trusted, superseded, expired or rejected.
 - **`pnpm kb:tasks`** lists the verification tasks the shipped knowledge base generates, as JSON,
   using the builder a scan uses. It reads no repository and reaches no network. `kb/KB_POLICY.md`
   describes the re-verification flow it feeds.

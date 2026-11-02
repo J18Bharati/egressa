@@ -3,11 +3,14 @@ import {
   ConfigError,
   DISCLAIMER,
   type EgressaConfig,
+  FactsError,
+  type ParsedFacts,
   RULES,
   RULE_IDS,
   excludeProblem,
   isRuleId,
   loadConfig,
+  loadFacts,
   scan,
   summarise,
 } from '@egressa/core';
@@ -52,7 +55,10 @@ server.tool(
       'Returns a summary plus the strongest findings; set full=true for the complete document. ' +
       "The repository's own .egressa.yml is applied, as the CLI applies it: it can exclude files " +
       'and suppress findings. scan.config names the file when there is one, and a suppressed ' +
-      'finding is kept and marked suppressed, never removed.',
+      'finding is kept and marked suppressed, never removed. Its .egressa/facts.json is applied ' +
+      'too: facts that make a finding stricter always, facts that would loosen one only with ' +
+      'trustFacts=true, which is for a repository the user owns. Findings computed from those ' +
+      'facts carry transfer.repositoryFacts and, when the rule changed, baselineRuleId.',
   ),
   {
     path: z.string().describe('Path to the repository to scan'),
@@ -69,6 +75,13 @@ server.tool(
       .array(z.string())
       .optional()
       .describe('Globs to skip during discovery, e.g. ["vendor/**", "**/legacy/**"]'),
+    trustFacts: z
+      .boolean()
+      .optional()
+      .describe(
+        "Apply facts in the repository's .egressa/facts.json that would loosen a finding. " +
+          'Set only when the user owns the repository; never inferred from the repository.',
+      ),
   },
   async (args) => {
     const excludeError = excludeProblem(args.exclude ?? []);
@@ -84,10 +97,19 @@ server.tool(
       const text = error instanceof ConfigError ? message : `.egressa.yml: ${message}`;
       return { content: [{ type: 'text' as const, text }], isError: true };
     }
+    let facts: ParsedFacts | null;
+    try {
+      facts = loadFacts(root);
+    } catch (error) {
+      if (!(error instanceof FactsError)) throw error;
+      return { content: [{ type: 'text' as const, text: error.message }], isError: true };
+    }
     const result = scan({
       root,
       toolVersion: TOOL_VERSION,
       config,
+      facts,
+      trustFacts: args.trustFacts === true,
       includeCallsites: true,
       ...(args.includeTransitive !== undefined
         ? { includeTransitive: args.includeTransitive }

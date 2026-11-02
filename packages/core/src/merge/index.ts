@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { type KnowledgeBase, type VendorEntry, verifyTask } from '@egressa/kb';
 import { type AppliedRegion, isUnmappedRegion, resolveRegion } from '../exposure/regions.js';
 import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
+import type { Overlay } from '../facts/overlay.js';
 import { RULES } from '../rules.js';
 import type {
   Confidence,
@@ -17,6 +18,8 @@ import { strongest } from './confidence.js';
 
 export interface MergeOptions {
   kb: KnowledgeBase;
+  /** The repository's applied facts, when it has any; `kb` already carries them. */
+  overlay?: Overlay;
   /**
    * The instant staleness and verification tasks are judged against. Required,
    * so the same signals always merge to the same findings: a default of "now"
@@ -34,7 +37,7 @@ export interface MergeOptions {
  * evidence becomes the location and the rest become relatedLocations.
  */
 export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[] {
-  const { kb, now } = options;
+  const { kb, now, overlay } = options;
   const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
   const groups = new Map<
     string,
@@ -77,7 +80,15 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
   const findings: Finding[] = [];
   for (const group of groups.values()) {
     findings.push(
-      buildFinding(group.ruleId, group.vendor, group.signals, group.classified, group.region, kb),
+      buildFinding(
+        group.ruleId,
+        group.vendor,
+        group.signals,
+        group.classified,
+        group.region,
+        kb,
+        overlay,
+      ),
     );
   }
 
@@ -88,7 +99,7 @@ export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[
       confidenceOrder(b) - confidenceOrder(a) ||
       (a.vendor?.name ?? a.ruleId).localeCompare(b.vendor?.name ?? b.ruleId),
   );
-  return withVerification(findings, kb, now, staleVendorIds);
+  return withVerification(findings, kb, now, staleVendorIds, overlay);
 }
 
 /**
@@ -104,6 +115,7 @@ function withVerification(
   kb: KnowledgeBase,
   now: Date,
   staleVendorIds: Set<string>,
+  overlay: Overlay | undefined,
 ): Finding[] {
   const noted = new Set<string>();
   return findings.flatMap((finding) => {
@@ -121,13 +133,41 @@ function withVerification(
       });
       return [{ ...finding, verification: [task] }];
     }
-    const tasks = kb.verifyTasks(vendor, now);
+    const tasks = [...kb.verifyTasks(vendor, now), ...expiredFactTasks(vendor, overlay)];
     if (!staleVendorIds.has(vendor.id)) {
       return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
     }
     if (noted.has(vendor.id)) return [finding];
     noted.add(vendor.id);
     return [finding, staleNote(finding, vendor, tasks)];
+  });
+}
+
+/**
+ * A repository fact that expired is a task to read its source again. The task
+ * points at the knowledge base's own page for that fact, never at the URL the
+ * expired fact cited, so a task's `where` stays knowledge base data.
+ */
+function expiredFactTasks(vendor: VendorEntry, overlay: Overlay | undefined): VerifyTask[] {
+  return (overlay?.expiredByVendor.get(vendor.id) ?? []).flatMap((item) => {
+    const kind = item.fact?.fact;
+    if (!kind) return [];
+    const dpf = vendor.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
+    const url =
+      kind === 'dpf'
+        ? (dpf?.url ?? null)
+        : kind === 'dpa'
+          ? (vendor.legal.dpa.url ?? null)
+          : (vendor.legal.subprocessors?.url ?? null);
+    return [
+      verifyTask({
+        vendorId: vendor.id,
+        fact: kind,
+        reason: 'overlay-expired',
+        current: { value: null, asOf: item.expiresOn ?? null, url },
+        where: url ? [url] : kind === 'dpf' ? ['https://www.dataprivacyframework.gov/list'] : [],
+      }),
+    ];
   });
 }
 
@@ -164,21 +204,47 @@ function buildFinding(
   classified: ExposureResult | null,
   region: AppliedRegion | null,
   kb: KnowledgeBase,
+  overlay: Overlay | undefined,
 ): Finding {
   const evidence = signals.map((s) => toEvidence(s, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s) => s.confidence));
   const primary = evidence[0];
 
-  const transfer = vendor ? toTransferFacts(vendor) : null;
+  const applied = vendor ? (overlay?.byVendor.get(vendor.id) ?? []) : [];
+  const local = vendor !== null && overlay?.localIds.has(vendor.id) === true;
+  const transfer = vendor
+    ? { ...toTransferFacts(vendor), ...(applied.length > 0 ? { repositoryFacts: applied } : {}) }
+    : null;
   // Re-classified with every unmapped region the group's evidence carries, so
   // the audit trail matches the evidence whatever order the signals arrived in.
   const unmappedRegions = signals.flatMap((s) =>
     s.region !== undefined && isUnmappedRegion(vendor, s.region) ? [s.region] : [],
   );
-  const exposure =
+  const computed =
     vendor && unmappedRegions.length > 0
       ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure
       : (classified?.exposure ?? null);
+  // The audit trail says which inputs came from the repository rather than the
+  // knowledge base, so a reader can tell a shipped answer from a supplied one.
+  const factInputs = [
+    ...(local ? ['factSource:local'] : []),
+    ...[...new Set(applied.filter((a) => a.fact !== 'local-entry').map((a) => a.fact))].map(
+      (fact) => `factSource:${fact}:overlay`,
+    ),
+  ];
+  const exposure =
+    computed && factInputs.length > 0
+      ? { ...computed, inputs: [...computed.inputs, ...factInputs] }
+      : computed;
+
+  // The rule the shipped knowledge base alone gives, when a fact changed it.
+  const shippedVendor =
+    vendor && applied.some((a) => a.fact !== 'local-entry')
+      ? overlay?.baseline.byId.get(vendor.id)
+      : undefined;
+  const baselineRule = shippedVendor
+    ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId
+    : undefined;
 
   return {
     id: fingerprint(
@@ -188,7 +254,14 @@ function buildFinding(
       exposure?.inputs.some((i) => i.startsWith('narrowedTo:')) ? (region?.country ?? null) : null,
     ),
     ruleId,
-    vendor: vendor ? { id: vendor.id, name: vendor.name, category: vendor.category } : null,
+    vendor: vendor
+      ? {
+          id: vendor.id,
+          name: vendor.name,
+          category: vendor.category,
+          ...(local ? { origin: 'local' as const } : {}),
+        }
+      : null,
     transfer,
     exposure,
     severity: RULES[ruleId].defaultLevel,
@@ -198,6 +271,9 @@ function buildFinding(
     remediation: buildRemediation(ruleId, vendor),
     suppressed: false,
     suppression: null,
+    ...(baselineRule !== undefined && baselineRule !== ruleId
+      ? { baselineRuleId: baselineRule }
+      : {}),
   };
 }
 

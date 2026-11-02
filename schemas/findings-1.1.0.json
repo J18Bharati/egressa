@@ -214,6 +214,68 @@
           }
         }
       }
+    },
+    "facts": {
+      "description": "Present when the repository has a .egressa/facts.json. Counts of what its facts did to this scan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "trusted",
+        "applied",
+        "redundant",
+        "notTrusted",
+        "superseded",
+        "expired",
+        "rejected",
+        "localVendors",
+        "findingsDependingOnFacts",
+        "loosened"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "trusted": {
+          "type": "boolean"
+        },
+        "applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redundant": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notTrusted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "superseded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "localVendors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findingsDependingOnFacts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "loosened": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   },
   "$defs": {
@@ -397,6 +459,13 @@
               }
             }
           ]
+        },
+        "repositoryFacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/repositoryFact"
+          }
         }
       }
     },
@@ -483,6 +552,10 @@
                 },
                 "category": {
                   "type": "string"
+                },
+                "origin": {
+                  "const": "local",
+                  "description": "The entry came from the scanned repository's .egressa/facts.json, not the knowledge base."
                 }
               }
             }
@@ -675,7 +748,13 @@
         "verification": {
           "type": "array",
           "description": "Legal facts behind this finding to re-check, and where. Every URL in `where` comes from knowledge base data, never from the scanned repository.",
-          "items": { "$ref": "#/$defs/verifyTask" }
+          "items": {
+            "$ref": "#/$defs/verifyTask"
+          }
+        },
+        "baselineRuleId": {
+          "description": "The rule before repository facts were applied, present only when they changed it.",
+          "$ref": "#/$defs/ruleId"
         }
       }
     },
@@ -684,9 +763,23 @@
       "additionalProperties": false,
       "required": ["id", "vendorId", "fact", "reason", "current", "where"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
-        "vendorId": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
-        "fact": { "enum": ["dpf", "dpa", "subprocessors", "local-entry"] },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "vendorId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "fact": {
+          "enum": ["dpf", "dpa", "subprocessors", "local-entry"]
+        },
         "reason": {
           "enum": [
             "stale-entry",
@@ -694,7 +787,8 @@
             "dpf-status-unobserved",
             "dpf-status-qualified",
             "dpf-status-unrecognised",
-            "unknown-vendor"
+            "unknown-vendor",
+            "overlay-expired"
           ]
         },
         "current": {
@@ -702,13 +796,82 @@
           "additionalProperties": false,
           "required": ["value", "asOf", "url"],
           "properties": {
-            "value": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
-            "asOf": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/isoDate" }] },
-            "url": { "oneOf": [{ "type": "null" }, { "type": "string" }] }
+            "value": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "asOf": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/isoDate"
+                }
+              ]
+            },
+            "url": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
-        "where": { "type": "array", "items": { "type": "string" } },
-        "subject": { "type": "string" }
+        "where": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subject": {
+          "type": "string"
+        }
+      }
+    },
+    "repositoryFact": {
+      "description": "A fact the scanned repository supplied, as provenance: where it is in the file, what it cites, when that page was read and by whom, and until when it counts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact", "file", "at", "retrievedAt", "verifiedBy", "expiresOn", "effect"],
+      "properties": {
+        "fact": {
+          "enum": ["dpf", "dpa", "subprocessors", "local-entry"]
+        },
+        "file": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "retrievedAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "verifiedBy": {
+          "type": "string"
+        },
+        "expiresOn": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "effect": {
+          "enum": ["loosens", "tightens", "neutral"]
+        },
+        "observedStatus": {
+          "type": "string"
+        }
       }
     }
   }

@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "facts": [
+    {
+      "vendor": "notion",
+      "fact": "dpf",
+      "value": {
+        "observedStatus": "Active",
+        "organizationName": "Notion Labs, Inc.",
+        "participantUrl": "https://www.dataprivacyframework.gov/participant/6134"
+      },
+      "source": {
+        "url": "https://www.dataprivacyframework.gov/participant/6134",
+        "retrievedAt": "2026-11-03"
+      },
+      "verifiedBy": "fixture: a loosening fact"
+    },
+    {
+      "vendor": "stripe",
+      "fact": "dpf",
+      "value": {
+        "observedStatus": "Inactive - Lapse",
+        "organizationName": "Stripe, LLC",
+        "participantUrl": "https://www.dataprivacyframework.gov/participant/10014"
+      },
+      "source": {
+        "url": "https://www.dataprivacyframework.gov/participant/10014",
+        "retrievedAt": "2026-11-03"
+      },
+      "verifiedBy": "fixture: a tightening fact"
+    },
+    {
+      "vendor": "openai",
+      "fact": "dpf",
+      "value": {
+        "observedStatus": "not-listed",
+        "organizationName": "OpenAI",
+        "participantUrl": "https://www.dataprivacyframework.gov/list"
+      },
+      "source": {
+        "url": "https://www.dataprivacyframework.gov/list",
+        "retrievedAt": "2026-11-03"
+      },
+      "verifiedBy": "fixture: a neutral fact"
+    }
+  ],
+  "localVendors": [
+    {
+      "entry": {
+        "schemaVersion": "1.0.0",
+        "id": "acme-geo",
+        "name": "Acme Geo (fixture)",
+        "product": "IPinfo API",
+        "category": "other",
+        "homepage": "https://ipinfo.io",
+        "aliases": {
+          "packages": {},
+          "hosts": [
+            {
+              "pattern": "api.acme-geo.example.net",
+              "match": "exact",
+              "purpose": "api"
+            }
+          ]
+        },
+        "processing": {
+          "jurisdictions": [
+            {
+              "country": "US",
+              "role": "primary",
+              "note": "Fixture jurisdiction."
+            }
+          ],
+          "euRegion": {
+            "available": false,
+            "notes": "No EU hosting or data residency option was found on the developer documentation, privacy policy, Terms of Service or DPA read for this entry. Every sub-processor listed in Annex 3 of the DPA on the access date carries the country US."
+          }
+        },
+        "legal": {
+          "dpa": {
+            "available": true,
+            "url": "https://ipinfo.io/data-processing-agreement",
+            "type": "incorporated-by-reference",
+            "lastChecked": "2026-11-02"
+          },
+          "subprocessors": {
+            "url": "https://ipinfo.io/data-processing-agreement",
+            "listType": "page",
+            "notifications": "email-subscribe"
+          },
+          "transferMechanisms": [
+            {
+              "mechanism": "SCC",
+              "url": "https://ipinfo.io/data-processing-agreement",
+              "lastChecked": "2026-11-02"
+            }
+          ]
+        },
+        "dataCategories": [
+          {
+            "category": "ip_address",
+            "typical": true,
+            "note": "The API's input is an IP address, and a request for /me looks up the caller's own address. The DPA defines Customer Data as 'any data, including IP addresses, that you or your end users submit to the Service (including through API requests)', and states that the parties agree to handle IP addresses under the DPA."
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://ipinfo.io/developers",
+            "title": "IPinfo developer documentation: API base URLs, IPv4/IPv6 hosts, legacy API",
+            "publisher": "vendor",
+            "accessedAt": "2026-11-02"
+          },
+          {
+            "url": "https://ipinfo.io/developers/libraries",
+            "title": "IPinfo official libraries (NodeJS: node-ipinfo on npm; Python: ipinfo on PyPI)",
+            "publisher": "vendor",
+            "accessedAt": "2026-11-03"
+          },
+          {
+            "url": "https://ipinfo.io/data-processing-agreement",
+            "title": "IPinfo Online Data Processing Agreement (last updated 20 October 2026), with Annex 3 sub-processor list",
+            "publisher": "vendor",
+            "accessedAt": "2026-11-02"
+          },
+          {
+            "url": "https://ipinfo.io/privacy-policy",
+            "title": "IPinfo Privacy Policy (effective 29 October 2026)",
+            "publisher": "vendor",
+            "accessedAt": "2026-11-02"
+          },
+          {
+            "url": "https://ipinfo.io/terms-of-service",
+            "title": "IPinfo Terms of Service (last updated June 3, 2024)",
+            "publisher": "vendor",
+            "accessedAt": "2026-11-02"
+          },
+          {
+            "url": "https://www.dataprivacyframework.gov/list",
+            "title": "Data Privacy Framework participant list (searched for IPinfo; no record)",
+            "publisher": "regulator",
+            "accessedAt": "2026-11-02"
+          },
+          {
+            "url": "https://registry.npmjs.org/node-ipinfo/latest",
+            "title": "npm registry metadata: node-ipinfo (repository github.com/ipinfo/node, maintainer ipinfo-releases)",
+            "publisher": "other",
+            "accessedAt": "2026-11-03"
+          },
+          {
+            "url": "https://pypi.org/pypi/ipinfo/json",
+            "title": "PyPI metadata: ipinfo (author IPinfo, homepage github.com/ipinfo/python)",
+            "publisher": "other",
+            "accessedAt": "2026-11-03"
+          }
+        ],
+        "lastVerified": "2026-11-03",
+        "verifiedBy": "egressa-kb",
+        "notes": "A fixture entry for a destination the knowledge base does not know, drafted locally."
+      },
+      "retrievedAt": "2026-11-03",
+      "verifiedBy": "fixture: a local entry"
+    }
+  ]
+}

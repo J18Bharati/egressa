@@ -899,8 +899,9 @@ describe('egressa facts check', () => {
     const root = repo(JSON.stringify({ version: 1, facts: [fact('notion'), fact('nobody')] }));
     const { code, stdout } = run(['facts', 'check', root]);
     expect(code).toBe(EXIT.FINDINGS);
-    expect(stdout).toMatch(/1 current, 0 expired, 1 rejected/);
-    expect(stdout).toMatch(/facts\[0\]\s+notion\s+dpf\s+current/);
+    // Notion's shipped record is the qualified status, so an Active reading loosens it.
+    expect(stdout).toMatch(/1 loosening-not-trusted, 1 rejected/);
+    expect(stdout).toMatch(/facts\[0\]\s+notion\s+dpf\s+loosening-not-trusted/);
     expect(stdout).toMatch(/facts\[1\]\s+nobody\s+dpf\s+rejected/);
   });
 
@@ -908,7 +909,15 @@ describe('egressa facts check', () => {
     const root = repo(JSON.stringify({ version: 1, facts: [fact('notion')] }));
     const { code, stdout } = run(['facts', 'check', root, '--json']);
     expect(code).toBe(EXIT.CLEAN);
-    expect(JSON.parse(stdout).items[0]).toMatchObject({ at: 'facts[0]', state: 'current' });
+    expect(JSON.parse(stdout).items[0]).toMatchObject({
+      at: 'facts[0]',
+      state: 'loosening-not-trusted',
+    });
+    const trusted = run(['facts', 'check', root, '--json', '--trust-facts']);
+    expect(JSON.parse(trusted.stdout).items[0]).toMatchObject({
+      state: 'applied',
+      effect: 'loosens',
+    });
   });
 
   it('is a usage error, exit 2, when the file is not a facts document', () => {

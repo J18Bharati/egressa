@@ -359,3 +359,51 @@ describe('errors reach the summary', () => {
     expect(result.omittedErrors).toBe(0);
   });
 });
+
+describe('the repository’s own .egressa/facts.json', () => {
+  // The server judges expiry against the real clock, so the reading is dated today.
+  const today = new Date().toISOString().slice(0, 10);
+  const repo = (facts: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'egressa-mcp-facts-'));
+    writeFileSync(join(dir, 'package.json'), '{"dependencies":{"@notionhq/client":"^2.2.15"}}');
+    mkdirSync(join(dir, '.egressa'));
+    writeFileSync(join(dir, '.egressa', 'facts.json'), facts);
+    return dir;
+  };
+  const loosening = JSON.stringify({
+    version: 1,
+    facts: [
+      {
+        vendor: 'notion',
+        fact: 'dpf',
+        value: {
+          observedStatus: 'Active',
+          organizationName: 'Notion Labs, Inc.',
+          participantUrl: 'https://www.dataprivacyframework.gov/participant/6134',
+        },
+        source: {
+          url: 'https://www.dataprivacyframework.gov/participant/6134',
+          retrievedAt: today,
+        },
+        verifiedBy: 'A Person',
+      },
+    ],
+  });
+
+  it('applies a loosening fact only when trustFacts is passed', async () => {
+    const dir = repo(loosening);
+    const plain = await call('scan_repository', { path: dir, full: true });
+    expect(plain.facts).toMatchObject({ trusted: false, notTrusted: 1, loosened: 0 });
+    const trusted = await call('scan_repository', { path: dir, full: true, trustFacts: true });
+    expect(trusted.facts).toMatchObject({ trusted: true, applied: 1, loosened: 1 });
+  });
+
+  it('is a tool error, naming the file, when it is not a facts document', async () => {
+    const response = (await client.callTool({
+      name: 'scan_repository',
+      arguments: { path: repo('{"version": 1,}') },
+    })) as { isError?: boolean; content: { text: string }[] };
+    expect(response.isError).toBe(true);
+    expect(response.content[0]?.text).toMatch(/^\.egressa\/facts\.json: not valid JSON/);
+  });
+});

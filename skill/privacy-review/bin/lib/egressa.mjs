@@ -13133,6 +13133,7 @@ function dpfStatusVerdict(observedStatus, accepted) {
   }
   return { certified: false, kind: "unrecognised" };
 }
+var STALE_AFTER_DAYS = 180;
 function verifyTask(task) {
   const key = [
     task.vendorId ?? "",
@@ -13148,7 +13149,7 @@ function vendorTasks(entry, context) {
   const vendorId = entry.id;
   const dpfRecords = entry.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
   for (const m2 of dpfRecords) {
-    const reason = dpfRecordReason(m2) ?? (context.stale ? "stale-entry" : null);
+    const reason = dpfRecordReason(m2) ?? (context.stale && !recent(m2.lastChecked, context) ? "stale-entry" : null);
     if (reason === null) continue;
     tasks.push(
       verifyTask({
@@ -13176,7 +13177,7 @@ function vendorTasks(entry, context) {
       })
     );
   }
-  if (context.stale) {
+  if (context.stale && !recent(entry.legal.dpa.lastChecked, context)) {
     const dpa = entry.legal.dpa;
     tasks.push(
       verifyTask({
@@ -13191,6 +13192,8 @@ function vendorTasks(entry, context) {
         where: dpa.url ? [dpa.url] : []
       })
     );
+  }
+  if (context.stale) {
     const sub = entry.legal.subprocessors;
     if (sub) {
       tasks.push(
@@ -13205,6 +13208,10 @@ function vendorTasks(entry, context) {
     }
   }
   return tasks;
+}
+function recent(lastChecked, context) {
+  if (lastChecked === void 0) return false;
+  return Date.parse(lastChecked) >= context.asOf.getTime() - STALE_AFTER_DAYS * 864e5;
 }
 function dpfRecordReason(m2) {
   if (m2.observedStatus === void 0) {
@@ -13612,7 +13619,6 @@ function collisionIssues(entries) {
   }
   return issues;
 }
-var STALE_AFTER_DAYS = 180;
 var bundledSchemas = /* @__PURE__ */ new Map();
 function bundledSchemaIssues(file, def, value) {
   const bundled = bundledKbPath();
@@ -13653,6 +13659,16 @@ function loadKnowledgeBase(options = {}) {
   const vendors = vendorFiles.map((f3) => readVendor(join2(vendorDir, f3), schemaDir)).sort((a2, b2) => a2.id.localeCompare(b2.id));
   const adequacy = readAdequacy(join2(kbPath, "adequacy-status.json"), schemaDir);
   const version = readText(join2(kbPath, "kb.version")).trim();
+  return buildKnowledgeBase({
+    version,
+    vendors,
+    adequacy,
+    assumeAdequacyLapsed: options.assumeAdequacyLapsed ?? []
+  });
+}
+function buildKnowledgeBase(parts) {
+  const { version, adequacy } = parts;
+  const vendors = [...parts.vendors].sort((a2, b2) => a2.id.localeCompare(b2.id));
   const byId = new Map(vendors.map((v2) => [v2.id, v2]));
   const packageIndex = /* @__PURE__ */ new Map();
   const scopeIndex = [];
@@ -13670,9 +13686,10 @@ function loadKnowledgeBase(options = {}) {
     }
     for (const alias of vendor.aliases.hosts) hosts.add(vendor, alias);
   }
-  const lapsed = new Set((options.assumeAdequacyLapsed ?? []).map((v2) => v2.toUpperCase()));
+  const lapsed = new Set(parts.assumeAdequacyLapsed.map((v2) => v2.toUpperCase()));
   const kb = {
     version,
+    assumeAdequacyLapsed: parts.assumeAdequacyLapsed,
     vendors,
     byId,
     adequacy,
@@ -13740,6 +13757,7 @@ function loadKnowledgeBase(options = {}) {
     },
     verifyTasks(entry, asOf = /* @__PURE__ */ new Date()) {
       return vendorTasks(entry, {
+        asOf,
         stale: isStale(entry, asOf),
         dpfJurisdiction: entry.processing.jurisdictions.some((j) => {
           const decision = kb.decisionFor(j.country);
@@ -15343,8 +15361,16 @@ function checkFacts(parsed, kb, now) {
       kind: "local-entry",
       ...PLAIN2.test(id) ? { vendor: id } : {}
     };
+    if (kb.byId.has(id)) {
+      out.push({
+        ...base,
+        state: "superseded",
+        reason: "the knowledge base has an entry with this id, which is used instead; this one can be deleted"
+      });
+      continue;
+    }
     const timing = timingProblem(local.retrievedAt, local.expires, now);
-    const reason = timing.reason ?? textProblem(local) ?? (kb.byId.has(id) ? "reuses the id of a shipped vendor" : void 0) ?? (localIds.has(id) ? "repeats the id of an earlier local vendor" : void 0) ?? entryIssues(local.entry)[0]?.message ?? collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
+    const reason = timing.reason ?? textProblem(local) ?? (localIds.has(id) ? "repeats the id of an earlier local vendor" : void 0) ?? entryIssues(local.entry)[0]?.message ?? collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
       (issue) => issue.vendorId === id
     )?.message;
     if (reason) {
@@ -15485,6 +15511,323 @@ function safeIssue(message) {
     /(['"])([^'"]*)\1/g,
     (whole, quote, text) => /^[\w.@/*:$-]{1,80}$/.test(text) ? whole : `${quote}(not shown)${quote}`
   );
+}
+function resolveRegion(vendor, raw) {
+  const code = raw.trim().toLowerCase();
+  if (code === "") return null;
+  const hit = (vendor.regions ?? []).find((r3) => r3.code.toLowerCase() === code);
+  if (!hit) return null;
+  return { code: hit.code, country: hit.country.toUpperCase(), sourceUrl: hit.sourceUrl };
+}
+function isUnmappedRegion(vendor, raw) {
+  return vendor !== null && !!raw?.trim() && resolveRegion(vendor, raw) === null;
+}
+function declaresRegionNarrowing(vendor) {
+  return vendor.processing.jurisdictions.some((j) => j.regionSelected === true);
+}
+var EXPOSURE_RULES_VERSION = "1.3.0";
+var EEA_MEMBERS = /* @__PURE__ */ new Set([
+  "AT",
+  "BE",
+  "BG",
+  "HR",
+  "CY",
+  "CZ",
+  "DK",
+  "EE",
+  "FI",
+  "FR",
+  "DE",
+  "GR",
+  "HU",
+  "IE",
+  "IT",
+  "LV",
+  "LT",
+  "LU",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SK",
+  "SI",
+  "ES",
+  "SE",
+  "IS",
+  "LI",
+  "NO",
+  "EEA"
+]);
+function classifyExposure(vendor, kb, context = {}) {
+  const known = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
+  const euRegion = vendor.processing.euRegion;
+  const inputs = known.map((c3) => `jurisdiction:${c3}`);
+  const region = context.region ?? null;
+  const narrows = region !== null && declaresRegionNarrowing(vendor);
+  const countries = narrows ? [
+    region.country,
+    ...vendor.processing.jurisdictions.filter((j) => j.regionSelected !== true).map((j) => j.country.toUpperCase())
+  ] : known;
+  if (region) {
+    inputs.push(`region:${region.code}`, `regionCountry:${region.country}`, "regionSource:kb");
+    if (narrows) inputs.push(`narrowedTo:${[...new Set(countries)].sort().join(",")}`);
+    else inputs.push("narrowing:not-declared");
+  }
+  const unmapped = [...new Set(context.unmappedRegions ?? [])].sort();
+  if (unmapped.length > 0) {
+    inputs.push(...unmapped.map((code) => `region:${code}`), "regionSource:unmapped");
+  }
+  if (!region && unmapped.length === 0) inputs.push("regionSource:none");
+  const nonEea = countries.filter((c3) => !EEA_MEMBERS.has(c3));
+  inputs.push(`euRegion:${euRegion.available ? euRegion.scope ?? "unscoped" : "none"}`);
+  for (const mechanism of vendor.legal.transferMechanisms) {
+    inputs.push(`mechanism:${mechanism.mechanism}`);
+  }
+  if (nonEea.length === 0) {
+    return {
+      ruleId: "transfer/eu-processing",
+      exposure: flags({
+        thirdCountryTransfer: false,
+        euAlternativeAvailable: euRegion.available,
+        adequacyDependent: false,
+        additionalSafeguardsRequired: false,
+        level: "none",
+        inputs
+      })
+    };
+  }
+  const decisions = nonEea.map((country) => kb.decisionFor(country));
+  const allCovered = decisions.length > 0 && decisions.every((d2) => d2 !== null && covers(d2, vendor));
+  for (const [i2, decision] of decisions.entries()) {
+    inputs.push(`decision:${nonEea[i2]}:${decision ? decision.status : "none"}`);
+    if (decision?.mechanism === "DPF") {
+      inputs.push(`dpfCertified:${vendorIsDpfCertified(vendor)}`);
+    }
+  }
+  if (allCovered) {
+    return {
+      ruleId: "transfer/adequate-country-egress",
+      exposure: flags({
+        // Art 44: a transfer to an adequate country is still a third-country
+        // transfer. Art 45 supplies its legal basis; it does not undo the fact.
+        thirdCountryTransfer: true,
+        euAlternativeAvailable: euRegion.available,
+        // The whole premise of the tool: this is the population that changes
+        // if a decision is withdrawn.
+        adequacyDependent: true,
+        // Adequacy is the mechanism, so nothing under Art 46 is added.
+        additionalSafeguardsRequired: false,
+        level: "low",
+        inputs
+      })
+    };
+  }
+  const euAlternative = euRegion.available;
+  return {
+    ruleId: euAlternative ? "transfer/third-country-egress-eu-region-available" : "transfer/third-country-egress",
+    exposure: flags({
+      thirdCountryTransfer: true,
+      euAlternativeAvailable: euAlternative,
+      // Not `decisions.some(...)`: a decision merely existing for the country
+      // says nothing about this vendor. A US vendor relying on SCCs rather than
+      // DPF is unaffected by DPF being withdrawn, and reporting it as adequacy
+      // dependent puts it in the "what breaks if adequacy falls" list wrongly.
+      adequacyDependent: false,
+      additionalSafeguardsRequired: true,
+      // A documented EU alternative means the exposure is addressable by
+      // configuration, which is materially different from one that is not.
+      level: euAlternative ? "moderate" : "elevated",
+      inputs
+    })
+  };
+}
+function isInForce(decision) {
+  return decision.status === "in-force" || decision.status === "under-challenge";
+}
+function covers(decision, vendor) {
+  if (!isInForce(decision)) return false;
+  if (decision.mechanism === "DPF") return vendorIsDpfCertified(vendor);
+  return true;
+}
+function vendorIsDpfCertified(vendor) {
+  return vendor.legal.transferMechanisms.some(
+    (m2) => m2.mechanism === "DPF" && m2.dpfCertified === true && (m2.observedStatus === void 0 || dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0).certified)
+  );
+}
+function flags(input) {
+  return { ...input, rulesVersion: EXPOSURE_RULES_VERSION };
+}
+function applyOverlay(baseline, checked, options) {
+  const { trustFacts } = options;
+  const items = [];
+  const byVendor = /* @__PURE__ */ new Map();
+  const expiredByVendor = /* @__PURE__ */ new Map();
+  const changed = /* @__PURE__ */ new Map();
+  const localIds = /* @__PURE__ */ new Set();
+  const add = (map, key, value) => {
+    const list = map.get(key);
+    if (list) list.push(value);
+    else map.set(key, [value]);
+  };
+  for (const item of checked.items) {
+    if (item.kind !== "local-entry") continue;
+    if (item.state !== "current" || !item.local) {
+      items.push({ ...item, state: item.state === "current" ? "rejected" : item.state });
+      continue;
+    }
+    const entry = item.local.entry;
+    const local = {
+      ...entry,
+      legal: {
+        ...entry.legal,
+        transferMechanisms: entry.legal.transferMechanisms.map(
+          (m2) => m2.mechanism === "DPF" ? { ...m2, dpfCertified: false } : m2
+        )
+      }
+    };
+    changed.set(local.id, local);
+    localIds.add(local.id);
+    add(byVendor, local.id, {
+      fact: "local-entry",
+      file: checked.source,
+      at: item.at,
+      retrievedAt: item.local.retrievedAt,
+      verifiedBy: item.local.verifiedBy,
+      expiresOn: item.expiresOn ?? "",
+      effect: "neutral"
+    });
+    items.push({ ...item, state: "applied", effect: "neutral" });
+  }
+  for (const item of checked.items) {
+    if (item.kind === "local-entry") continue;
+    if (item.state === "expired" && item.fact) {
+      const expired = { ...item, state: "expired" };
+      add(expiredByVendor, item.fact.vendor, expired);
+      items.push(expired);
+      continue;
+    }
+    if (item.state !== "current" || !item.fact) {
+      items.push({ ...item, state: item.state === "current" ? "rejected" : item.state });
+      continue;
+    }
+    const fact = item.fact;
+    const before = changed.get(fact.vendor) ?? baseline.byId.get(fact.vendor);
+    if (!before) {
+      items.push({ ...item, state: "rejected", reason: "names a vendor that is not loaded" });
+      continue;
+    }
+    const after = withFact(before, fact);
+    if (sameLegal(before, after)) {
+      items.push({ ...item, state: "redundant", effect: "neutral" });
+      continue;
+    }
+    const effect = effectOf(before, after);
+    if (effect === "loosens" && !trustFacts) {
+      items.push({ ...item, state: "loosening-not-trusted", effect });
+      continue;
+    }
+    changed.set(fact.vendor, after);
+    add(byVendor, fact.vendor, {
+      fact: fact.fact,
+      file: checked.source,
+      at: item.at,
+      sourceUrl: fact.source.url,
+      retrievedAt: fact.source.retrievedAt,
+      verifiedBy: fact.verifiedBy,
+      expiresOn: item.expiresOn ?? "",
+      effect,
+      ...fact.fact === "dpf" ? { observedStatus: fact.value.observedStatus } : {}
+    });
+    items.push({ ...item, state: "applied", effect });
+  }
+  const order = new Map(checked.items.map((item, i2) => [item.at, i2]));
+  items.sort((a2, b2) => (order.get(a2.at) ?? 0) - (order.get(b2.at) ?? 0));
+  const vendors = [
+    ...baseline.vendors.map((v2) => changed.get(v2.id) ?? v2),
+    ...[...changed.values()].filter((v2) => localIds.has(v2.id))
+  ];
+  const kb = changed.size === 0 ? baseline : buildKnowledgeBase({
+    version: baseline.version,
+    vendors,
+    adequacy: baseline.adequacy,
+    assumeAdequacyLapsed: baseline.assumeAdequacyLapsed
+  });
+  return {
+    kb,
+    baseline,
+    source: checked.source,
+    trusted: trustFacts,
+    items,
+    byVendor,
+    expiredByVendor,
+    localIds
+  };
+}
+function withFact(vendor, fact) {
+  switch (fact.fact) {
+    case "dpf": {
+      const { observedStatus, participantUrl } = fact.value;
+      const accepted = fact.acceptQualifiedStatus;
+      const record2 = {
+        mechanism: "DPF",
+        dpfCertified: dpfStatusVerdict(observedStatus, accepted !== void 0).certified,
+        url: participantUrl,
+        lastChecked: fact.source.retrievedAt,
+        observedStatus,
+        ...accepted ? { acceptQualifiedStatus: accepted } : {}
+      };
+      const mechanisms = vendor.legal.transferMechanisms;
+      const same = mechanisms.some((m2) => m2.mechanism === "DPF" && m2.url === participantUrl);
+      const kept = mechanisms.filter(
+        (m2) => m2.mechanism !== "DPF" || same && m2.url !== participantUrl
+      );
+      return { ...vendor, legal: { ...vendor.legal, transferMechanisms: [...kept, record2] } };
+    }
+    case "dpa":
+      return {
+        ...vendor,
+        legal: {
+          ...vendor.legal,
+          dpa: {
+            ...vendor.legal.dpa.type ? { type: vendor.legal.dpa.type } : {},
+            available: fact.value.available,
+            ...fact.value.url ? { url: fact.value.url } : {},
+            lastChecked: fact.source.retrievedAt
+          }
+        }
+      };
+    case "subprocessors":
+      return {
+        ...vendor,
+        legal: {
+          ...vendor.legal,
+          subprocessors: { ...vendor.legal.subprocessors, url: fact.value.url }
+        }
+      };
+  }
+}
+function sameLegal(a2, b2) {
+  const strip = (v2) => canonical({
+    dpa: { ...v2.legal.dpa, lastChecked: void 0 },
+    sub: v2.legal.subprocessors?.url,
+    mechanisms: v2.legal.transferMechanisms.map((m2) => canonical({ ...m2, lastChecked: void 0 })).sort()
+  });
+  return strip(a2) === strip(b2);
+}
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(([, v2]) => v2 !== void 0).sort(([x2], [y3]) => x2.localeCompare(y3));
+    return `{${entries.map(([k2, v2]) => `${JSON.stringify(k2)}:${canonical(v2)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function effectOf(before, after) {
+  const was = vendorIsDpfCertified(before);
+  const now = vendorIsDpfCertified(after);
+  if (was === now) return "neutral";
+  return now ? "loosens" : "tightens";
 }
 var LineIndex = class {
   constructor(text) {
@@ -16283,152 +16626,6 @@ function dedupe(records) {
   return out.sort(
     (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
   );
-}
-function resolveRegion(vendor, raw) {
-  const code = raw.trim().toLowerCase();
-  if (code === "") return null;
-  const hit = (vendor.regions ?? []).find((r3) => r3.code.toLowerCase() === code);
-  if (!hit) return null;
-  return { code: hit.code, country: hit.country.toUpperCase(), sourceUrl: hit.sourceUrl };
-}
-function isUnmappedRegion(vendor, raw) {
-  return vendor !== null && !!raw?.trim() && resolveRegion(vendor, raw) === null;
-}
-function declaresRegionNarrowing(vendor) {
-  return vendor.processing.jurisdictions.some((j) => j.regionSelected === true);
-}
-var EXPOSURE_RULES_VERSION = "1.2.0";
-var EEA_MEMBERS = /* @__PURE__ */ new Set([
-  "AT",
-  "BE",
-  "BG",
-  "HR",
-  "CY",
-  "CZ",
-  "DK",
-  "EE",
-  "FI",
-  "FR",
-  "DE",
-  "GR",
-  "HU",
-  "IE",
-  "IT",
-  "LV",
-  "LT",
-  "LU",
-  "MT",
-  "NL",
-  "PL",
-  "PT",
-  "RO",
-  "SK",
-  "SI",
-  "ES",
-  "SE",
-  "IS",
-  "LI",
-  "NO",
-  "EEA"
-]);
-function classifyExposure(vendor, kb, context = {}) {
-  const known = vendor.processing.jurisdictions.map((j) => j.country.toUpperCase());
-  const euRegion = vendor.processing.euRegion;
-  const inputs = known.map((c3) => `jurisdiction:${c3}`);
-  const region = context.region ?? null;
-  const narrows = region !== null && declaresRegionNarrowing(vendor);
-  const countries = narrows ? [
-    region.country,
-    ...vendor.processing.jurisdictions.filter((j) => j.regionSelected !== true).map((j) => j.country.toUpperCase())
-  ] : known;
-  if (region) {
-    inputs.push(`region:${region.code}`, `regionCountry:${region.country}`, "regionSource:kb");
-    if (narrows) inputs.push(`narrowedTo:${[...new Set(countries)].sort().join(",")}`);
-    else inputs.push("narrowing:not-declared");
-  }
-  const unmapped = [...new Set(context.unmappedRegions ?? [])].sort();
-  if (unmapped.length > 0) {
-    inputs.push(...unmapped.map((code) => `region:${code}`), "regionSource:unmapped");
-  }
-  if (!region && unmapped.length === 0) inputs.push("regionSource:none");
-  const nonEea = countries.filter((c3) => !EEA_MEMBERS.has(c3));
-  inputs.push(`euRegion:${euRegion.available ? euRegion.scope ?? "unscoped" : "none"}`);
-  for (const mechanism of vendor.legal.transferMechanisms) {
-    inputs.push(`mechanism:${mechanism.mechanism}`);
-  }
-  if (nonEea.length === 0) {
-    return {
-      ruleId: "transfer/eu-processing",
-      exposure: flags({
-        thirdCountryTransfer: false,
-        euAlternativeAvailable: euRegion.available,
-        adequacyDependent: false,
-        additionalSafeguardsRequired: false,
-        level: "none",
-        inputs
-      })
-    };
-  }
-  const decisions = nonEea.map((country) => kb.decisionFor(country));
-  const allCovered = decisions.length > 0 && decisions.every((d2) => d2 !== null && covers(d2, vendor));
-  for (const [i2, decision] of decisions.entries()) {
-    inputs.push(`decision:${nonEea[i2]}:${decision ? decision.status : "none"}`);
-    if (decision?.mechanism === "DPF") {
-      inputs.push(`dpfCertified:${vendorIsDpfCertified(vendor)}`);
-    }
-  }
-  if (allCovered) {
-    return {
-      ruleId: "transfer/adequate-country-egress",
-      exposure: flags({
-        // Art 44: a transfer to an adequate country is still a third-country
-        // transfer. Art 45 supplies its legal basis; it does not undo the fact.
-        thirdCountryTransfer: true,
-        euAlternativeAvailable: euRegion.available,
-        // The whole premise of the tool: this is the population that changes
-        // if a decision is withdrawn.
-        adequacyDependent: true,
-        // Adequacy is the mechanism, so nothing under Art 46 is added.
-        additionalSafeguardsRequired: false,
-        level: "low",
-        inputs
-      })
-    };
-  }
-  const euAlternative = euRegion.available;
-  return {
-    ruleId: euAlternative ? "transfer/third-country-egress-eu-region-available" : "transfer/third-country-egress",
-    exposure: flags({
-      thirdCountryTransfer: true,
-      euAlternativeAvailable: euAlternative,
-      // Not `decisions.some(...)`: a decision merely existing for the country
-      // says nothing about this vendor. A US vendor relying on SCCs rather than
-      // DPF is unaffected by DPF being withdrawn, and reporting it as adequacy
-      // dependent puts it in the "what breaks if adequacy falls" list wrongly.
-      adequacyDependent: false,
-      additionalSafeguardsRequired: true,
-      // A documented EU alternative means the exposure is addressable by
-      // configuration, which is materially different from one that is not.
-      level: euAlternative ? "moderate" : "elevated",
-      inputs
-    })
-  };
-}
-function isInForce(decision) {
-  return decision.status === "in-force" || decision.status === "under-challenge";
-}
-function covers(decision, vendor) {
-  if (!isInForce(decision)) return false;
-  if (decision.mechanism === "DPF") return vendorIsDpfCertified(vendor);
-  return true;
-}
-function vendorIsDpfCertified(vendor) {
-  return vendor.legal.transferMechanisms.some(
-    (m2) => m2.mechanism === "DPF" && m2.dpfCertified === true && (m2.observedStatus === void 0 || dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0).certified)
-  );
-}
-function flags(input) {
-  return { ...input, rulesVersion: EXPOSURE_RULES_VERSION };
 }
 function displayName(finding) {
   return finding.vendor?.name ?? "Unrecognised destination";
@@ -18029,7 +18226,7 @@ function parseServerlessYaml(text, path) {
   ];
 }
 function mergeSignals(signals, options) {
-  const { kb, now } = options;
+  const { kb, now, overlay } = options;
   const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
   const groups = /* @__PURE__ */ new Map();
   for (const signal of signals) {
@@ -18046,15 +18243,23 @@ function mergeSignals(signals, options) {
   const findings = [];
   for (const group of groups.values()) {
     findings.push(
-      buildFinding(group.ruleId, group.vendor, group.signals, group.classified, group.region, kb)
+      buildFinding(
+        group.ruleId,
+        group.vendor,
+        group.signals,
+        group.classified,
+        group.region,
+        kb,
+        overlay
+      )
     );
   }
   findings.sort(
     (a2, b2) => severityOrder(b2) - severityOrder(a2) || confidenceOrder(b2) - confidenceOrder(a2) || (a2.vendor?.name ?? a2.ruleId).localeCompare(b2.vendor?.name ?? b2.ruleId)
   );
-  return withVerification(findings, kb, now, staleVendorIds);
+  return withVerification(findings, kb, now, staleVendorIds, overlay);
 }
-function withVerification(findings, kb, now, staleVendorIds) {
+function withVerification(findings, kb, now, staleVendorIds, overlay) {
   const noted = /* @__PURE__ */ new Set();
   return findings.flatMap((finding) => {
     const vendor = finding.vendor ? kb.byId.get(finding.vendor.id) : void 0;
@@ -18071,13 +18276,30 @@ function withVerification(findings, kb, now, staleVendorIds) {
       });
       return [{ ...finding, verification: [task] }];
     }
-    const tasks = kb.verifyTasks(vendor, now);
+    const tasks = [...kb.verifyTasks(vendor, now), ...expiredFactTasks(vendor, overlay)];
     if (!staleVendorIds.has(vendor.id)) {
       return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
     }
     if (noted.has(vendor.id)) return [finding];
     noted.add(vendor.id);
     return [finding, staleNote(finding, vendor, tasks)];
+  });
+}
+function expiredFactTasks(vendor, overlay) {
+  return (overlay?.expiredByVendor.get(vendor.id) ?? []).flatMap((item) => {
+    const kind = item.fact?.fact;
+    if (!kind) return [];
+    const dpf = vendor.legal.transferMechanisms.find((m2) => m2.mechanism === "DPF");
+    const url = kind === "dpf" ? dpf?.url ?? null : kind === "dpa" ? vendor.legal.dpa.url ?? null : vendor.legal.subprocessors?.url ?? null;
+    return [
+      verifyTask({
+        vendorId: vendor.id,
+        fact: kind,
+        reason: "overlay-expired",
+        current: { value: null, asOf: item.expiresOn ?? null, url },
+        where: url ? [url] : kind === "dpf" ? ["https://www.dataprivacyframework.gov/list"] : []
+      })
+    ];
   });
 }
 function staleNote(finding, vendor, tasks) {
@@ -18103,15 +18325,26 @@ function staleNote(finding, vendor, tasks) {
 function unmatchedRule(signal) {
   return signal.unresolvedReason ? "transfer/unresolved-egress" : "transfer/unknown-vendor-egress";
 }
-function buildFinding(ruleId, vendor, signals, classified, region, kb) {
+function buildFinding(ruleId, vendor, signals, classified, region, kb, overlay) {
   const evidence = signals.map((s2) => toEvidence(s2, vendor)).sort(byStrength);
   const confidence = strongest(signals.map((s2) => s2.confidence));
   const primary = evidence[0];
-  const transfer = vendor ? toTransferFacts(vendor) : null;
+  const applied = vendor ? overlay?.byVendor.get(vendor.id) ?? [] : [];
+  const local = vendor !== null && overlay?.localIds.has(vendor.id) === true;
+  const transfer = vendor ? { ...toTransferFacts(vendor), ...applied.length > 0 ? { repositoryFacts: applied } : {} } : null;
   const unmappedRegions = signals.flatMap(
     (s2) => s2.region !== void 0 && isUnmappedRegion(vendor, s2.region) ? [s2.region] : []
   );
-  const exposure = vendor && unmappedRegions.length > 0 ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure : classified?.exposure ?? null;
+  const computed = vendor && unmappedRegions.length > 0 ? classifyExposure(vendor, kb, { region, unmappedRegions }).exposure : classified?.exposure ?? null;
+  const factInputs = [
+    ...local ? ["factSource:local"] : [],
+    ...[...new Set(applied.filter((a2) => a2.fact !== "local-entry").map((a2) => a2.fact))].map(
+      (fact) => `factSource:${fact}:overlay`
+    )
+  ];
+  const exposure = computed && factInputs.length > 0 ? { ...computed, inputs: [...computed.inputs, ...factInputs] } : computed;
+  const shippedVendor = vendor && applied.some((a2) => a2.fact !== "local-entry") ? overlay?.baseline.byId.get(vendor.id) : void 0;
+  const baselineRule = shippedVendor ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId : void 0;
   return {
     id: fingerprint(
       vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ""}`,
@@ -18120,7 +18353,12 @@ function buildFinding(ruleId, vendor, signals, classified, region, kb) {
       exposure?.inputs.some((i2) => i2.startsWith("narrowedTo:")) ? region?.country ?? null : null
     ),
     ruleId,
-    vendor: vendor ? { id: vendor.id, name: vendor.name, category: vendor.category } : null,
+    vendor: vendor ? {
+      id: vendor.id,
+      name: vendor.name,
+      category: vendor.category,
+      ...local ? { origin: "local" } : {}
+    } : null,
     transfer,
     exposure,
     severity: RULES[ruleId].defaultLevel,
@@ -18129,7 +18367,8 @@ function buildFinding(ruleId, vendor, signals, classified, region, kb) {
     evidence,
     remediation: buildRemediation(ruleId, vendor),
     suppressed: false,
-    suppression: null
+    suppression: null,
+    ...baselineRule !== void 0 && baselineRule !== ruleId ? { baselineRuleId: baselineRule } : {}
   };
 }
 function toEvidence(signal, vendor) {
@@ -18226,10 +18465,14 @@ function scan(options) {
   const includeTransitive = options.includeTransitive ?? config.includeTransitive === true;
   const startedAt = now;
   const started = Date.now();
-  const kb = options.kb ?? loadKnowledgeBase({
+  const shipped = options.kb ?? loadKnowledgeBase({
     ...options.kbPath ? { kbPath: options.kbPath } : {},
     ...options.assumeAdequacyLapsed ? { assumeAdequacyLapsed: options.assumeAdequacyLapsed } : {}
   });
+  const overlay = options.facts ? applyOverlay(shipped, checkFacts(options.facts, shipped, now), {
+    trustFacts: options.trustFacts === true
+  }) : null;
+  const kb = overlay?.kb ?? shipped;
   const errors = [];
   const signals = [];
   const unmatchedPackages = /* @__PURE__ */ new Set();
@@ -18360,11 +18603,19 @@ function scan(options) {
     }
   }
   const engine = includeCallsites ? { callsite: degraded ? "unavailable" : "oxc", degraded } : { callsite: "disabled", degraded: false };
+  if (overlay) {
+    for (const signal of signals) {
+      if (signal.vendorId && overlay.localIds.has(signal.vendorId) && signal.confidence === "high") {
+        signal.confidence = "medium";
+      }
+    }
+  }
   const filtered = signals.filter((signal) => {
     if (onlyVendor && (!signal.vendorId || !onlyVendor.includes(signal.vendorId))) return false;
     return meetsConfidence(signal.confidence, minConfidence);
   });
-  const merged = mergeSignals(filtered, { kb, now });
+  const merged = mergeSignals(filtered, { kb, now, ...overlay ? { overlay } : {} });
+  const reclassified = merged.filter((f3) => f3.baselineRuleId !== void 0).length;
   const narrowedBy = [
     ...onlyVendor ? ["only some vendors were scanned"] : [],
     ...minConfidence !== "low" ? [`findings below ${minConfidence} confidence were dropped`] : [],
@@ -18375,6 +18626,8 @@ function scan(options) {
     ...options.exclude?.length ? ["the caller excluded paths"] : [],
     // A what-if run rewrites rule ids, so a rule suppression can stop matching.
     ...options.assumeAdequacyLapsed?.length ? ["adequacy decisions were assumed withdrawn"] : [],
+    // A fact that changes a rule changes a finding's id, as an assumed lapse does.
+    ...reclassified > 0 ? [`repository facts changed ${reclassified} classification${reclassified === 1 ? "" : "s"}`] : [],
     // The config asked for transitive dependencies and the caller turned them off.
     ...!includeTransitive && config.includeTransitive === true ? ["transitive dependencies were left out"] : [],
     ...!includeCallsites ? ["call sites were not analysed"] : degraded ? ["call sites could not be analysed"] : []
@@ -18389,11 +18642,12 @@ function scan(options) {
     disclaimer: DISCLAIMER,
     tool: { name: "egressa", version: toolVersion },
     kb: {
-      version: kb.version,
-      entryCount: kb.vendors.length,
+      // The shipped knowledge base: local entries are counted under `facts`.
+      version: shipped.version,
+      entryCount: shipped.vendors.length,
       license: "CC-BY-4.0",
-      adequacyStatusAsOf: kb.adequacy.asOf,
-      staleEntryCount: kb.staleEntries(now).length
+      adequacyStatusAsOf: shipped.adequacy.asOf,
+      staleEntryCount: shipped.staleEntries(now).length
     },
     scan: {
       root,
@@ -18415,7 +18669,27 @@ function scan(options) {
       hosts: [...unmatchedHosts].sort(),
       packages: [...unmatchedPackages].sort()
     },
-    errors
+    errors,
+    ...overlay ? { facts: factsSummary(overlay, findings) } : {}
+  };
+}
+function factsSummary(overlay, findings) {
+  const count = (state) => overlay.items.filter((i2) => i2.state === state).length;
+  const active = findings.filter((f3) => !f3.suppressed);
+  return {
+    source: overlay.source,
+    trusted: overlay.trusted,
+    applied: count("applied"),
+    redundant: count("redundant"),
+    notTrusted: count("loosening-not-trusted"),
+    superseded: count("superseded"),
+    expired: count("expired"),
+    rejected: count("rejected"),
+    localVendors: overlay.localIds.size,
+    findingsDependingOnFacts: active.filter((f3) => (f3.transfer?.repositoryFacts?.length ?? 0) > 0).length,
+    loosened: active.filter(
+      (f3) => f3.baselineRuleId !== void 0 && (f3.transfer?.repositoryFacts ?? []).some((r3) => r3.effect === "loosens")
+    ).length
   };
 }
 var ORDER2 = { low: 0, medium: 1, high: 2 };
@@ -18518,7 +18792,12 @@ var factsCommand = defineCommand({
     action: { type: "positional", required: false, default: "check", description: "check" },
     root: { type: "positional", required: false, default: ".", description: "Repository root" },
     kb: { type: "string", description: "Path to a knowledge base directory" },
-    json: { type: "boolean", default: false }
+    json: { type: "boolean", default: false },
+    "trust-facts": {
+      type: "boolean",
+      default: false,
+      description: "Show the states a scan with --trust-facts would apply"
+    }
   },
   async run({ args }) {
     const action = String(args.action);
@@ -18539,30 +18818,46 @@ var factsCommand = defineCommand({
     let checked;
     try {
       const parsed = loadFacts(String(args.root));
-      checked = parsed ? checkFacts(parsed, kb, /* @__PURE__ */ new Date()) : null;
+      checked = parsed ? applyOverlay(kb, checkFacts(parsed, kb, /* @__PURE__ */ new Date()), {
+        trustFacts: args["trust-facts"] === true
+      }) : null;
     } catch (error) {
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}
 `);
       process.exit(EXIT.USAGE);
     }
-    const text = args.json ? `${JSON.stringify(checked ?? { source: null, items: [] }, null, 2)}
+    const text = args.json ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicItem) } : { source: null, items: [] }, null, 2)}
 ` : formatCheck(checked);
     const rejected = checked?.items.some((i2) => i2.state === "rejected") ?? false;
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
   }
 });
+function publicItem(item) {
+  const { local: _local, ...rest } = item;
+  return rest;
+}
+var STATES = [
+  "applied",
+  "redundant",
+  "loosening-not-trusted",
+  "superseded",
+  "expired",
+  "rejected"
+];
 function formatCheck(checked) {
   if (!checked) return "No .egressa/facts.json in this repository.\n";
   if (checked.items.length === 0) return `${checked.source}: no facts.
 `;
   const lines = checked.items.map((item) => {
-    const what = item.kind ?? "";
-    const detail = item.state === "rejected" ? item.reason ?? "" : item.state === "expired" ? `expired ${item.expiresOn}; the knowledge base's own fact applies` : `until ${item.expiresOn}`;
-    return `  ${item.at.padEnd(16)} ${(item.vendor ?? "-").padEnd(20)} ${what.padEnd(14)} ${item.state.padEnd(9)} ${detail}`;
+    const detail = item.state === "rejected" || item.state === "superseded" ? item.reason ?? "" : item.state === "expired" ? `expired ${item.expiresOn}; the knowledge base's own fact applies` : item.state === "redundant" ? "says what the knowledge base says; can be deleted" : item.state === "loosening-not-trusted" ? "would loosen a finding; applied only with --trust-facts" : `${item.effect ?? "neutral"}, until ${item.expiresOn}`;
+    return `  ${item.at.padEnd(16)} ${(item.vendor ?? "-").padEnd(20)} ${(item.kind ?? "").padEnd(14)} ${item.state.padEnd(22)} ${detail}`;
   });
-  const count = (state) => checked.items.filter((i2) => i2.state === state).length;
-  return `${checked.source}: ${count("current")} current, ${count("expired")} expired, ${count("rejected")} rejected
+  const counts = STATES.map((state) => {
+    const n2 = checked.items.filter((i2) => i2.state === state).length;
+    return n2 > 0 ? `${n2} ${state}` : null;
+  }).filter((x2) => x2 !== null);
+  return `${checked.source}: ${counts.join(", ")}
 ${lines.join("\n")}
 `;
 }
@@ -18856,6 +19151,11 @@ var scanCommand = defineCommand({
     },
     kb: { type: "string", description: "Path to a knowledge base directory" },
     config: { type: "string", description: "Path to .egressa.yml" },
+    "trust-facts": {
+      type: "boolean",
+      default: false,
+      description: "Apply facts in .egressa/facts.json that would loosen a finding. Only for a repository you own"
+    },
     exclude: {
       type: "string",
       description: "Glob to skip during discovery (repeatable: --exclude a/** --exclude b/**). Adds to, not replacing, any exclude: in .egressa.yml; .egressaignore and .gitignore are honoured too."
@@ -18884,6 +19184,15 @@ var scanCommand = defineCommand({
 `);
       process.exit(EXIT.USAGE);
     }
+    let facts;
+    try {
+      facts = loadFacts(root);
+    } catch (error) {
+      if (!(error instanceof FactsError)) throw error;
+      process.stderr.write(`egressa: ${error.message}
+`);
+      process.exit(EXIT.USAGE);
+    }
     const exclude = toStringArray(args.exclude);
     const excludeError = excludeProblem(exclude);
     if (excludeError) {
@@ -18900,6 +19209,8 @@ var scanCommand = defineCommand({
         toolVersion: TOOL_VERSION,
         ...args.kb ? { kbPath: String(args.kb) } : {},
         config,
+        facts,
+        trustFacts: args["trust-facts"] === true,
         ...exclude.length > 0 ? { exclude } : {},
         // Only when typed, either way: an untyped flag would otherwise override
         // what the config says, and MCP's `includeTransitive: false` already can.
