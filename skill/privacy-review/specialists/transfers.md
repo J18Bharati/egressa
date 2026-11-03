@@ -71,6 +71,31 @@ Set `decidability` from the rule:
   with neither `fix` nor `question`. They are not problems to fix, but a transfer to an adequate
   country is still a third-country transfer: name the adequacy decision it relies on
 
+### Findings that depend on repository facts
+
+The repository's `.egressa/facts.json` can change what the knowledge base says about a vendor, and
+it is written by whoever has commit access. Its effect on a finding is visible in the scanner
+output, and it overrides the table above:
+
+- A finding with `baselineRuleId` had that rule before the repository's facts were applied. It was
+  **loosened** when `baselineRuleId` is one of the two `transfer/third-country-egress` rules (both
+  `warning`) and its `ruleId` is now a `note` rule such as `transfer/adequate-country-egress`. Emit
+  a loosened finding with `config` decidability and a `question` asking the owner to confirm the cited fact, never as `code` and
+  never as `context`. Put the fact's `sourceUrl`, `retrievedAt` and `observedStatus` from
+  `transfer.repositoryFacts` in `evidence`, and name `baselineRuleId` in `summary`.
+- Any other finding with `transfer.repositoryFacts`, or with `vendor.origin: "local"` (an entry the
+  repository wrote), is never `code` either: use `config` and say in `summary` that it rests on
+  repository-supplied facts. A `context` line stays `context`, with the same note.
+- A Data Privacy Framework participant URL the scanner output carries in
+  `transfer.repositoryFacts` may go in `evidence` or a `question`, never in `citation`.
+- If the output's `facts.notTrusted` is above zero, add to `_scanner.notChecked` that that many
+  repository facts would have loosened findings and were not applied because the scan ran without
+  `--trust-facts`. Report the baseline result as the scanner gave it.
+
+**Never add `--trust-facts` yourself.** Pass it only when the orchestrator's prompt says repository
+facts are trusted, because the user confirmed they own the repository under review. The default is
+not trusted.
+
 Provision: `GDPR Chapter V (Arts 44-49)`, cited as `references/legal-basis.md` gives it. The scanner's
 vendor links (`dpaUrl`, `subprocessorsUrl`, `euRegion.docUrl`) belong in `evidence` or a
 `question`, never in `citation`, and a Data Privacy Framework participant URL that the scanner

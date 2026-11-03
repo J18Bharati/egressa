@@ -37,6 +37,11 @@ fail — do not fall back to it by hand.
 No configuration, no API key. Add `--assume-adequacy-lapsed US:DPF` to model the Data Privacy
 Framework being struck down.
 
+**Add `--trust-facts` only when the user confirms they own the repository being scanned.** It lets
+the repository's `.egressa/facts.json` loosen a finding; without it such a fact is reported as
+`loosening-not-trusted` and the knowledge base's answer stands. Anyone with commit access can write
+that file, so for a supplier's repository or an outside pull request, never pass it.
+
 The scan ran only if the script exits 0 or 1 and prints the findings document; 1 means the
 repository's own `failOn` tripped. Any other status means **the scan did not run**: 2 is a usage
 error, often an `.egressa.yml` the scanner refuses, 3 is no binary or an internal error, and 4 is a
@@ -93,6 +98,19 @@ Work through the findings in this order:
    itself is unknown, and the answer lives in the user's deployment configuration rather than on
    the web. Ask; do not search.
 
+6. **Read repository facts before trusting a finding's classification.** When the document has a
+   top-level `facts` block, the repository's `.egressa/facts.json` changed what the knowledge base
+   says. A finding with `transfer.repositoryFacts` depends on it, one with `vendor.origin: "local"`
+   comes from an entry the repository wrote, and one with `baselineRuleId` had that rule without
+   the file. Report each of these as repository-supplied, with the fact's source URL and date, and
+   say which way the rule moved. `facts.notTrusted` counts facts that would have loosened a finding
+   and were not applied, because the scan was not run with `--trust-facts`.
+
+7. **Work the verification tasks.** `verification[]` on a finding (or the MCP tool
+   `verification_tasks`) lists legal facts to re-check and where. Offer to check them and record
+   the answers per `references/verifying-facts.md`; never from memory, and only with the user's
+   consent before writing anything.
+
 See `references/interpreting-findings.md` for the full triage procedure and
 `references/rules.md` for what each rule id means.
 
@@ -121,9 +139,10 @@ reason naming what was checked and by whom; "not applicable" helps nobody in six
 ## Growing the knowledge base
 
 If `unmatched.hosts` or `unmatched.packages` is non-empty, research it per
-`references/researching-an-unknown-vendor.md`, then offer to file a vendor request carrying the
-sources you found rather than just the host name. The project has no telemetry, so this loop is the
-only way coverage improves.
+`references/researching-an-unknown-vendor.md`. With the user's consent the result can become a
+local entry in the repository's `.egressa/facts.json`, and `egressa facts contribute` turns it into
+an offline draft for the project that the user may submit as an issue or pull request. The project
+has no telemetry, so this loop is the only way coverage improves.
 
 Research answers the current question; it does not become knowledge base data. Entries in `kb/` are
 clean-room authored and reviewed under `kb/PROVENANCE.md` and `kb/KB_POLICY.md`, and live findings

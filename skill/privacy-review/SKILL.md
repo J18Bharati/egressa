@@ -162,6 +162,10 @@ Each specialist prompt contains, in this order:
 5. The scope lines from Step 1, verbatim, and the stack from `STACK`.
 5a. The absolute `SKILL_DIR`, stated as such, so a specialist that runs a script runs this copy of it
    and not one the reviewed repository supplies.
+5b. For the transfers specialist only, whether repository facts are trusted. **The default is not
+   trusted**, and the specialist then never passes `--trust-facts`. Say "trusted" only when the
+   user has confirmed, in this conversation, that they own the repository under review: its
+   `.egressa/facts.json` can loosen a transfer finding, and anyone with commit access can write it.
 6. The file list under review, exactly as `bash "$SCOPE" <same mode flags> --list` prints it, so
    the specialist reads the same set the gates did. Never have a specialist run `git` in the
    reviewed repository to build its own list: the repository's own `.git/config` can make git run

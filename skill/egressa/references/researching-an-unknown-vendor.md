@@ -4,8 +4,9 @@ The knowledge base is a curated seed set, not a census. A real repository will r
 has no entry for, and the scanner reports those as `transfer/unknown-vendor-egress` or leaves them
 in the `unmatched` block. That is honest, and it is also unhelpful on its own.
 
-This procedure turns "no entry" into a sourced answer for the current conversation. It does not
-turn it into a knowledge base entry — see [What this is not](#what-this-is-not).
+This procedure turns "no entry" into a sourced answer for the current conversation, and, if the
+user wants, a local entry in the repository's facts file. It does not turn it into a knowledge base
+entry — see [What this is not](#what-this-is-not).
 
 ## When this applies, and when it does not
 
@@ -79,18 +80,43 @@ conclusion further than the facts reach — this procedure establishes where a v
 processes data, which is a smaller claim than what follows from that, and the smaller claim is the
 one to write down.
 
+## Recording it for this repository
+
+When the research is solid and the user wants later scans to know the vendor, offer to draft a
+**local vendor entry** in the repository's `.egressa/facts.json`, under `localVendors`. It is a full
+entry in the knowledge base's own format (`egressa schema vendor`), with every fact sourced as
+above, plus `retrievedAt` (the day you read the pages) and `verifiedBy` (ask the user what to put).
+It expires 30 days after retrieval at the latest, like every repository fact.
+
+Show the draft and write the file only after the user agrees. Then run `egressa facts check <repo>`
+and report its state. The scanner treats a local entry with less weight than a shipped one, on
+purpose:
+
+- its findings are capped at `medium` confidence and marked as coming from the repository on every
+  surface;
+- it can never claim Data Privacy Framework certification for itself; only a separate `dpf` fact
+  with a participant record can;
+- an id, host or package the shipped knowledge base already has is refused, and once a shipped
+  entry covers the vendor the local one is reported `superseded`.
+
+`references/verifying-facts.md` covers the file, consent and the trust rules in full.
+
 ## Offering the entry back
 
-When the research produced something solid, offer to file a vendor request using
-`.github/ISSUE_TEMPLATE/vendor-request.yml`, with the sources you gathered already filled in. Draft
-it; do not file it without being asked.
+When the entry is in place, offer the user `egressa facts contribute <vendorId> --root <repo>`. It
+prints an offline draft of `kb/vendors/<id>.json` with a checklist and an issue or pull request
+body, and it contains nothing from the repository's code. Show it to the user; submitting it is
+their action, as an issue (`.github/ISSUE_TEMPLATE/vendor-request.yml`) or a pull request on the
+project. Draft it; never file it yourself.
 
 The project has no telemetry, so this loop is the only route by which coverage improves. A request
 carrying four verified URLs is worth considerably more than one carrying a host name.
 
 ## What this is not
 
-This does not write to `kb/`, and you must not offer to.
+This does not write to `kb/`, and you must not offer to. A local entry lives in the repository's
+`.egressa/facts.json`, labelled as the repository's own; the shared knowledge base changes only
+through its own review.
 
 Entries there are clean-room authored under `kb/PROVENANCE.md`, reviewed under `kb/KB_POLICY.md`,
 carry a `lastVerified` date and a staleness rule, and are licensed CC-BY-4.0 for other tools to
