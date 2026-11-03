@@ -1,8 +1,8 @@
 {
   "name": "@egressa/kb",
   "version": "0.2.0",
-  "description": "Loads and indexes the Egressa vendor knowledge base. Code Apache-2.0; bundled data CC-BY-4.0.",
-  "license": "Apache-2.0",
+  "description": "Loads and indexes the Egressa vendor knowledge base. Code MIT; bundled data CC-BY-4.0.",
+  "license": "MIT AND CC-BY-4.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/J18Bharati/egressa.git",

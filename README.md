@@ -254,7 +254,7 @@ None of these produces a score or a grade.
 
 ## Licensing and corrections
 
-Code is Apache-2.0. The vendor knowledge base in [`kb/`](kb/) is licensed separately under
+Code is MIT-licensed. The vendor knowledge base in [`kb/`](kb/) is licensed separately under
 CC-BY-4.0, so anyone, including competing tools, can build on it. It is authored from vendor and
 regulator primary sources; see [kb/PROVENANCE.md](kb/PROVENANCE.md). Vendor names are used
 nominatively; see [TRADEMARKS.md](TRADEMARKS.md).

@@ -42,4 +42,4 @@ throws a `ConfigError` for a file it cannot honour.
 Call-site analysis needs the native `oxc-parser` binding. When it cannot load, `scan()` still runs
 on manifests and sets `scan.engine.degraded: true` in the result.
 
-Versions below 1.0 make no promise of API stability. Apache-2.0.
+Versions below 1.0 make no promise of API stability. MIT.

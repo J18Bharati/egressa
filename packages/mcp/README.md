@@ -35,4 +35,4 @@ There is also a `transfer-review` prompt. `scan_repository` applies the reposito
 the same way the CLI does, and returns the scan's errors rather than an empty summary when a path
 does not exist. Details: [docs/mcp.md](https://github.com/J18Bharati/egressa/blob/main/docs/mcp.md).
 
-Code is Apache-2.0. The bundled knowledge base in `kb/` is CC-BY-4.0.
+Code is MIT-licensed. The bundled knowledge base in `kb/` is CC-BY-4.0.

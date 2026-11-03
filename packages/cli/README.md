@@ -53,4 +53,4 @@ finding means the code references a vendor, not that personal data was sent. See
 
 ## Licence
 
-Code is Apache-2.0. The bundled knowledge base in `kb/` is CC-BY-4.0.
+Code is MIT-licensed. The bundled knowledge base in `kb/` is CC-BY-4.0.

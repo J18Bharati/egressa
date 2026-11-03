@@ -37,6 +37,6 @@ computed by `@egressa/core`, not stored here. To correct an entry, see
 
 ## Licence
 
-The loader code is Apache-2.0. The data in `kb/` is CC-BY-4.0, which requires attribution when you
+The loader code is MIT-licensed. The data in `kb/` is CC-BY-4.0, which requires attribution when you
 reuse it; see `kb/LICENSE` and
 [PROVENANCE.md](https://github.com/J18Bharati/egressa/blob/main/kb/PROVENANCE.md).

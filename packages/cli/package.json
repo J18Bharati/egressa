@@ -2,7 +2,7 @@
   "name": "egressa",
   "version": "0.2.0",
   "description": "Detects third-party data-egress patterns in source code and their cross-border transfer exposure.",
-  "license": "Apache-2.0",
+  "license": "MIT AND CC-BY-4.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/J18Bharati/egressa.git",

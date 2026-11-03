@@ -10,7 +10,7 @@
       "description": "Privacy review skills: transfer exposure, consent gating, retention, personal data in logs, session replay, opt-out signals.",
       "category": "code-review",
       "keywords": ["gdpr", "privacy", "consent", "data-transfer"],
-      "license": "Apache-2.0"
+      "license": "MIT AND CC-BY-4.0"
     }
   ]
 }

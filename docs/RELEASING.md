@@ -47,7 +47,7 @@ later locally, 2FA on your npm account.
    ```bash
    for n in egressa @egressa/core @egressa/kb @egressa/mcp; do
      d=$(mktemp -d) && (cd "$d" && npm init -y >/dev/null \
-       && npm pkg set name="$n" version=0.0.1 license=Apache-2.0 \
+       && npm pkg set name="$n" version=0.0.1 license=MIT \
             description="Placeholder. Releases are published from GitHub Actions." \
        && npm publish --access public --tag bootstrap)
    done

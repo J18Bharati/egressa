@@ -1,11 +1,11 @@
 /**
  * Copies the knowledge base and the licence files into each publishable package.
  *
- * The data is CC-BY-4.0 while the code is Apache-2.0, so both live at the repo
+ * The data is CC-BY-4.0 while the code is MIT, so both live at the repo
  * root as the single source of truth and are copied in rather than duplicated in
  * git. Each tarball must carry what governs it:
  *
- *   - LICENSE and NOTICE (Apache-2.0, section 4) in every package;
+ *   - LICENSE (MIT requires it with every copy) and NOTICE (the code/data split) in every package;
  *   - kb/ with its own kb/LICENSE (CC-BY-4.0) in every package that ships data.
  *
  * Two entry points, one script:

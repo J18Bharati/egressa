@@ -1,6 +1,7 @@
 {
   "name": "egressa-workspace",
   "private": true,
+  "license": "MIT AND CC-BY-4.0",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "engines": {

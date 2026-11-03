@@ -2,7 +2,7 @@
   "name": "@egressa/mcp",
   "version": "0.2.0",
   "description": "MCP server exposing Egressa transfer-exposure scanning and vendor lookups.",
-  "license": "Apache-2.0",
+  "license": "MIT AND CC-BY-4.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/J18Bharati/egressa.git",

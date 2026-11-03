@@ -396,7 +396,7 @@ else here and `jq` is not guaranteed.
 
 ## Knowledge base
 
-`kb/` is CC-BY-4.0 with its own LICENSE, deliberately separable from the Apache-2.0 code. Entries
+`kb/` is CC-BY-4.0 with its own LICENSE, deliberately separable from the MIT-licensed code. Entries
 state facts and cite them; nothing evaluative belongs in the data layer.
 
 **A package alias may be a namespace, and an ambiguous one is refused.** An alias ending `/*` —
