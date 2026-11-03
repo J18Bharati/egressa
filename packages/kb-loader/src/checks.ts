@@ -90,6 +90,9 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
   // its observed status means, so the shipped data and a repository-supplied
   // fact can never read the same status two ways.
   for (const m of entry.legal.transferMechanisms) {
+    if (m.mechanism !== 'DPF' && m.certificationEndDate !== undefined) {
+      add(issue`${m.mechanism} record: certificationEndDate applies only to a DPF record`);
+    }
     if (m.mechanism !== 'DPF' || m.observedStatus === undefined) continue;
     const verdict = dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined);
     if (verdict.certified !== (m.dpfCertified === true)) {

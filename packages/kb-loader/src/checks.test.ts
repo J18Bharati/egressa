@@ -72,6 +72,20 @@ describe('entryIssues', () => {
     expect(messages(entryIssues(draft(edit))).some((m) => pattern.test(m))).toBe(true);
   });
 
+  it('refuses a certification end date on anything but a DPF record', () => {
+    const e = draft((d) => {
+      d.legal.transferMechanisms = [{ mechanism: 'SCC', certificationEndDate: '2027-01-01' }];
+    });
+    expect(messages(entryIssues(e))).toContain(
+      'SCC record: certificationEndDate applies only to a DPF record',
+    );
+    const dpf = draft((d) => {
+      const m = d.legal.transferMechanisms.find((r) => r.mechanism === 'DPF');
+      if (m) m.certificationEndDate = '2027-01-01';
+    });
+    expect(entryIssues(dpf)).toEqual([]);
+  });
+
   it('refuses a DPF record whose dpfCertified disagrees with its observed status', () => {
     const auth0 = structuredClone(read('auth0'));
     const record = auth0.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');

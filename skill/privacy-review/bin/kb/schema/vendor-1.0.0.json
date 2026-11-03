@@ -266,6 +266,10 @@
                 "maxLength": 100,
                 "description": "The participant's public status exactly as the Data Privacy Framework list showed it on lastChecked, e.g. 'Active' or 'Active - Re-certification under Review'. dpfCertified must agree with it under the engine's closed status table."
               },
+              "certificationEndDate": {
+                "$ref": "#/$defs/isoDate",
+                "description": "The certification end date the participant record showed on lastChecked, copied from the record and never estimated. DPF records only. A record is due for re-checking from 30 days before this date."
+              },
               "acceptQualifiedStatus": {
                 "type": "object",
                 "additionalProperties": false,

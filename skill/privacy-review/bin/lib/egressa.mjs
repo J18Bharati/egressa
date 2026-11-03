@@ -13134,6 +13134,9 @@ function dpfStatusVerdict(observedStatus, accepted) {
   return { certified: false, kind: "unrecognised" };
 }
 var STALE_AFTER_DAYS = 180;
+var DPF_RECHECK_DAYS = 90;
+var DPF_END_DATE_LEAD_DAYS = 30;
+var DPF_QUALIFIED_RECHECK_DAYS = 30;
 function verifyTask(task) {
   const key = [
     task.vendorId ?? "",
@@ -13149,7 +13152,7 @@ function vendorTasks(entry, context) {
   const vendorId = entry.id;
   const dpfRecords = entry.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
   for (const m2 of dpfRecords) {
-    const reason = dpfRecordReason(m2) ?? (context.stale && !recent(m2.lastChecked, context) ? "stale-entry" : null);
+    const reason = dpfRecordReason(m2, context.asOf);
     if (reason === null) continue;
     tasks.push(
       verifyTask({
@@ -13213,19 +13216,33 @@ function vendorTasks(entry, context) {
   }
   return tasks;
 }
+var DAY = 864e5;
 function recent(lastChecked, context) {
-  if (lastChecked === void 0) return false;
-  return Date.parse(lastChecked) >= context.asOf.getTime() - STALE_AFTER_DAYS * 864e5;
+  return within(lastChecked, context.asOf, STALE_AFTER_DAYS);
 }
-function dpfRecordReason(m2) {
+function within(lastChecked, asOf, days) {
+  if (lastChecked === void 0) return false;
+  return Date.parse(lastChecked) >= asOf.getTime() - days * DAY;
+}
+function dpfRecordReason(m2, asOf) {
   if (m2.observedStatus === void 0) {
-    return m2.dpfCertified === true ? "dpf-status-unobserved" : null;
+    if (m2.dpfCertified === true) return "dpf-status-unobserved";
+  } else {
+    const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
+    if (verdict.kind === "unrecognised") return "dpf-status-unrecognised";
+    if (verdict.kind === "qualified") {
+      if (m2.acceptQualifiedStatus === void 0) return "dpf-status-qualified";
+      if (!within(m2.lastChecked, asOf, DPF_QUALIFIED_RECHECK_DAYS)) return "dpf-status-qualified";
+    }
   }
-  const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
-  if (verdict.kind === "unrecognised") return "dpf-status-unrecognised";
-  if (verdict.kind === "qualified" && m2.acceptQualifiedStatus === void 0) {
-    return "dpf-status-qualified";
+  if (m2.certificationEndDate !== void 0) {
+    const end = Date.parse(m2.certificationEndDate);
+    const readSinceEnd = m2.lastChecked !== void 0 && Date.parse(m2.lastChecked) >= end;
+    if (asOf.getTime() >= end - DPF_END_DATE_LEAD_DAYS * DAY && !readSinceEnd) {
+      return "dpf-end-date";
+    }
   }
+  if (!within(m2.lastChecked, asOf, DPF_RECHECK_DAYS)) return "dpf-recheck-due";
   return null;
 }
 var KnowledgeBaseError = class extends Error {
@@ -13521,6 +13538,9 @@ function entryIssues(entry) {
     }
   }
   for (const m2 of entry.legal.transferMechanisms) {
+    if (m2.mechanism !== "DPF" && m2.certificationEndDate !== void 0) {
+      add(issue`${m2.mechanism} record: certificationEndDate applies only to a DPF record`);
+    }
     if (m2.mechanism !== "DPF" || m2.observedStatus === void 0) continue;
     const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
     if (verdict.certified !== (m2.dpfCertified === true)) {
@@ -15385,7 +15405,7 @@ function parseFacts(text, label) {
   }
   return { source: label, items };
 }
-var DAY = 864e5;
+var DAY2 = 864e5;
 function shippedClaim(entry, kb) {
   const owner = (id, field) => id ? `${field} is already resolved by the knowledge base vendor "${id}"` : void 0;
   for (const [i2, host] of entry.aliases.hosts.entries()) {
@@ -15495,7 +15515,7 @@ function timingProblem(retrievedAt, expires, now) {
   if (read > now.getTime() + MAX_ZONE_AHEAD_MS) {
     return { reason: "retrievedAt is in the future", expired: false, expiresOn: "" };
   }
-  const cap = read + MAX_FACT_AGE_DAYS * DAY;
+  const cap = read + MAX_FACT_AGE_DAYS * DAY2;
   let end = cap;
   if (expires !== void 0) {
     const stated = expiryInstant(expires);
@@ -20273,6 +20293,10 @@ var vendor_1_0_0_default = {
                 maxLength: 100,
                 description: "The participant's public status exactly as the Data Privacy Framework list showed it on lastChecked, e.g. 'Active' or 'Active - Re-certification under Review'. dpfCertified must agree with it under the engine's closed status table."
               },
+              certificationEndDate: {
+                $ref: "#/$defs/isoDate",
+                description: "The certification end date the participant record showed on lastChecked, copied from the record and never estimated. DPF records only. A record is due for re-checking from 30 days before this date."
+              },
               acceptQualifiedStatus: {
                 type: "object",
                 additionalProperties: false,
@@ -21299,6 +21323,8 @@ var findings_1_1_0_default = {
             "dpf-status-unobserved",
             "dpf-status-qualified",
             "dpf-status-unrecognised",
+            "dpf-end-date",
+            "dpf-recheck-due",
             "unknown-vendor",
             "overlay-expired"
           ]

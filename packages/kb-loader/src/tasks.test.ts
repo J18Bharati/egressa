@@ -7,7 +7,12 @@ import {
   knowledgeBaseTasks,
   loadKnowledgeBase,
 } from './index.js';
-import { vendorTasks } from './tasks.js';
+import {
+  DPF_END_DATE_LEAD_DAYS,
+  DPF_QUALIFIED_RECHECK_DAYS,
+  DPF_RECHECK_DAYS,
+  vendorTasks,
+} from './tasks.js';
 
 const kb = loadKnowledgeBase({ kbPath: 'kb' });
 const entry = (id: string): VendorEntry => {
@@ -88,8 +93,10 @@ describe('verify tasks', () => {
   });
 
   it('lists every legal fact of a stale entry, each under its most specific reason', () => {
+    // The DPF record runs on its own, shorter clock, so by the time the entry
+    // is stale its DPF record has long been due.
     expect(reasons('clerk', staleDay(entry('clerk')))).toEqual([
-      'dpf:stale-entry',
+      'dpf:dpf-recheck-due',
       'dpa:stale-entry',
       'subprocessors:stale-entry',
     ]);
@@ -106,6 +113,7 @@ describe('verify tasks', () => {
     const accepted = withDpf('clerk', (m) => {
       m.observedStatus = 'Active - Re-certification under Review';
       m.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
+      m.lastChecked = '2026-11-03';
     });
     expect(vendorTasks(accepted, fresh)).toEqual([]);
   });
@@ -139,6 +147,95 @@ describe('verify tasks', () => {
         }
       }
     }
+  });
+});
+
+describe('the DPF re-verification cadence', () => {
+  const READ = '2026-11-03';
+  const day = (iso: string, offset: number) => new Date(Date.parse(iso) + offset * 86_400_000);
+  /** Clerk with one Active DPF record read on READ, then edited. */
+  const record = (
+    edit: (m: VendorEntry['legal']['transferMechanisms'][number]) => void = () => {},
+  ) =>
+    withDpf('clerk', (m) => {
+      m.observedStatus = 'Active';
+      m.dpfCertified = true;
+      m.lastChecked = READ;
+      m.acceptQualifiedStatus = undefined;
+      m.certificationEndDate = undefined;
+      edit(m);
+    });
+  /** Reasons on `asOf` for a fresh entry, so only the DPF clock is in play. */
+  const due = (e: VendorEntry, asOf: Date) =>
+    vendorTasks(e, { asOf, stale: false, dpfJurisdiction: true }).map((t) => t.reason);
+
+  it(`re-reads a record ${DPF_RECHECK_DAYS} days after it was read, not a day earlier`, () => {
+    expect(due(record(), day(READ, DPF_RECHECK_DAYS))).toEqual([]);
+    expect(due(record(), day(READ, DPF_RECHECK_DAYS + 1))).toEqual(['dpf-recheck-due']);
+  });
+
+  it(`re-reads from ${DPF_END_DATE_LEAD_DAYS} days before the end date`, () => {
+    const end = '2027-01-15';
+    const e = record((m) => {
+      m.certificationEndDate = end;
+    });
+    expect(due(e, day(end, -DPF_END_DATE_LEAD_DAYS - 1))).toEqual([]);
+    expect(due(e, day(end, -DPF_END_DATE_LEAD_DAYS))).toEqual(['dpf-end-date']);
+    expect(due(e, day(end, 0))).toEqual(['dpf-end-date']);
+    // Still due long after the end date, until someone reads the record again.
+    expect(due(e, day(end, 60))).toEqual(['dpf-end-date']);
+  });
+
+  it('closes the end-date task once the record is read on or after the end date', () => {
+    const e = record((m) => {
+      m.certificationEndDate = '2026-11-03';
+      m.lastChecked = '2026-11-03';
+    });
+    expect(due(e, day('2026-11-03', 1))).toEqual([]);
+    // Then the ordinary 90-day clock applies again.
+    expect(due(e, day('2026-11-03', DPF_RECHECK_DAYS + 1))).toEqual(['dpf-recheck-due']);
+  });
+
+  it('ranks the end date above the 90-day clock', () => {
+    const e = record((m) => {
+      m.certificationEndDate = '2027-01-15';
+    });
+    expect(due(e, day(READ, DPF_RECHECK_DAYS + 1))).toEqual(['dpf-end-date']);
+  });
+
+  it(`re-reads an accepted qualified status after ${DPF_QUALIFIED_RECHECK_DAYS} days`, () => {
+    const e = record((m) => {
+      m.observedStatus = 'Active - Re-certification under Review';
+      m.acceptQualifiedStatus = { acceptedBy: 'A Person', reason: 'x' };
+    });
+    expect(due(e, day(READ, DPF_QUALIFIED_RECHECK_DAYS))).toEqual([]);
+    expect(due(e, day(READ, DPF_QUALIFIED_RECHECK_DAYS + 1))).toEqual(['dpf-status-qualified']);
+  });
+
+  it('keeps an unaccepted qualified status open from the day it is read', () => {
+    const e = record((m) => {
+      m.observedStatus = 'Active - Re-certification under Review';
+      m.dpfCertified = false;
+    });
+    expect(due(e, day(READ, 0))).toEqual(['dpf-status-qualified']);
+  });
+
+  it('applies to a not-listed record too, since an organisation can join the list', () => {
+    const e = record((m) => {
+      m.observedStatus = 'not-listed';
+      m.dpfCertified = false;
+    });
+    expect(due(e, day(READ, DPF_RECHECK_DAYS))).toEqual([]);
+    expect(due(e, day(READ, DPF_RECHECK_DAYS + 1))).toEqual(['dpf-recheck-due']);
+  });
+
+  it('gives an end-date task the same id on every day it holds', () => {
+    const e = record((m) => {
+      m.certificationEndDate = '2027-01-15';
+    });
+    const ids = (asOf: Date) =>
+      vendorTasks(e, { asOf, stale: false, dpfJurisdiction: true }).map((t) => t.id);
+    expect(ids(day('2027-01-15', -10))).toEqual(ids(day('2027-01-15', 20)));
   });
 });
 

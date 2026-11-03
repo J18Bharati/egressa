@@ -787,6 +787,8 @@
             "dpf-status-unobserved",
             "dpf-status-qualified",
             "dpf-status-unrecognised",
+            "dpf-end-date",
+            "dpf-recheck-due",
             "unknown-vendor",
             "overlay-expired"
           ]

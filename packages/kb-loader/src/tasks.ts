@@ -24,8 +24,12 @@ export type VerifyFact = (typeof VERIFY_FACTS)[number];
  * relies on the DPF decision and the entry has no DPF record.
  * `dpf-status-unobserved`: a record claims certification with no observed list
  * status behind it. `dpf-status-qualified`: the observed status is the
- * qualified one and nobody has accepted it. `dpf-status-unrecognised`: the
- * status is not in the closed table. `unknown-vendor`: a destination matched
+ * qualified one, and nobody has accepted it or it was read over
+ * `DPF_QUALIFIED_RECHECK_DAYS` ago. `dpf-status-unrecognised`: the status is
+ * not in the closed table. `dpf-end-date`: the record's certification end date
+ * is within `DPF_END_DATE_LEAD_DAYS` or has passed, and nobody has read the
+ * record since. `dpf-recheck-due`: the record was read over
+ * `DPF_RECHECK_DAYS` ago. `unknown-vendor`: a destination matched
  * no entry. `overlay-expired`: a fact the repository recorded has passed its
  * expiry, so the knowledge base's own fact is used until it is read again.
  */
@@ -35,10 +39,23 @@ export const VERIFY_REASONS = [
   'dpf-status-unobserved',
   'dpf-status-qualified',
   'dpf-status-unrecognised',
+  'dpf-end-date',
+  'dpf-recheck-due',
   'unknown-vendor',
   'overlay-expired',
 ] as const;
 export type VerifyReason = (typeof VERIFY_REASONS)[number];
+
+/**
+ * The DPF cadence. A certification lapses on a date the participant record
+ * publishes, or changes status on the list at any time, so a DPF record runs
+ * on its own clock rather than its entry's 180 days: re-read every 90 days,
+ * from 30 days before its end date, and monthly while the status is the
+ * qualified one. DPA and sub-processor facts keep the entry's threshold.
+ */
+export const DPF_RECHECK_DAYS = 90;
+export const DPF_END_DATE_LEAD_DAYS = 30;
+export const DPF_QUALIFIED_RECHECK_DAYS = 30;
 
 export interface VerifyTask {
   /** Deterministic over the vendor, subject, fact, record and reason. */
@@ -75,11 +92,10 @@ export function verifyTask(task: Omit<VerifyTask, 'id'>): VerifyTask {
 }
 
 /**
- * The tasks one entry generates. A fresh entry yields only the records that
- * are themselves in doubt; a stale one yields every legal fact it carries that
- * has not itself been re-checked within the threshold, each under its most
- * specific reason. A record re-read last week is not stale because the rest of
- * its entry is.
+ * The tasks one entry generates. A DPF record is listed on its own cadence,
+ * whatever the age of its entry. A stale entry adds its DPA and sub-processor
+ * facts that have not themselves been re-checked within the threshold. A
+ * record re-read last week is not stale because the rest of its entry is.
  */
 export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): VerifyTask[] {
   const tasks: VerifyTask[] = [];
@@ -87,9 +103,7 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
   const dpfRecords = entry.legal.transferMechanisms.filter((m) => m.mechanism === 'DPF');
 
   for (const m of dpfRecords) {
-    const reason =
-      dpfRecordReason(m) ??
-      (context.stale && !recent(m.lastChecked, context) ? 'stale-entry' : null);
+    const reason = dpfRecordReason(m, context.asOf);
     if (reason === null) continue;
     tasks.push(
       verifyTask({
@@ -155,24 +169,43 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
   return tasks;
 }
 
+const DAY = 86_400_000;
+
 /** Checked within the staleness threshold of `asOf`. */
 function recent(lastChecked: string | undefined, context: VendorTaskContext): boolean {
-  if (lastChecked === undefined) return false;
-  return Date.parse(lastChecked) >= context.asOf.getTime() - STALE_AFTER_DAYS * 86_400_000;
+  return within(lastChecked, context.asOf, STALE_AFTER_DAYS);
 }
 
+/** Checked no more than `days` days before `asOf`. Unchecked is never within. */
+function within(lastChecked: string | undefined, asOf: Date, days: number): boolean {
+  if (lastChecked === undefined) return false;
+  return Date.parse(lastChecked) >= asOf.getTime() - days * DAY;
+}
+
+/** Why a DPF record needs reading again on `asOf`, most specific first, or null. */
 function dpfRecordReason(
   m: VendorEntry['legal']['transferMechanisms'][number],
+  asOf: Date,
 ): VerifyReason | null {
   if (m.observedStatus === undefined) {
-    return m.dpfCertified === true ? 'dpf-status-unobserved' : null;
+    if (m.dpfCertified === true) return 'dpf-status-unobserved';
+  } else {
+    const verdict = dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined);
+    if (verdict.kind === 'unrecognised') return 'dpf-status-unrecognised';
+    if (verdict.kind === 'qualified') {
+      // Unaccepted, it stands until someone decides. Accepted, it is a decision
+      // someone owns, and the list may resolve it either way within weeks.
+      if (m.acceptQualifiedStatus === undefined) return 'dpf-status-qualified';
+      if (!within(m.lastChecked, asOf, DPF_QUALIFIED_RECHECK_DAYS)) return 'dpf-status-qualified';
+    }
   }
-  const verdict = dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined);
-  if (verdict.kind === 'unrecognised') return 'dpf-status-unrecognised';
-  // An accepted qualified status is a decision someone owns; re-checking it is
-  // the stale-entry cycle's job, not a standing task.
-  if (verdict.kind === 'qualified' && m.acceptQualifiedStatus === undefined) {
-    return 'dpf-status-qualified';
+  if (m.certificationEndDate !== undefined) {
+    const end = Date.parse(m.certificationEndDate);
+    const readSinceEnd = m.lastChecked !== undefined && Date.parse(m.lastChecked) >= end;
+    if (asOf.getTime() >= end - DPF_END_DATE_LEAD_DAYS * DAY && !readSinceEnd) {
+      return 'dpf-end-date';
+    }
   }
+  if (!within(m.lastChecked, asOf, DPF_RECHECK_DAYS)) return 'dpf-recheck-due';
   return null;
 }

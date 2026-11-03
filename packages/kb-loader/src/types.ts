@@ -56,6 +56,8 @@ export interface VendorEntry {
       observedStatus?: string;
       /** A named person accepting a qualified status as certified. */
       acceptQualifiedStatus?: { acceptedBy: string; reason: string };
+      /** The participant record's certification end date, as shown on `lastChecked`. */
+      certificationEndDate?: string;
     }[];
   };
   dataCategories: { category: string; typical: boolean; note?: string }[];
