@@ -234,6 +234,9 @@
             },
             "notifications": {
               "enum": ["email-subscribe", "rss", "page-only", "none", "unknown"]
+            },
+            "lastChecked": {
+              "$ref": "#/$defs/isoDate"
             }
           }
         },

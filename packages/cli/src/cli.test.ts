@@ -920,6 +920,45 @@ describe('egressa facts check', () => {
     });
   });
 
+  it('is a usage error, exit 2, when the root is not a directory', () => {
+    const { code } = run(['facts', 'check', join(tmpdir(), 'egressa-no-such-dir-x7')]);
+    expect(code).toBe(EXIT.USAGE);
+  });
+
+  it('never prints a local entry in --json, only its state and provenance', () => {
+    const local = JSON.parse(readFileSync('fixtures/repos/overlay-dpf/.egressa/facts.json', 'utf8'))
+      .localVendors[0];
+    local.retrievedAt = today;
+    const root = repo(JSON.stringify({ version: 1, localVendors: [local] }));
+    const { stdout } = run(['facts', 'check', root, '--json']);
+    expect(JSON.parse(stdout).items[0]).toMatchObject({ kind: 'local-entry', state: 'applied' });
+    expect(stdout).not.toContain('"entry"');
+    expect(stdout).not.toContain('acme-geo-fixture.net');
+  });
+
+  it('makes scan exit 2 on a facts file it cannot read, and applies --trust-facts', () => {
+    const bad = run(['scan', repo('{"version": 1,}'), '--format', 'json']);
+    expect(bad.code).toBe(EXIT.USAGE);
+
+    const root = repo(JSON.stringify({ version: 1, facts: [fact('notion')] }));
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'x',
+        version: '1.0.0',
+        dependencies: { '@notionhq/client': '2.0.0' },
+      }),
+    );
+    const notion = (args: string[]) =>
+      (
+        JSON.parse(run(['scan', root, '--format', 'json', ...args]).stdout) as {
+          findings: { ruleId: string; vendor: { id: string } | null }[];
+        }
+      ).findings.find((f) => f.vendor?.id === 'notion')?.ruleId;
+    expect(notion([])).toBe('transfer/third-country-egress-eu-region-available');
+    expect(notion(['--trust-facts'])).toBe('transfer/adequate-country-egress');
+  });
+
   it('is a usage error, exit 2, when the file is not a facts document', () => {
     const { code, stderr } = run(['facts', 'check', repo('{"version": 1,}')]);
     expect(code).toBe(EXIT.USAGE);

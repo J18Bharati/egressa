@@ -10,8 +10,14 @@ import { join } from 'node:path';
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { DISCLAIMER, findForbiddenClaims } from '../packages/core/src/claims.js';
+import { FACT_KINDS } from '../packages/core/src/facts/load.js';
 import { RULE_IDS } from '../packages/core/src/rules.js';
-import { FINDINGS_SCHEMA_VERSION, SIGNAL_KINDS } from '../packages/core/src/types.js';
+import {
+  FACT_EFFECTS,
+  FINDINGS_SCHEMA_VERSION,
+  REPOSITORY_FACT_KINDS,
+  SIGNAL_KINDS,
+} from '../packages/core/src/types.js';
 import { VERIFY_FACTS, VERIFY_REASONS } from '../packages/kb-loader/src/tasks.js';
 
 const root = process.cwd();
@@ -77,6 +83,19 @@ if (kindsMissingInTs.length > 0) {
 for (const [label, ts, json] of [
   ['verification facts', VERIFY_FACTS, schema.$defs.verifyTask.properties.fact.enum],
   ['verification reasons', VERIFY_REASONS, schema.$defs.verifyTask.properties.reason.enum],
+  // Repository fact vocabularies: the findings schema, and the facts file's own schema.
+  ['fact effects', FACT_EFFECTS, schema.$defs.repositoryFact.properties.effect.enum],
+  [
+    'repository fact kinds',
+    REPOSITORY_FACT_KINDS,
+    schema.$defs.repositoryFact.properties.fact.enum,
+  ],
+  [
+    'facts file fact kinds',
+    FACT_KINDS,
+    JSON.parse(readFileSync(join(root, 'kb/schema/facts-1.0.0.json'), 'utf8')).$defs.fact.properties
+      .fact.enum,
+  ],
 ] as [string, readonly string[], string[]][]) {
   const notInSchema = ts.filter((v) => !json.includes(v));
   const notInTs = json.filter((v) => !ts.includes(v));

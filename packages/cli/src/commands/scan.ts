@@ -142,6 +142,12 @@ export const scanCommand = defineCommand({
     try {
       facts = loadFacts(root);
     } catch (error) {
+      // The facts file is checked against the tool's bundled schema; that
+      // copy missing is a knowledge base failure, exit 4, not the repository's.
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
+        process.exit(EXIT.KB);
+      }
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}\n`);
       process.exit(EXIT.USAGE);

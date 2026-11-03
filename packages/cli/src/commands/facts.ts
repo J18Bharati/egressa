@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { FactsError, type OverlayItem, applyOverlay, checkFacts, loadFacts } from '@egressa/core';
 import { KnowledgeBaseError, loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
@@ -38,15 +39,25 @@ export const factsCommand = defineCommand({
       process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
       process.exit(EXIT.KB);
     }
+    // A mistyped path would otherwise read as "no facts file", exit 0.
+    const root = String(args.root);
+    if (!isDirectory(root)) {
+      process.stderr.write(`egressa: ${root} is not a directory\n`);
+      process.exit(EXIT.USAGE);
+    }
     let checked: { source: string; items: OverlayItem[] } | null;
     try {
-      const parsed = loadFacts(String(args.root));
+      const parsed = loadFacts(root);
       checked = parsed
         ? applyOverlay(kb, checkFacts(parsed, kb, new Date()), {
             trustFacts: args['trust-facts'] === true,
           })
         : null;
     } catch (error) {
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}\n`);
+        process.exit(EXIT.KB);
+      }
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}\n`);
       process.exit(EXIT.USAGE);
@@ -58,6 +69,14 @@ export const factsCommand = defineCommand({
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
   },
 });
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /** What `--json` prints for an item: its state and provenance, not the whole local entry. */
 function publicItem(item: OverlayItem) {

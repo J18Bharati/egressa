@@ -15,8 +15,9 @@
  * otherwise attribute its own exfiltration host to an EEA vendor.
  *
  * The trust gate: a fact that would make a vendor DPF certified when the
- * knowledge base says it is not *loosens* a finding, and applies only when the
- * caller passed `trustFacts`. Without it the fact is reported as
+ * knowledge base says it is not *loosens* a finding, and so does a local entry
+ * that would place an unknown host in the EEA or an adequate country. Either
+ * applies only when the caller passed `trustFacts`. Without it the fact is reported as
  * `loosening-not-trusted` and the knowledge base's answer stands, so a
  * repository scanned by someone else can make its findings stricter but never
  * clear them.
@@ -27,8 +28,9 @@ import {
   buildKnowledgeBase,
   dpfStatusVerdict,
 } from '@egressa/kb';
-import { vendorIsDpfCertified } from '../exposure/rules.js';
-import type { FactEffect, RepositoryFactRef } from '../types.js';
+import { resolveRegion } from '../exposure/regions.js';
+import { classifyExposure, vendorIsDpfCertified } from '../exposure/rules.js';
+import type { FactEffect, RepositoryFactRef, RuleId } from '../types.js';
 import type { CheckedItem, FactsCheck, RepositoryFact } from './load.js';
 
 export type OverlayState =
@@ -97,6 +99,15 @@ export function applyOverlay(
         ),
       },
     };
+    // Without the entry, its destination is an unknown vendor: a reviewer has
+    // to look. An entry that says the data stays in the EEA, or goes only to an
+    // adequate country, tells them they need not -- so it loosens, and is held
+    // to the same gate as a dpf fact. One naming a third country does not.
+    const effect: FactEffect = mostFavourableRule(local, baseline) ? 'loosens' : 'tightens';
+    if (effect === 'loosens' && !trustFacts) {
+      items.push({ ...item, state: 'loosening-not-trusted', effect });
+      continue;
+    }
     changed.set(local.id, local);
     localIds.add(local.id);
     add(byVendor, local.id, {
@@ -106,9 +117,9 @@ export function applyOverlay(
       retrievedAt: item.local.retrievedAt,
       verifiedBy: item.local.verifiedBy,
       expiresOn: item.expiresOn ?? '',
-      effect: 'neutral',
+      effect,
     });
-    items.push({ ...item, state: 'applied', effect: 'neutral' });
+    items.push({ ...item, state: 'applied', effect });
   }
 
   for (const item of checked.items) {
@@ -130,7 +141,10 @@ export function applyOverlay(
       continue;
     }
     const after = withFact(before, fact);
-    if (sameLegal(before, after)) {
+    // Redundant only when the knowledge base says the same thing at least as
+    // recently. A fact that re-confirms an old record is what answers its
+    // stale task, so it applies, and deleting it would reopen the task.
+    if (sameLegal(before, after) && !fresher(before, fact)) {
       items.push({ ...item, state: 'redundant', effect: 'neutral' });
       continue;
     }
@@ -196,14 +210,14 @@ function withFact(vendor: VendorEntry, fact: RepositoryFact): VendorEntry {
         observedStatus,
         ...(accepted ? { acceptQualifiedStatus: accepted } : {}),
       };
-      // A record for the same participant is replaced and any other kept: an
-      // entry such as Meta's has one record per certified organisation. A
-      // fact citing none of them speaks for the vendor as a whole and
-      // replaces them all -- including with `not-listed`.
-      const mechanisms = vendor.legal.transferMechanisms;
-      const same = mechanisms.some((m) => m.mechanism === 'DPF' && m.url === participantUrl);
-      const kept = mechanisms.filter(
-        (m) => m.mechanism !== 'DPF' || (same && m.url !== participantUrl),
+      // An entry such as Meta's has one record per certified organisation.
+      // A fact about one participant replaces that participant's record, or
+      // sits beside the others when it is a participant the entry does not
+      // have. Only `not-listed` speaks for the vendor as a whole, and replaces
+      // every record: one organisation's lapse says nothing about another's.
+      const wholeVendor = isNotListed(observedStatus);
+      const kept = vendor.legal.transferMechanisms.filter(
+        (m) => m.mechanism !== 'DPF' || (!wholeVendor && m.url !== participantUrl),
       );
       return { ...vendor, legal: { ...vendor.legal, transferMechanisms: [...kept, record] } };
     }
@@ -225,7 +239,11 @@ function withFact(vendor: VendorEntry, fact: RepositoryFact): VendorEntry {
         ...vendor,
         legal: {
           ...vendor.legal,
-          subprocessors: { ...vendor.legal.subprocessors, url: fact.value.url },
+          subprocessors: {
+            ...vendor.legal.subprocessors,
+            url: fact.value.url,
+            lastChecked: fact.source.retrievedAt,
+          },
         },
       };
   }
@@ -237,15 +255,36 @@ function withFact(vendor: VendorEntry, fact: RepositoryFact): VendorEntry {
  * redundant, and `facts check` says it can be deleted.
  */
 function sameLegal(a: VendorEntry, b: VendorEntry): boolean {
+  // Status compared as the table compares it, so a change of case is not a change.
   const strip = (v: VendorEntry) =>
     canonical({
       dpa: { ...v.legal.dpa, lastChecked: undefined },
       sub: v.legal.subprocessors?.url,
       mechanisms: v.legal.transferMechanisms
-        .map((m) => canonical({ ...m, lastChecked: undefined }))
+        .map((m) =>
+          canonical({
+            ...m,
+            lastChecked: undefined,
+            observedStatus: m.observedStatus?.trim().replace(/\s+/g, ' ').toLowerCase(),
+          }),
+        )
         .sort(),
     });
   return strip(a) === strip(b);
+}
+
+/** Whether the fact was read later than the record it re-confirms was last checked. */
+function fresher(vendor: VendorEntry, fact: RepositoryFact): boolean {
+  const { legal } = vendor;
+  const checked =
+    fact.fact === 'dpf'
+      ? legal.transferMechanisms.find(
+          (m) => m.mechanism === 'DPF' && m.url === fact.value.participantUrl,
+        )?.lastChecked
+      : fact.fact === 'dpa'
+        ? legal.dpa.lastChecked
+        : legal.subprocessors?.lastChecked;
+  return checked === undefined || fact.source.retrievedAt > checked;
 }
 
 /** JSON with keys in sorted order and undefined members dropped, so field order cannot matter. */
@@ -258,6 +297,22 @@ function canonical(value: unknown): string {
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/**
+ * Whether a local entry can classify a destination as adequate or EEA-only,
+ * with no region or with any region its own map names. The most favourable
+ * reading is the one a repository would choose, so it is the one gated.
+ */
+function mostFavourableRule(entry: VendorEntry, kb: KnowledgeBase): boolean {
+  const regions = [null, ...(entry.regions ?? []).map((r) => resolveRegion(entry, r.code))];
+  return regions.some((region) => LOOSE_RULES.has(classifyExposure(entry, kb, { region }).ruleId));
+}
+
+const LOOSE_RULES = new Set<RuleId>(['transfer/adequate-country-egress', 'transfer/eu-processing']);
+
+function isNotListed(status: string): boolean {
+  return dpfStatusVerdict(status, false).kind === 'not-listed';
 }
 
 function effectOf(before: VendorEntry, after: VendorEntry): FactEffect {

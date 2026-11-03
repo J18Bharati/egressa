@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { type KnowledgeBase, type VendorEntry, verifyTask } from '@egressa/kb';
+import { isReservedHost } from '../callsites/reserved-host.js';
 import { type AppliedRegion, isUnmappedRegion, resolveRegion } from '../exposure/regions.js';
 import { type ExposureResult, classifyExposure } from '../exposure/rules.js';
 import type { Overlay } from '../facts/overlay.js';
@@ -133,7 +134,14 @@ function withVerification(
       });
       return [{ ...finding, verification: [task] }];
     }
-    const tasks = [...kb.verifyTasks(vendor, now), ...expiredFactTasks(vendor, overlay)];
+    // Which tasks are open is decided on the overlaid entry, so an applied
+    // fact answers its task. Where each one points is not: a task's URLs are
+    // knowledge base data, so any the repository supplied are dropped.
+    const shipped = overlay?.baseline.byId.get(vendor.id);
+    const tasks = [
+      ...kb.verifyTasks(vendor, now),
+      ...expiredFactTasks(shipped ?? vendor, overlay),
+    ].map((task) => (overlay ? shippedUrlsOnly(task, shipped) : task));
     if (!staleVendorIds.has(vendor.id)) {
       return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
     }
@@ -152,7 +160,11 @@ function expiredFactTasks(vendor: VendorEntry, overlay: Overlay | undefined): Ve
   return (overlay?.expiredByVendor.get(vendor.id) ?? []).flatMap((item) => {
     const kind = item.fact?.fact;
     if (!kind) return [];
-    const dpf = vendor.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
+    // The record the expired fact was about, when the entry has several.
+    const records = vendor.legal.transferMechanisms.filter((m) => m.mechanism === 'DPF');
+    const cited = item.fact?.fact === 'dpf' ? item.fact.value.participantUrl : undefined;
+    const dpf =
+      records.find((m) => m.url === cited) ?? (records.length === 1 ? records[0] : undefined);
     const url =
       kind === 'dpf'
         ? (dpf?.url ?? null)
@@ -165,9 +177,43 @@ function expiredFactTasks(vendor: VendorEntry, overlay: Overlay | undefined): Ve
         fact: kind,
         reason: 'overlay-expired',
         current: { value: null, asOf: item.expiresOn ?? null, url },
-        where: url ? [url] : kind === 'dpf' ? ['https://www.dataprivacyframework.gov/list'] : [],
+        where: url ? [url] : kind === 'dpf' ? [DPF_LIST] : [],
       }),
     ];
+  });
+}
+
+const DPF_LIST = 'https://www.dataprivacyframework.gov/list';
+
+/** Every URL the shipped entry itself carries. */
+function entryUrls(vendor: VendorEntry | undefined): Set<string> {
+  if (!vendor) return new Set();
+  const { legal } = vendor;
+  return new Set(
+    [
+      legal.dpa.url,
+      legal.subprocessors?.url,
+      vendor.processing.euRegion.docUrl,
+      ...legal.transferMechanisms.map((m) => m.url),
+      ...vendor.sources.map((source) => source.url),
+    ].filter((url): url is string => typeof url === 'string'),
+  );
+}
+
+/**
+ * The task with every URL the shipped entry does not carry removed. A DPF
+ * task left with nowhere to look points at the list itself.
+ */
+function shippedUrlsOnly(task: VerifyTask, shipped: VendorEntry | undefined): VerifyTask {
+  const known = entryUrls(shipped);
+  const where = task.where.filter((url) => known.has(url) || url === DPF_LIST);
+  const url = task.current.url !== null && known.has(task.current.url) ? task.current.url : null;
+  if (url === task.current.url && where.length === task.where.length) return task;
+  const { id: _id, ...rest } = task;
+  return verifyTask({
+    ...rest,
+    current: { ...task.current, url },
+    where: where.length === 0 && task.fact === 'dpf' ? [DPF_LIST] : where,
   });
 }
 
@@ -212,8 +258,17 @@ function buildFinding(
 
   const applied = vendor ? (overlay?.byVendor.get(vendor.id) ?? []) : [];
   const local = vendor !== null && overlay?.localIds.has(vendor.id) === true;
+  // A shipped vendor's DPA and sub-processor links stay the knowledge base's.
+  // A `dpa` or `subprocessors` fact applies without trust, since it changes no
+  // rule, so letting its URL stand in for the vendor's would let a repository
+  // swap the link every reader follows. Its URL is in `repositoryFacts`.
+  const shippedEntry = vendor && !local ? overlay?.baseline.byId.get(vendor.id) : undefined;
   const transfer = vendor
-    ? { ...toTransferFacts(vendor), ...(applied.length > 0 ? { repositoryFacts: applied } : {}) }
+    ? {
+        ...toTransferFacts(vendor),
+        ...(shippedEntry ? shippedLinks(shippedEntry) : {}),
+        ...(applied.length > 0 ? { repositoryFacts: applied } : {}),
+      }
     : null;
   // Re-classified with every unmapped region the group's evidence carries, so
   // the audit trail matches the evidence whatever order the signals arrived in.
@@ -242,9 +297,20 @@ function buildFinding(
     vendor && applied.some((a) => a.fact !== 'local-entry')
       ? overlay?.baseline.byId.get(vendor.id)
       : undefined;
-  const baselineRule = shippedVendor
-    ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId
-    : undefined;
+  // A local vendor has no shipped entry. Without it, a destination the code
+  // names is an unknown vendor, so that is the rule it is measured against.
+  // A package alone, or a documentation host, produced no finding at all,
+  // and there is then no baseline to name.
+  const baselineRule: RuleId | undefined = local
+    ? signals.some(
+        (s) =>
+          s.kind !== 'dependency' && !(s.kind !== 'infrastructure' && isReservedHost(s.matchedOn)),
+      )
+      ? 'transfer/unknown-vendor-egress'
+      : undefined
+    : shippedVendor
+      ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId
+      : undefined;
 
   return {
     id: fingerprint(
@@ -268,7 +334,13 @@ function buildFinding(
     confidence,
     signals,
     evidence,
-    remediation: buildRemediation(ruleId, vendor),
+    // Links come from the shipped entry only. A fact's URLs are the
+    // repository's, and a local vendor's are all the repository's: it gets
+    // the request-an-entry link instead.
+    remediation: buildRemediation(
+      ruleId,
+      local ? null : vendor ? (overlay?.baseline.byId.get(vendor.id) ?? vendor) : null,
+    ),
     suppressed: false,
     suppression: null,
     ...(baselineRule !== undefined && baselineRule !== ruleId
@@ -299,6 +371,14 @@ function byStrength(a: Evidence, b: Evidence): number {
     (e.confidence === 'high' ? 4 : e.confidence === 'medium' ? 2 : 0) +
     (e.kind === 'callsite' ? 1 : 0);
   return rank(b) - rank(a) || a.file.localeCompare(b.file) || a.startLine - b.startLine;
+}
+
+/** The link fields of `toTransferFacts`, from one entry, with absent ones explicitly unset. */
+function shippedLinks(vendor: VendorEntry): Pick<TransferFacts, 'dpaUrl' | 'subprocessorsUrl'> {
+  return {
+    dpaUrl: vendor.legal.dpa.url,
+    subprocessorsUrl: vendor.legal.subprocessors?.url,
+  };
 }
 
 function toTransferFacts(vendor: VendorEntry): TransferFacts {

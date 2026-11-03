@@ -136,13 +136,17 @@ export function vendorTasks(entry: VendorEntry, context: VendorTaskContext): Ver
   }
   if (context.stale) {
     const sub = entry.legal.subprocessors;
-    if (sub) {
+    if (sub && !recent(sub.lastChecked, context)) {
       tasks.push(
         verifyTask({
           vendorId,
           fact: 'subprocessors',
           reason: 'stale-entry',
-          current: { value: sub.listType ?? 'published', asOf: entry.lastVerified, url: sub.url },
+          current: {
+            value: sub.listType ?? 'published',
+            asOf: sub.lastChecked ?? entry.lastVerified,
+            url: sub.url,
+          },
           where: [sub.url],
         }),
       );

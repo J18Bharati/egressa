@@ -15,6 +15,31 @@ import type { VendorEntry } from './types.js';
 export interface EntryIssue {
   vendorId: string;
   message: string;
+  /**
+   * The message with every value taken from an entry replaced, unless it is a
+   * plain name. What a check on a repository-supplied entry may print: that
+   * entry's text is untrusted, and the quoting in `message` is decoration, not
+   * a boundary, since a value can contain the quote character.
+   */
+  redacted: string;
+}
+
+const PLAIN_VALUE = /^[a-z0-9@/*:._-]{1,80}$/;
+
+/** A message from a template, and the same message with its values redacted. */
+function issue(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): { message: string; redacted: string } {
+  const join = (show: (v: string) => string) =>
+    strings.reduce(
+      (out, text, i) => out + text + (i < values.length ? show(String(values[i])) : ''),
+      '',
+    );
+  return {
+    message: join((v) => v),
+    redacted: join((v) => (PLAIN_VALUE.test(v) ? v : '(not shown)')),
+  };
 }
 
 /** Words that make a data-layer sentence evaluative. Facts only belong in kb/. */
@@ -23,13 +48,14 @@ const EVALUATIVE = ['risky', 'dangerous', 'avoid', 'bad ', 'unsafe', 'problemati
 /** Checks one entry needs no other entry to answer. */
 export function entryIssues(entry: VendorEntry): EntryIssue[] {
   const issues: EntryIssue[] = [];
-  const add = (message: string) => issues.push({ vendorId: entry.id, message });
+  const add = (text: { message: string; redacted: string }) =>
+    issues.push({ vendorId: entry.id, ...text });
 
   const primary = entry.sources.filter(
     (s) => s.publisher === 'vendor' || s.publisher === 'regulator',
   );
   if (primary.length === 0) {
-    add('needs at least one source published by the vendor or a regulator');
+    add(issue`needs at least one source published by the vendor or a regulator`);
   }
 
   for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
@@ -42,7 +68,7 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
       // confidence, which is exactly what `scope` exists to prevent.
       if (alias.name.endsWith('/*') !== (alias.kind === 'scope')) {
         add(
-          `package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`,
+          issue`package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`,
         );
       }
       // PyPI treats `Twilio`, `twilio` and `twi_lio`-style spellings as one
@@ -53,7 +79,7 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
         const normalised = normalisePypiName(alias.name);
         if (alias.name !== normalised || alias.name.endsWith('/*')) {
           add(
-            `pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`,
+            issue`pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`,
           );
         }
       }
@@ -68,12 +94,12 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
     const verdict = dpfStatusVerdict(m.observedStatus, m.acceptQualifiedStatus !== undefined);
     if (verdict.certified !== (m.dpfCertified === true)) {
       add(
-        `DPF record ${m.url ?? '(no url)'}: dpfCertified is ${m.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`,
+        issue`DPF record ${m.url ?? '(no url)'}: dpfCertified is ${m.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`,
       );
     }
     if (m.acceptQualifiedStatus && verdict.kind !== 'qualified') {
       add(
-        `DPF record ${m.url ?? '(no url)'}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`,
+        issue`DPF record ${m.url ?? '(no url)'}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`,
       );
     }
   }
@@ -81,7 +107,7 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
   for (const host of entry.aliases.hosts) {
     // Never a bare public suffix.
     if (host.pattern.split('.').length < 2) {
-      add(`host pattern "${host.pattern}" has too few labels`);
+      add(issue`host pattern "${host.pattern}" has too few labels`);
     }
   }
 
@@ -99,7 +125,7 @@ export function entryIssues(entry: VendorEntry): EntryIssue[] {
     .toLowerCase();
   for (const word of EVALUATIVE) {
     if (prose.includes(word)) {
-      add(`evaluative language "${word.trim()}" does not belong in the data layer`);
+      add(issue`evaluative language "${word.trim()}" does not belong in the data layer`);
     }
   }
   return issues;
@@ -121,15 +147,16 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
   const hostOwners = new Map<string, string>(); // "pattern|match" -> vendorId
 
   for (const entry of entries) {
-    const add = (message: string) => issues.push({ vendorId: entry.id, message });
-    if (vendorIds.has(entry.id)) add(`duplicate vendor id "${entry.id}"`);
+    const add = (text: { message: string; redacted: string }) =>
+      issues.push({ vendorId: entry.id, ...text });
+    if (vendorIds.has(entry.id)) add(issue`duplicate vendor id "${entry.id}"`);
     vendorIds.add(entry.id);
     for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
       for (const alias of list ?? []) {
         const key = `${ecosystem}:${alias.name}`;
         const owner = packageOwners.get(key);
         if (owner && owner !== entry.id) {
-          add(`package alias "${key}" already claimed by "${owner}"`);
+          add(issue`package alias "${key}" already claimed by "${owner}"`);
         }
         packageOwners.set(key, entry.id);
         if (alias.name.endsWith('/*')) {
@@ -141,7 +168,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
       const key = `${host.pattern}|${host.match}`;
       const owner = hostOwners.get(key);
       if (owner && owner !== entry.id) {
-        add(`host pattern "${host.pattern}" already claimed by "${owner}"`);
+        add(issue`host pattern "${host.pattern}" already claimed by "${owner}"`);
       }
       hostOwners.set(key, entry.id);
     }
@@ -157,7 +184,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
       if (other.startsWith(scope)) {
         issues.push({
           vendorId: owner,
-          message: `package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`,
+          ...issue`package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`,
         });
       }
     }
@@ -166,7 +193,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
       if (pkg.startsWith(scope)) {
         issues.push({
           vendorId: owner,
-          message: `package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`,
+          ...issue`package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`,
         });
       }
     }
@@ -182,7 +209,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
     if (vendorIds.has(name) && name !== owner) {
       issues.push({
         vendorId: owner,
-        message: `package alias "${key}" is the id of vendor "${name}"`,
+        ...issue`package alias "${key}" is the id of vendor "${name}"`,
       });
     }
     if (ecosystem === 'npm') {
@@ -190,7 +217,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
       if (pypiOwner && pypiOwner !== owner) {
         issues.push({
           vendorId: owner,
-          message: `"${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`,
+          ...issue`"${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`,
         });
       }
     }
@@ -198,7 +225,7 @@ export function collisionIssues(entries: readonly VendorEntry[]): EntryIssue[] {
       if (hostOwner !== owner && hostKey.split('|')[0] === name) {
         issues.push({
           vendorId: owner,
-          message: `package alias "${key}" is a host of vendor "${hostOwner}"`,
+          ...issue`package alias "${key}" is a host of vendor "${hostOwner}"`,
         });
       }
     }

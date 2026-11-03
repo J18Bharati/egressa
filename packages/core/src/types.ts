@@ -175,7 +175,11 @@ export interface TransferFacts {
 }
 
 /** What applying a repository fact did to the vendor's DPF certification. */
-export type FactEffect = 'loosens' | 'tightens' | 'neutral';
+export const FACT_EFFECTS = ['loosens', 'tightens', 'neutral'] as const;
+export type FactEffect = (typeof FACT_EFFECTS)[number];
+
+/** What a repository fact is about; `local-entry` is a whole vendor entry. */
+export const REPOSITORY_FACT_KINDS = ['dpf', 'dpa', 'subprocessors', 'local-entry'] as const;
 
 /**
  * One repository-supplied fact, as provenance. Everything a reader needs to
@@ -183,7 +187,7 @@ export type FactEffect = 'loosens' | 'tightens' | 'neutral';
  * was read and by whom, and until when it counts.
  */
 export interface RepositoryFactRef {
-  fact: 'dpf' | 'dpa' | 'subprocessors' | 'local-entry';
+  fact: (typeof REPOSITORY_FACT_KINDS)[number];
   file: string;
   /** JSON path in `file`, such as `facts[0]`. */
   at: string;

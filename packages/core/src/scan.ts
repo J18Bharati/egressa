@@ -14,6 +14,7 @@ import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
 import { confidenceForDependency } from './merge/confidence.js';
 import { mergeSignals } from './merge/index.js';
+import { RULES } from './rules.js';
 import { FINDINGS_SCHEMA_VERSION } from './types.js';
 import type {
   Confidence,
@@ -292,7 +293,10 @@ export function scan(options: ScanOptions): ScanResult {
 
   // A local entry was drafted by the repository, not reviewed for the
   // knowledge base, so nothing it matches is reported above medium -- however
-  // the entry labels its own aliases.
+  // the entry labels its own aliases. The filter below still reads the
+  // confidence the signal had before the cap: a cap meant to make a finding
+  // look less certain must not be a way to drop it under --min-confidence.
+  const before = new Map<Signal, Confidence>();
   if (overlay) {
     for (const signal of signals) {
       if (
@@ -300,6 +304,7 @@ export function scan(options: ScanOptions): ScanResult {
         overlay.localIds.has(signal.vendorId) &&
         signal.confidence === 'high'
       ) {
+        before.set(signal, signal.confidence);
         signal.confidence = 'medium';
       }
     }
@@ -307,7 +312,7 @@ export function scan(options: ScanOptions): ScanResult {
 
   const filtered = signals.filter((signal) => {
     if (onlyVendor && (!signal.vendorId || !onlyVendor.includes(signal.vendorId))) return false;
-    return meetsConfidence(signal.confidence, minConfidence);
+    return meetsConfidence(before.get(signal) ?? signal.confidence, minConfidence);
   });
 
   const merged = mergeSignals(filtered, { kb, now, ...(overlay ? { overlay } : {}) });
@@ -396,14 +401,17 @@ function factsSummary(overlay: Overlay, findings: Finding[]): FactsSummary {
     localVendors: overlay.localIds.size,
     findingsDependingOnFacts: active.filter((f) => (f.transfer?.repositoryFacts?.length ?? 0) > 0)
       .length,
+    // Measured on the finding, not on the fact's label: a fact can loosen in
+    // general and still leave this repository's finding stricter.
     loosened: active.filter(
       (f) =>
         f.baselineRuleId !== undefined &&
-        (f.transfer?.repositoryFacts ?? []).some((r) => r.effect === 'loosens'),
+        LEVEL[RULES[f.ruleId].defaultLevel] < LEVEL[RULES[f.baselineRuleId].defaultLevel],
     ).length,
   };
 }
 
+const LEVEL: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
 const ORDER: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 function meetsConfidence(value: Confidence, floor: Confidence): boolean {
   return ORDER[value] >= ORDER[floor];

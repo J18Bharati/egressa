@@ -57,7 +57,7 @@
           "packages": {},
           "hosts": [
             {
-              "pattern": "api.acme-geo.example.net",
+              "pattern": "api.acme-geo-fixture.net",
               "match": "exact",
               "purpose": "api"
             }

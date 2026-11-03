@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { DISCLAIMER } from '../claims.js';
 import { RULES, RULE_IDS } from '../rules.js';
 import type { Finding, ScanResult, Severity } from '../types.js';
-import { displayName, isReferenceOnly } from './display.js';
+import { displayName, isReferenceOnly, markdownText, markdownUrl, plainText } from './display.js';
 
 /**
  * SARIF 2.1.0 emitter.
@@ -120,21 +120,27 @@ function buildHelpMarkdown(id: (typeof RULE_IDS)[number], result: ScanResult): s
   if (vendors.length > 0) {
     lines.push('', '#### Vendors matched in this scan', '');
     for (const { vendor, transfer } of vendors) {
-      lines.push(`**${vendor.name}** — processing: ${transfer.jurisdictions.join(', ')}`);
+      lines.push(
+        `**${markdownText(vendor.name)}** — processing: ${markdownText(transfer.jurisdictions.join(', '))}`,
+      );
       if (transfer.euRegion.available) {
         lines.push(`- EU region: available (${transfer.euRegion.scope ?? 'scope not recorded'})`);
       }
-      if (transfer.dpaUrl) lines.push(`- [Data processing agreement](${transfer.dpaUrl})`);
+      if (transfer.dpaUrl) {
+        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})`);
+      }
       if (transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${transfer.subprocessorsUrl})`);
+        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})`);
       }
       for (const source of transfer.kbSources) {
-        lines.push(`- Source: [${source.title}](${source.url}) (${source.publisher})`);
+        lines.push(
+          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})`,
+        );
       }
       lines.push(`- Last verified: ${transfer.lastVerified}`);
       if (transfer.disputed) {
         lines.push(
-          `- **Disputed**: ${transfer.disputed.summary} ([issue](${transfer.disputed.issueUrl}))`,
+          `- **Disputed**: ${markdownText(transfer.disputed.summary)} ([issue](${markdownUrl(transfer.disputed.issueUrl)}))`,
         );
       }
       lines.push('');
@@ -190,8 +196,9 @@ function confidencePrefix(finding: Finding): string {
   return finding.confidence === 'high' ? '' : `[${finding.confidence} confidence] `;
 }
 
-function buildMessageText(finding: Finding): string {
-  const vendor = displayName(finding);
+/** The message, with names passed through `render`: plain for `text`, inert markdown for `markdown`. */
+function buildMessageText(finding: Finding, render: (text: string) => string = plainText): string {
+  const vendor = render(displayName(finding));
   const where = finding.transfer
     ? ` (processing: ${finding.transfer.jurisdictions.join(', ')})`
     : '';
@@ -206,9 +213,9 @@ function buildMessageText(finding: Finding): string {
 }
 
 function buildMessage(finding: Finding): string {
-  const text = buildMessageText(finding);
+  const text = buildMessageText(finding, markdownText);
   if (!finding.transfer?.dpaUrl) return text;
-  return `${text} [DPA](${finding.transfer.dpaUrl})`;
+  return `${text} [DPA](${markdownUrl(finding.transfer.dpaUrl)})`;
 }
 
 function toSarifLocation(evidence: Finding['evidence'][number]): unknown {

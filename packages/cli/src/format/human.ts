@@ -89,7 +89,7 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
       : finding.severity === 'error'
         ? c('red', 'x')
         : c('blue', 'i');
-  const vendorName = displayName(finding);
+  const vendorName = printable(displayName(finding));
   // Without the region in the header, one provider configured in four regions
   // renders as four identical blocks. All of them, not the first: two regions
   // in the same country share a finding because they have the same legal
@@ -135,7 +135,7 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
       lines.push(c('dim', '    relies on an adequacy decision that could be withdrawn'));
     }
     if (finding.transfer.disputed) {
-      lines.push(c('yellow', `    disputed:   ${finding.transfer.disputed.summary}`));
+      lines.push(c('yellow', `    disputed:   ${printable(finding.transfer.disputed.summary)}`));
     }
     lines.push(c('dim', `    verified:   ${finding.transfer.lastVerified}`));
   }

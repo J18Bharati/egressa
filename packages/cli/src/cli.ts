@@ -1,4 +1,4 @@
-import { type ArgsDef, defineCommand, runMain } from 'citty';
+import { type ArgsDef, defineCommand, runCommand, runMain } from 'citty';
 import { explainCommand } from './commands/explain.js';
 import { factsCommand } from './commands/facts.js';
 import { scanCommand } from './commands/scan.js';
@@ -78,7 +78,19 @@ if (command !== undefined && Object.hasOwn(subCommands, command)) {
   }
 }
 
-runMain(main, { rawArgs }).catch((error: unknown) => {
-  process.stderr.write(`egressa: ${(error as Error).message}\n`);
-  process.exit(EXIT.INTERNAL);
+// citty's runMain catches every error a command throws and exits 1, which is
+// this tool's "findings" code: an internal error would read as findings in CI.
+// It is kept for --help and --version only; commands run through runCommand,
+// so an error reaches this handler and exits as what it is.
+const metaOnly =
+  rawArgs.includes('--help') ||
+  rawArgs.includes('-h') ||
+  (rawArgs.length === 1 && rawArgs[0] === '--version');
+const run = metaOnly ? runMain(main, { rawArgs }) : runCommand(main, { rawArgs });
+run.catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`egressa: ${message}\n`);
+  // citty's own argument errors (an unknown subcommand, a missing positional).
+  const usage = error instanceof Error && error.name === 'CLIError';
+  process.exit(usage ? EXIT.USAGE : EXIT.INTERNAL);
 });

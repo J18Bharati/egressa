@@ -100,6 +100,44 @@ export class FactsError extends Error {
   override name = 'FactsError';
 }
 
+/** Deeper than any facts document the schema allows; a local entry is about eight levels. */
+const MAX_DEPTH = 32;
+
+/**
+ * Bounds on what a repository may declare. The set checks a local entry runs
+ * against the knowledge base grow with the product of aliases, so an
+ * unbounded file is a way to stall a scan, and the MCP server with it.
+ */
+const MAX_LOCAL_VENDORS = 20;
+const MAX_ALIASES = 50;
+
+function sizeProblem(entry: VendorEntry): string | undefined {
+  const packages = Object.values(entry.aliases.packages ?? {}).reduce(
+    (n, list) => n + (list?.length ?? 0),
+    0,
+  );
+  return entry.aliases.hosts.length > MAX_ALIASES || packages > MAX_ALIASES
+    ? `declares more than ${MAX_ALIASES} hosts or packages`
+    : undefined;
+}
+
+/** The deepest bracket nesting in `text`, outside strings. */
+function nestingDepth(text: string): number {
+  let depth = 0;
+  let max = 0;
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '[' || ch === '{') max = Math.max(max, ++depth);
+    else if (ch === ']' || ch === '}') depth--;
+  }
+  return max;
+}
+
 /** Larger than any facts file a team writes; the same cap as `.egressa.yml`. */
 const MAX_FACTS_BYTES = 8 * 1_048_576;
 
@@ -123,6 +161,12 @@ export function loadFacts(root: string): ParsedFacts | null {
  * approve the first value while the second is the one applied.
  */
 export function parseFacts(text: string, label: string): ParsedFacts {
+  // Every reader below recurses, the parser included, so depth is bounded
+  // before any of them runs: a file of nested brackets is a usage error, not
+  // a stack overflow reported as an internal one.
+  if (nestingDepth(text) > MAX_DEPTH) {
+    throw new FactsError(`${label}: nested more than ${MAX_DEPTH} levels deep`);
+  }
   const errors: ParseError[] = [];
   const tree = parseTree(text, errors, {
     disallowComments: true,
@@ -222,6 +266,60 @@ export interface FactsCheck {
 
 const DAY = 86_400_000;
 /** UTC+14, Kiribati: the furthest any calendar date runs ahead of UTC. */
+/**
+ * A local entry may only name destinations the shipped knowledge base does
+ * not resolve. Exact-key collision is not enough: the host trie prefers an
+ * exact pattern and then the deepest suffix, so `bucket.s3.amazonaws.com`
+ * would take that host from AWS, and `findSinks()` returns every matching
+ * sink, so a constructor on a shipped module would be attributed twice.
+ * Messages name the field, never its content.
+ */
+function shippedClaim(entry: VendorEntry, kb: KnowledgeBase): string | undefined {
+  const owner = (id: string | undefined, field: string) =>
+    id ? `${field} is already resolved by the knowledge base vendor "${id}"` : undefined;
+  for (const [i, host] of entry.aliases.hosts.entries()) {
+    const field = `aliases.hosts[${i}]`;
+    const found = owner(kb.lookupHost(host.pattern)?.vendor.id, field);
+    if (found) return found;
+    // A suffix above a shipped host would name that vendor's other hosts
+    // under a name the repository chose.
+    if (host.match === 'suffix') {
+      const below = kb.vendors.find((v) =>
+        v.aliases.hosts.some(
+          (h) => h.pattern === host.pattern || h.pattern.endsWith(`.${host.pattern}`),
+        ),
+      );
+      if (below) return owner(below.id, field);
+    }
+  }
+  const shippedNames = (ecosystem: string) =>
+    kb.vendors.flatMap((v) =>
+      ((v.aliases.packages as Record<string, { name: string }[] | undefined>)[ecosystem] ?? []).map(
+        (a) => ({ name: a.name, id: v.id }),
+      ),
+    );
+  for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
+    if (ecosystem !== 'npm' && ecosystem !== 'pypi') continue;
+    for (const [i, alias] of (list ?? []).entries()) {
+      const field = `aliases.packages.${ecosystem}[${i}]`;
+      const found = alias.name.endsWith('/*')
+        ? owner(
+            shippedNames(ecosystem).find((p) => p.name.startsWith(alias.name.slice(0, -1)))?.id,
+            field,
+          )
+        : owner(kb.lookupPackage(ecosystem, alias.name)?.vendor.id, field);
+      if (found) return found;
+    }
+  }
+  // A named constructor sink matches its export name in any module, and the
+  // first vendor's sink to resolve claims the call, so a local `init` would
+  // take Sentry's. Constructors are proposed upstream, where they are reviewed.
+  if ((entry.aliases.clientConstructors ?? []).length > 0) {
+    return 'aliases.clientConstructors: a local vendor cannot declare client constructors; propose them for the knowledge base';
+  }
+  return undefined;
+}
+
 const MAX_ZONE_AHEAD_MS = 14 * 3_600_000;
 
 /**
@@ -262,10 +360,15 @@ export function checkFacts(parsed: ParsedFacts, kb: KnowledgeBase, now: Date): F
       timing.reason ??
       textProblem(local) ??
       (localIds.has(id) ? 'repeats the id of an earlier local vendor' : undefined) ??
-      entryIssues(local.entry)[0]?.message ??
+      (acceptedLocals.length >= MAX_LOCAL_VENDORS
+        ? `more than ${MAX_LOCAL_VENDORS} local vendors; contribute some upstream`
+        : undefined) ??
+      sizeProblem(local.entry) ??
+      entryIssues(local.entry)[0]?.redacted ??
+      shippedClaim(local.entry, kb) ??
       collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
         (issue) => issue.vendorId === id,
-      )?.message;
+      )?.redacted;
     if (reason) {
       out.push({ ...base, state: 'rejected', reason: safeIssue(reason) });
       continue;
@@ -379,9 +482,14 @@ function dpfProblem(fact: RepositoryFact): string | undefined {
  */
 function textProblem(value: unknown): string | undefined {
   for (const text of strings(value)) {
+    // Newlines included: every field is rendered on one line, in a table
+    // cell or a heading, and a newline there starts a new block.
     // biome-ignore lint/suspicious/noControlCharactersInRegex: the check is for control characters
-    if (/[\u0000-\u001f\u007f]/.test(text.replace(/[\n\t]/g, ' '))) {
-      return 'contains a control character';
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(text)) {
+      return 'contains a control or layout character';
+    }
+    if (/^https?:/i.test(text) && !SAFE_URL.test(text)) {
+      return 'contains a URL with a character that would end a link in rendered output';
     }
     if (findForbiddenClaims(text).length > 0) {
       return 'uses a word this tool does not use about a vendor (see references/language-rules.md)';
@@ -389,6 +497,9 @@ function textProblem(value: unknown): string | undefined {
   }
   return undefined;
 }
+
+/** An https URL with no character that ends a markdown link or an HTML attribute. */
+const SAFE_URL = /^https:\/\/[^\s()<>"'`\\[\]{}|^]+$/;
 
 function* strings(value: unknown): Generator<string> {
   if (typeof value === 'string') yield value;
@@ -462,7 +573,21 @@ function lineOf(text: string, offset: number): number {
  * constrain: both are the file's own text.
  */
 function safeIssue(message: string): string {
-  return message.replace(/(['"])([^'"]*)\1/g, (whole, quote: string, text: string) =>
-    /^[\w.@/*:$-]{1,80}$/.test(text) ? whole : `${quote}(not shown)${quote}`,
-  );
+  // Quoting is not a boundary: a value can contain the quote character, and
+  // then pairs match across it. Unless every quoted span is a plain name and
+  // nothing outside them holds a quote, everything from the first quote to the
+  // last is hidden.
+  const spans = [...message.matchAll(/(['"])([^'"]*)\1/g)];
+  const rest = message.replace(/(['"])([^'"]*)\1/g, '');
+  // A plain name is still the file's word: one the claims contract forbids
+  // (a key named `unlawful`) is hidden like any other text.
+  const quotable = (text: string) =>
+    /^[\w.@/*:$-]{1,80}$/.test(text) && findForbiddenClaims(text).length === 0;
+  if (!/['"]/.test(rest) && spans.every((m) => quotable(m[2] ?? ''))) {
+    return message;
+  }
+  const first = message.search(/['"]/);
+  const last = Math.max(message.lastIndexOf('"'), message.lastIndexOf("'"));
+  const quote = message[first];
+  return `${message.slice(0, first)}${quote}(not shown)${quote}${message.slice(last + 1)}`;
 }

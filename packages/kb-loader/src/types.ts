@@ -41,7 +41,12 @@ export interface VendorEntry {
   };
   legal: {
     dpa: { available: boolean; url?: string; type?: string; lastChecked?: string };
-    subprocessors?: { url: string; listType?: string; notifications?: string };
+    subprocessors?: {
+      url: string;
+      listType?: string;
+      notifications?: string;
+      lastChecked?: string;
+    };
     transferMechanisms: {
       mechanism: TransferMechanismKind;
       dpfCertified?: boolean;

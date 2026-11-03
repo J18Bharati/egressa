@@ -391,7 +391,7 @@ describe('checkFacts: local vendors', () => {
           ],
         ),
       )[0],
-    ).toMatch(/already claimed by "stripe"/);
+    ).toMatch(/already (?:claimed|resolved) by (?:the knowledge base vendor )?"stripe"/);
   });
 
   it('refuses a draft failing the vendor schema, without quoting it', () => {

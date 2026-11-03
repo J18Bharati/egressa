@@ -1,5 +1,12 @@
 import type { Finding, ScanResult } from '@egressa/core';
-import { DISCLAIMER, displayName, isReferenceOnly } from '@egressa/core';
+import {
+  DISCLAIMER,
+  displayName,
+  isReferenceOnly,
+  markdownText,
+  markdownUrl,
+  plainText,
+} from '@egressa/core';
 
 /**
  * Markdown summary, shared by `--format markdown` and the MCP server's
@@ -34,8 +41,8 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     lines.push('| --- | --- | --- | --- | --- | --- |');
     for (const f of shown) {
       lines.push(
-        `| ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''} | ${reasonCell(f)} ` +
-          `| ${f.transfer?.jurisdictions.join(', ') ?? 'unknown'} ` +
+        `| ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''} | ${reasonCell(f)} ` +
+          `| ${f.transfer ? inert(f.transfer.jurisdictions.join(', ')) : 'unknown'} ` +
           `| ${euRegionCell(f)} | \`${f.ruleId}\` | ${f.confidence} |`,
       );
     }
@@ -47,16 +54,20 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
   }
 
   for (const f of shown) {
-    lines.push(`### ${displayName(f)}${isReferenceOnly(f) ? ' (named, not called)' : ''}`, '');
+    lines.push(
+      `### ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''}`,
+      '',
+    );
     if (f.transfer) {
-      lines.push(`- Processing: ${f.transfer.jurisdictions.join(', ')}`);
+      lines.push(`- Processing: ${inert(f.transfer.jurisdictions.join(', '))}`);
       lines.push(`- EU region: ${euRegionCell(f)}`);
-      if (f.transfer.dpaUrl) lines.push(`- [Data processing agreement](${f.transfer.dpaUrl})`);
+      if (f.transfer.dpaUrl)
+        lines.push(`- [Data processing agreement](${markdownUrl(f.transfer.dpaUrl)})`);
       if (f.transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${f.transfer.subprocessorsUrl})`);
+        lines.push(`- [Sub-processors](${markdownUrl(f.transfer.subprocessorsUrl)})`);
       }
       lines.push(`- Entry last verified: ${f.transfer.lastVerified}`);
-      if (f.transfer.disputed) lines.push(`- **Disputed:** ${f.transfer.disputed.summary}`);
+      if (f.transfer.disputed) lines.push(`- **Disputed:** ${inert(f.transfer.disputed.summary)}`);
     }
     lines.push('', 'Evidence:', '');
     for (const e of f.evidence.slice(0, 5)) {
@@ -123,22 +134,12 @@ function euRegionCell(finding: Finding): string {
  * load an image or leave its list item.
  */
 function inert(text: string): string {
-  return plain(text).replace(/[\\`*_{}[\]()#+!<>|@]/g, '\\$&');
+  return markdownText(text);
 }
 
 /** A path as a code span: no markup, no autolink, no mention inside it. */
 function codeSpan(text: string): string {
-  return `\`${plain(text).replace(/`/g, "'")}\``;
-}
-
-/** Control and bidi-override characters become spaces, so a line stays one line, read in order. */
-function plain(text: string): string {
-  return Array.from(text, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    const control = code < 0x20 || (code >= 0x7f && code <= 0x9f);
-    const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
-    return control || bidi ? ' ' : ch;
-  }).join('');
+  return `\`${plainText(text).replace(/`/g, "'")}\``;
 }
 
 const MAX_WARNINGS = 20;

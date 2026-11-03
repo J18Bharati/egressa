@@ -8577,26 +8577,26 @@ var require_ignore = __commonJS({
         }
       }
       let out = EMPTY;
-      let run = [];
+      let run2 = [];
       const flush = () => {
         let lastWildcard;
-        run.forEach((token, at) => {
+        run2.forEach((token, at) => {
           if (token.wildcard) {
             lastWildcard = at;
           }
         });
-        run.forEach((token, at) => {
+        run2.forEach((token, at) => {
           if (!token.wildcard) {
             out += token.single;
             return;
           }
-          out += at === lastWildcard ? WILDCARD : `(?:(?!${run[at + 1].single})[^\\/])*`;
+          out += at === lastWildcard ? WILDCARD : `(?:(?!${run2[at + 1].single})[^\\/])*`;
         });
-        run = [];
+        run2 = [];
       };
       tokens.forEach((token) => {
         if (token.boundary === void 0) {
-          run.push(token);
+          run2.push(token);
           return;
         }
         flush();
@@ -12975,13 +12975,13 @@ function buildCrawler(options, patterns) {
   let maxDepth;
   if (options.deep !== void 0) maxDepth = Math.round(options.deep - props.depthOffset);
   const crawler = new Builder({
-    filters: [debug ? (p, isDirectory2) => {
-      const path = format2(p, isDirectory2);
+    filters: [debug ? (p, isDirectory3) => {
+      const path = format2(p, isDirectory3);
       const matches2 = matcher(path) && !ignore2(path);
       if (matches2) log(`matched ${path}`);
       return matches2;
-    } : (p, isDirectory2) => {
-      const path = format2(p, isDirectory2);
+    } : (p, isDirectory3) => {
+      const path = format2(p, isDirectory3);
       return matcher(path) && !ignore2(path);
     }],
     exclude: debug ? (_3, p) => {
@@ -13195,13 +13195,17 @@ function vendorTasks(entry, context) {
   }
   if (context.stale) {
     const sub = entry.legal.subprocessors;
-    if (sub) {
+    if (sub && !recent(sub.lastChecked, context)) {
       tasks.push(
         verifyTask({
           vendorId,
           fact: "subprocessors",
           reason: "stale-entry",
-          current: { value: sub.listType ?? "published", asOf: entry.lastVerified, url: sub.url },
+          current: {
+            value: sub.listType ?? "published",
+            asOf: sub.lastChecked ?? entry.lastVerified,
+            url: sub.url
+          },
           where: [sub.url]
         })
       );
@@ -13228,7 +13232,7 @@ var KnowledgeBaseError = class extends Error {
   constructor(file, issues) {
     super(
       issues.length === 1 ? `${file}: ${issues[0]}` : `${file}:
-${issues.map((issue) => `  - ${issue}`).join("\n")}`
+${issues.map((issue2) => `  - ${issue2}`).join("\n")}`
     );
     this.file = file;
     this.issues = issues;
@@ -13477,29 +13481,40 @@ var conformsTo = (schemaPath) => (value, issues) => {
 };
 var readVendor = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "vendor-1.0.0.json")));
 var readAdequacy = (file, schemaDir) => readValidated(file, conformsTo(join(schemaDir, "adequacy-status-1.0.0.json")));
+var PLAIN_VALUE = /^[a-z0-9@/*:._-]{1,80}$/;
+function issue(strings2, ...values) {
+  const join33 = (show) => strings2.reduce(
+    (out, text, i2) => out + text + (i2 < values.length ? show(String(values[i2])) : ""),
+    ""
+  );
+  return {
+    message: join33((v2) => v2),
+    redacted: join33((v2) => PLAIN_VALUE.test(v2) ? v2 : "(not shown)")
+  };
+}
 var EVALUATIVE = ["risky", "dangerous", "avoid", "bad ", "unsafe", "problematic"];
 function entryIssues(entry) {
   const issues = [];
-  const add = (message) => issues.push({ vendorId: entry.id, message });
+  const add = (text) => issues.push({ vendorId: entry.id, ...text });
   const primary = entry.sources.filter(
     (s2) => s2.publisher === "vendor" || s2.publisher === "regulator"
   );
   if (primary.length === 0) {
-    add("needs at least one source published by the vendor or a regulator");
+    add(issue`needs at least one source published by the vendor or a regulator`);
   }
   for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
     for (const alias of list ?? []) {
       const key = `${ecosystem}:${alias.name}`;
       if (alias.name.endsWith("/*") !== (alias.kind === "scope")) {
         add(
-          `package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`
+          issue`package alias "${key}" has kind "${alias.kind}" -- a name ending "/*" must be kind "scope", and only such a name may be`
         );
       }
       if (ecosystem === "pypi") {
         const normalised = normalisePypiName(alias.name);
         if (alias.name !== normalised || alias.name.endsWith("/*")) {
           add(
-            `pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`
+            issue`pypi alias "${alias.name}" must be written in PEP 503 normalised form ("${normalised}"), with no wildcard`
           );
         }
       }
@@ -13510,18 +13525,18 @@ function entryIssues(entry) {
     const verdict = dpfStatusVerdict(m2.observedStatus, m2.acceptQualifiedStatus !== void 0);
     if (verdict.certified !== (m2.dpfCertified === true)) {
       add(
-        `DPF record ${m2.url ?? "(no url)"}: dpfCertified is ${m2.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`
+        issue`DPF record ${m2.url ?? "(no url)"}: dpfCertified is ${m2.dpfCertified === true}, but its observed status reads as ${verdict.kind}, which means ${verdict.certified}`
       );
     }
     if (m2.acceptQualifiedStatus && verdict.kind !== "qualified") {
       add(
-        `DPF record ${m2.url ?? "(no url)"}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`
+        issue`DPF record ${m2.url ?? "(no url)"}: acceptQualifiedStatus applies only to "${DPF_STATUS_QUALIFIED}"`
       );
     }
   }
   for (const host of entry.aliases.hosts) {
     if (host.pattern.split(".").length < 2) {
-      add(`host pattern "${host.pattern}" has too few labels`);
+      add(issue`host pattern "${host.pattern}" has too few labels`);
     }
   }
   const prose = [
@@ -13533,7 +13548,7 @@ function entryIssues(entry) {
   ].join(" ").toLowerCase();
   for (const word of EVALUATIVE) {
     if (prose.includes(word)) {
-      add(`evaluative language "${word.trim()}" does not belong in the data layer`);
+      add(issue`evaluative language "${word.trim()}" does not belong in the data layer`);
     }
   }
   return issues;
@@ -13545,15 +13560,15 @@ function collisionIssues(entries) {
   const scopeOwners = /* @__PURE__ */ new Map();
   const hostOwners = /* @__PURE__ */ new Map();
   for (const entry of entries) {
-    const add = (message) => issues.push({ vendorId: entry.id, message });
-    if (vendorIds.has(entry.id)) add(`duplicate vendor id "${entry.id}"`);
+    const add = (text) => issues.push({ vendorId: entry.id, ...text });
+    if (vendorIds.has(entry.id)) add(issue`duplicate vendor id "${entry.id}"`);
     vendorIds.add(entry.id);
     for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
       for (const alias of list ?? []) {
         const key = `${ecosystem}:${alias.name}`;
         const owner = packageOwners.get(key);
         if (owner && owner !== entry.id) {
-          add(`package alias "${key}" already claimed by "${owner}"`);
+          add(issue`package alias "${key}" already claimed by "${owner}"`);
         }
         packageOwners.set(key, entry.id);
         if (alias.name.endsWith("/*")) {
@@ -13565,7 +13580,7 @@ function collisionIssues(entries) {
       const key = `${host.pattern}|${host.match}`;
       const owner = hostOwners.get(key);
       if (owner && owner !== entry.id) {
-        add(`host pattern "${host.pattern}" already claimed by "${owner}"`);
+        add(issue`host pattern "${host.pattern}" already claimed by "${owner}"`);
       }
       hostOwners.set(key, entry.id);
     }
@@ -13576,7 +13591,7 @@ function collisionIssues(entries) {
       if (other.startsWith(scope)) {
         issues.push({
           vendorId: owner,
-          message: `package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`
+          ...issue`package scope "${scope}*" swallows scope "${other}*" claimed by "${otherOwner}"`
         });
       }
     }
@@ -13585,7 +13600,7 @@ function collisionIssues(entries) {
       if (pkg.startsWith(scope)) {
         issues.push({
           vendorId: owner,
-          message: `package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`
+          ...issue`package scope "${scope}*" swallows package alias "${pkg}" claimed by "${pkgOwner}"`
         });
       }
     }
@@ -13596,7 +13611,7 @@ function collisionIssues(entries) {
     if (vendorIds.has(name) && name !== owner) {
       issues.push({
         vendorId: owner,
-        message: `package alias "${key}" is the id of vendor "${name}"`
+        ...issue`package alias "${key}" is the id of vendor "${name}"`
       });
     }
     if (ecosystem === "npm") {
@@ -13604,7 +13619,7 @@ function collisionIssues(entries) {
       if (pypiOwner && pypiOwner !== owner) {
         issues.push({
           vendorId: owner,
-          message: `"${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`
+          ...issue`"${name}" is an npm alias of "${owner}" and a pypi alias of "${pypiOwner}"`
         });
       }
     }
@@ -13612,7 +13627,7 @@ function collisionIssues(entries) {
       if (hostOwner !== owner && hostKey.split("|")[0] === name) {
         issues.push({
           vendorId: owner,
-          message: `package alias "${key}" is a host of vendor "${hostOwner}"`
+          ...issue`package alias "${key}" is a host of vendor "${hostOwner}"`
         });
       }
     }
@@ -15285,6 +15300,31 @@ var MAX_FACT_AGE_DAYS = 30;
 var FactsError = class extends Error {
   name = "FactsError";
 };
+var MAX_DEPTH = 32;
+var MAX_LOCAL_VENDORS = 20;
+var MAX_ALIASES = 50;
+function sizeProblem(entry) {
+  const packages = Object.values(entry.aliases.packages ?? {}).reduce(
+    (n2, list) => n2 + (list?.length ?? 0),
+    0
+  );
+  return entry.aliases.hosts.length > MAX_ALIASES || packages > MAX_ALIASES ? `declares more than ${MAX_ALIASES} hosts or packages` : void 0;
+}
+function nestingDepth(text) {
+  let depth = 0;
+  let max = 0;
+  let inString = false;
+  for (let i2 = 0; i2 < text.length; i2++) {
+    const ch = text[i2];
+    if (inString) {
+      if (ch === "\\") i2++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "[" || ch === "{") max = Math.max(max, ++depth);
+    else if (ch === "]" || ch === "}") depth--;
+  }
+  return max;
+}
 var MAX_FACTS_BYTES = 8 * 1048576;
 function loadFacts(root) {
   const path = join32(root, FACTS_FILE);
@@ -15296,6 +15336,9 @@ function loadFacts(root) {
   return text === null ? null : parseFacts(text, FACTS_FILE);
 }
 function parseFacts(text, label) {
+  if (nestingDepth(text) > MAX_DEPTH) {
+    throw new FactsError(`${label}: nested more than ${MAX_DEPTH} levels deep`);
+  }
   const errors = [];
   const tree = parseTree2(text, errors, {
     disallowComments: true,
@@ -15343,6 +15386,42 @@ function parseFacts(text, label) {
   return { source: label, items };
 }
 var DAY = 864e5;
+function shippedClaim(entry, kb) {
+  const owner = (id, field) => id ? `${field} is already resolved by the knowledge base vendor "${id}"` : void 0;
+  for (const [i2, host] of entry.aliases.hosts.entries()) {
+    const field = `aliases.hosts[${i2}]`;
+    const found = owner(kb.lookupHost(host.pattern)?.vendor.id, field);
+    if (found) return found;
+    if (host.match === "suffix") {
+      const below = kb.vendors.find(
+        (v2) => v2.aliases.hosts.some(
+          (h2) => h2.pattern === host.pattern || h2.pattern.endsWith(`.${host.pattern}`)
+        )
+      );
+      if (below) return owner(below.id, field);
+    }
+  }
+  const shippedNames = (ecosystem) => kb.vendors.flatMap(
+    (v2) => (v2.aliases.packages[ecosystem] ?? []).map(
+      (a2) => ({ name: a2.name, id: v2.id })
+    )
+  );
+  for (const [ecosystem, list] of Object.entries(entry.aliases.packages ?? {})) {
+    if (ecosystem !== "npm" && ecosystem !== "pypi") continue;
+    for (const [i2, alias] of (list ?? []).entries()) {
+      const field = `aliases.packages.${ecosystem}[${i2}]`;
+      const found = alias.name.endsWith("/*") ? owner(
+        shippedNames(ecosystem).find((p) => p.name.startsWith(alias.name.slice(0, -1)))?.id,
+        field
+      ) : owner(kb.lookupPackage(ecosystem, alias.name)?.vendor.id, field);
+      if (found) return found;
+    }
+  }
+  if ((entry.aliases.clientConstructors ?? []).length > 0) {
+    return "aliases.clientConstructors: a local vendor cannot declare client constructors; propose them for the knowledge base";
+  }
+  return void 0;
+}
 var MAX_ZONE_AHEAD_MS = 14 * 36e5;
 function checkFacts(parsed, kb, now) {
   const out = [];
@@ -15370,9 +15449,9 @@ function checkFacts(parsed, kb, now) {
       continue;
     }
     const timing = timingProblem(local.retrievedAt, local.expires, now);
-    const reason = timing.reason ?? textProblem(local) ?? (localIds.has(id) ? "repeats the id of an earlier local vendor" : void 0) ?? entryIssues(local.entry)[0]?.message ?? collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
-      (issue) => issue.vendorId === id
-    )?.message;
+    const reason = timing.reason ?? textProblem(local) ?? (localIds.has(id) ? "repeats the id of an earlier local vendor" : void 0) ?? (acceptedLocals.length >= MAX_LOCAL_VENDORS ? `more than ${MAX_LOCAL_VENDORS} local vendors; contribute some upstream` : void 0) ?? sizeProblem(local.entry) ?? entryIssues(local.entry)[0]?.redacted ?? shippedClaim(local.entry, kb) ?? collisionIssues([...kb.vendors, ...acceptedLocals, local.entry]).find(
+      (issue2) => issue2.vendorId === id
+    )?.redacted;
     if (reason) {
       out.push({ ...base, state: "rejected", reason: safeIssue(reason) });
       continue;
@@ -15450,8 +15529,11 @@ function dpfProblem(fact) {
 }
 function textProblem(value) {
   for (const text of strings(value)) {
-    if (/[\u0000-\u001f\u007f]/.test(text.replace(/[\n\t]/g, " "))) {
-      return "contains a control character";
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(text)) {
+      return "contains a control or layout character";
+    }
+    if (/^https?:/i.test(text) && !SAFE_URL.test(text)) {
+      return "contains a URL with a character that would end a link in rendered output";
     }
     if (findForbiddenClaims(text).length > 0) {
       return "uses a word this tool does not use about a vendor (see references/language-rules.md)";
@@ -15459,6 +15541,7 @@ function textProblem(value) {
   }
   return void 0;
 }
+var SAFE_URL = /^https:\/\/[^\s()<>"'`\\[\]{}|^]+$/;
 function* strings(value) {
   if (typeof value === "string") yield value;
   else if (Array.isArray(value)) for (const v2 of value) yield* strings(v2);
@@ -15507,10 +15590,16 @@ function lineOf(text, offset) {
   return line;
 }
 function safeIssue(message) {
-  return message.replace(
-    /(['"])([^'"]*)\1/g,
-    (whole, quote, text) => /^[\w.@/*:$-]{1,80}$/.test(text) ? whole : `${quote}(not shown)${quote}`
-  );
+  const spans = [...message.matchAll(/(['"])([^'"]*)\1/g)];
+  const rest = message.replace(/(['"])([^'"]*)\1/g, "");
+  const quotable = (text) => /^[\w.@/*:$-]{1,80}$/.test(text) && findForbiddenClaims(text).length === 0;
+  if (!/['"]/.test(rest) && spans.every((m2) => quotable(m2[2] ?? ""))) {
+    return message;
+  }
+  const first = message.search(/['"]/);
+  const last = Math.max(message.lastIndexOf('"'), message.lastIndexOf("'"));
+  const quote = message[first];
+  return `${message.slice(0, first)}${quote}(not shown)${quote}${message.slice(last + 1)}`;
 }
 function resolveRegion(vendor, raw) {
   const code = raw.trim().toLowerCase();
@@ -15686,6 +15775,11 @@ function applyOverlay(baseline, checked, options) {
         )
       }
     };
+    const effect = mostFavourableRule(local, baseline) ? "loosens" : "tightens";
+    if (effect === "loosens" && !trustFacts) {
+      items.push({ ...item, state: "loosening-not-trusted", effect });
+      continue;
+    }
     changed.set(local.id, local);
     localIds.add(local.id);
     add(byVendor, local.id, {
@@ -15695,9 +15789,9 @@ function applyOverlay(baseline, checked, options) {
       retrievedAt: item.local.retrievedAt,
       verifiedBy: item.local.verifiedBy,
       expiresOn: item.expiresOn ?? "",
-      effect: "neutral"
+      effect
     });
-    items.push({ ...item, state: "applied", effect: "neutral" });
+    items.push({ ...item, state: "applied", effect });
   }
   for (const item of checked.items) {
     if (item.kind === "local-entry") continue;
@@ -15718,7 +15812,7 @@ function applyOverlay(baseline, checked, options) {
       continue;
     }
     const after = withFact(before, fact);
-    if (sameLegal(before, after)) {
+    if (sameLegal(before, after) && !fresher(before, fact)) {
       items.push({ ...item, state: "redundant", effect: "neutral" });
       continue;
     }
@@ -15777,10 +15871,9 @@ function withFact(vendor, fact) {
         observedStatus,
         ...accepted ? { acceptQualifiedStatus: accepted } : {}
       };
-      const mechanisms = vendor.legal.transferMechanisms;
-      const same = mechanisms.some((m2) => m2.mechanism === "DPF" && m2.url === participantUrl);
-      const kept = mechanisms.filter(
-        (m2) => m2.mechanism !== "DPF" || same && m2.url !== participantUrl
+      const wholeVendor = isNotListed(observedStatus);
+      const kept = vendor.legal.transferMechanisms.filter(
+        (m2) => m2.mechanism !== "DPF" || !wholeVendor && m2.url !== participantUrl
       );
       return { ...vendor, legal: { ...vendor.legal, transferMechanisms: [...kept, record2] } };
     }
@@ -15802,7 +15895,11 @@ function withFact(vendor, fact) {
         ...vendor,
         legal: {
           ...vendor.legal,
-          subprocessors: { ...vendor.legal.subprocessors, url: fact.value.url }
+          subprocessors: {
+            ...vendor.legal.subprocessors,
+            url: fact.value.url,
+            lastChecked: fact.source.retrievedAt
+          }
         }
       };
   }
@@ -15811,9 +15908,22 @@ function sameLegal(a2, b2) {
   const strip = (v2) => canonical({
     dpa: { ...v2.legal.dpa, lastChecked: void 0 },
     sub: v2.legal.subprocessors?.url,
-    mechanisms: v2.legal.transferMechanisms.map((m2) => canonical({ ...m2, lastChecked: void 0 })).sort()
+    mechanisms: v2.legal.transferMechanisms.map(
+      (m2) => canonical({
+        ...m2,
+        lastChecked: void 0,
+        observedStatus: m2.observedStatus?.trim().replace(/\s+/g, " ").toLowerCase()
+      })
+    ).sort()
   });
   return strip(a2) === strip(b2);
+}
+function fresher(vendor, fact) {
+  const { legal } = vendor;
+  const checked = fact.fact === "dpf" ? legal.transferMechanisms.find(
+    (m2) => m2.mechanism === "DPF" && m2.url === fact.value.participantUrl
+  )?.lastChecked : fact.fact === "dpa" ? legal.dpa.lastChecked : legal.subprocessors?.lastChecked;
+  return checked === void 0 || fact.source.retrievedAt > checked;
 }
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -15822,6 +15932,14 @@ function canonical(value) {
     return `{${entries.map(([k2, v2]) => `${JSON.stringify(k2)}:${canonical(v2)}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+function mostFavourableRule(entry, kb) {
+  const regions = [null, ...(entry.regions ?? []).map((r3) => resolveRegion(entry, r3.code))];
+  return regions.some((region) => LOOSE_RULES.has(classifyExposure(entry, kb, { region }).ruleId));
+}
+var LOOSE_RULES = /* @__PURE__ */ new Set(["transfer/adequate-country-egress", "transfer/eu-processing"]);
+function isNotListed(status) {
+  return dpfStatusVerdict(status, false).kind === "not-listed";
 }
 function effectOf(before, after) {
   const was = vendorIsDpfCertified(before);
@@ -16633,6 +16751,23 @@ function displayName(finding) {
 function isReferenceOnly(finding) {
   return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
 }
+function markdownText(text) {
+  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, "\\$&");
+}
+function plainText(text) {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control = code < 32 || code >= 127 && code <= 159 || code === 8232 || code === 8233;
+    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
+    return control || bidi ? " " : ch;
+  }).join("");
+}
+function markdownUrl(url) {
+  return plainText(url).trim().replace(
+    /[\s()<>"'`\\[\]{}|^*_]/g,
+    (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
 var SARIF_VERSION = "2.1.0";
 var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
 var INFORMATION_URI = "https://github.com/egressa-dev/egressa";
@@ -16717,21 +16852,27 @@ function buildHelpMarkdown(id, result) {
   if (vendors.length > 0) {
     lines.push("", "#### Vendors matched in this scan", "");
     for (const { vendor, transfer } of vendors) {
-      lines.push(`**${vendor.name}** \u2014 processing: ${transfer.jurisdictions.join(", ")}`);
+      lines.push(
+        `**${markdownText(vendor.name)}** \u2014 processing: ${markdownText(transfer.jurisdictions.join(", "))}`
+      );
       if (transfer.euRegion.available) {
         lines.push(`- EU region: available (${transfer.euRegion.scope ?? "scope not recorded"})`);
       }
-      if (transfer.dpaUrl) lines.push(`- [Data processing agreement](${transfer.dpaUrl})`);
+      if (transfer.dpaUrl) {
+        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})`);
+      }
       if (transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${transfer.subprocessorsUrl})`);
+        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})`);
       }
       for (const source of transfer.kbSources) {
-        lines.push(`- Source: [${source.title}](${source.url}) (${source.publisher})`);
+        lines.push(
+          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})`
+        );
       }
       lines.push(`- Last verified: ${transfer.lastVerified}`);
       if (transfer.disputed) {
         lines.push(
-          `- **Disputed**: ${transfer.disputed.summary} ([issue](${transfer.disputed.issueUrl}))`
+          `- **Disputed**: ${markdownText(transfer.disputed.summary)} ([issue](${markdownUrl(transfer.disputed.issueUrl)}))`
         );
       }
       lines.push("");
@@ -16774,17 +16915,17 @@ function toResult(finding, result) {
 function confidencePrefix(finding) {
   return finding.confidence === "high" ? "" : `[${finding.confidence} confidence] `;
 }
-function buildMessageText(finding) {
-  const vendor = displayName(finding);
+function buildMessageText(finding, render2 = plainText) {
+  const vendor = render2(displayName(finding));
   const where = finding.transfer ? ` (processing: ${finding.transfer.jurisdictions.join(", ")})` : "";
   const count = finding.evidence.length > 1 ? ` ${finding.evidence.length} references in this repository.` : "";
   const referenceOnly = isReferenceOnly(finding) ? " Named, not called." : "";
   return `${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}`;
 }
 function buildMessage(finding) {
-  const text = buildMessageText(finding);
+  const text = buildMessageText(finding, markdownText);
   if (!finding.transfer?.dpaUrl) return text;
-  return `${text} [DPA](${finding.transfer.dpaUrl})`;
+  return `${text} [DPA](${markdownUrl(finding.transfer.dpaUrl)})`;
 }
 function toSarifLocation(evidence) {
   return {
@@ -16821,7 +16962,7 @@ function confidenceForKind(kind, raw) {
 function strongest(values) {
   return values.reduce((best, v2) => ORDER[v2] > ORDER[best] ? v2 : best, "low");
 }
-var MAX_DEPTH = 3;
+var MAX_DEPTH2 = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
   const input = trimControls(prefix.replace(/[\t\n\r]/g, ""), !hasMore);
   const scheme = SCHEME.exec(input);
@@ -17274,7 +17415,7 @@ function toHit(resolution, node, index, filePath, confidence, kind) {
   };
 }
 function resolveArgument(node, configKeys, bindings, depth, context) {
-  if (depth > MAX_DEPTH) {
+  if (depth > MAX_DEPTH2) {
     return { kind: "unresolved", reason: "constant chain too deep to resolve" };
   }
   switch (node.type) {
@@ -18080,10 +18221,10 @@ function scanLine(line, state, language) {
       const delim = state.tomlMulti;
       if (delim === '"""' && line[i2] === "\\") i2 += 2;
       else if (line.startsWith(delim, i2)) {
-        let run = 3;
-        while (run < 5 && line[i2 + run] === delim[0]) run++;
+        let run2 = 3;
+        while (run2 < 5 && line[i2 + run2] === delim[0]) run2++;
         state.tomlMulti = void 0;
-        i2 += run;
+        i2 += run2;
       } else i2++;
       continue;
     }
@@ -18276,7 +18417,11 @@ function withVerification(findings, kb, now, staleVendorIds, overlay) {
       });
       return [{ ...finding, verification: [task] }];
     }
-    const tasks = [...kb.verifyTasks(vendor, now), ...expiredFactTasks(vendor, overlay)];
+    const shipped = overlay?.baseline.byId.get(vendor.id);
+    const tasks = [
+      ...kb.verifyTasks(vendor, now),
+      ...expiredFactTasks(shipped ?? vendor, overlay)
+    ].map((task) => overlay ? shippedUrlsOnly(task, shipped) : task);
     if (!staleVendorIds.has(vendor.id)) {
       return [tasks.length > 0 ? { ...finding, verification: tasks } : finding];
     }
@@ -18289,7 +18434,9 @@ function expiredFactTasks(vendor, overlay) {
   return (overlay?.expiredByVendor.get(vendor.id) ?? []).flatMap((item) => {
     const kind = item.fact?.fact;
     if (!kind) return [];
-    const dpf = vendor.legal.transferMechanisms.find((m2) => m2.mechanism === "DPF");
+    const records = vendor.legal.transferMechanisms.filter((m2) => m2.mechanism === "DPF");
+    const cited = item.fact?.fact === "dpf" ? item.fact.value.participantUrl : void 0;
+    const dpf = records.find((m2) => m2.url === cited) ?? (records.length === 1 ? records[0] : void 0);
     const url = kind === "dpf" ? dpf?.url ?? null : kind === "dpa" ? vendor.legal.dpa.url ?? null : vendor.legal.subprocessors?.url ?? null;
     return [
       verifyTask({
@@ -18297,9 +18444,35 @@ function expiredFactTasks(vendor, overlay) {
         fact: kind,
         reason: "overlay-expired",
         current: { value: null, asOf: item.expiresOn ?? null, url },
-        where: url ? [url] : kind === "dpf" ? ["https://www.dataprivacyframework.gov/list"] : []
+        where: url ? [url] : kind === "dpf" ? [DPF_LIST] : []
       })
     ];
+  });
+}
+var DPF_LIST = "https://www.dataprivacyframework.gov/list";
+function entryUrls(vendor) {
+  if (!vendor) return /* @__PURE__ */ new Set();
+  const { legal } = vendor;
+  return new Set(
+    [
+      legal.dpa.url,
+      legal.subprocessors?.url,
+      vendor.processing.euRegion.docUrl,
+      ...legal.transferMechanisms.map((m2) => m2.url),
+      ...vendor.sources.map((source) => source.url)
+    ].filter((url) => typeof url === "string")
+  );
+}
+function shippedUrlsOnly(task, shipped) {
+  const known = entryUrls(shipped);
+  const where = task.where.filter((url2) => known.has(url2) || url2 === DPF_LIST);
+  const url = task.current.url !== null && known.has(task.current.url) ? task.current.url : null;
+  if (url === task.current.url && where.length === task.where.length) return task;
+  const { id: _id, ...rest } = task;
+  return verifyTask({
+    ...rest,
+    current: { ...task.current, url },
+    where: where.length === 0 && task.fact === "dpf" ? [DPF_LIST] : where
   });
 }
 function staleNote(finding, vendor, tasks) {
@@ -18331,7 +18504,12 @@ function buildFinding(ruleId, vendor, signals, classified, region, kb, overlay) 
   const primary = evidence[0];
   const applied = vendor ? overlay?.byVendor.get(vendor.id) ?? [] : [];
   const local = vendor !== null && overlay?.localIds.has(vendor.id) === true;
-  const transfer = vendor ? { ...toTransferFacts(vendor), ...applied.length > 0 ? { repositoryFacts: applied } : {} } : null;
+  const shippedEntry = vendor && !local ? overlay?.baseline.byId.get(vendor.id) : void 0;
+  const transfer = vendor ? {
+    ...toTransferFacts(vendor),
+    ...shippedEntry ? shippedLinks(shippedEntry) : {},
+    ...applied.length > 0 ? { repositoryFacts: applied } : {}
+  } : null;
   const unmappedRegions = signals.flatMap(
     (s2) => s2.region !== void 0 && isUnmappedRegion(vendor, s2.region) ? [s2.region] : []
   );
@@ -18344,7 +18522,9 @@ function buildFinding(ruleId, vendor, signals, classified, region, kb, overlay) 
   ];
   const exposure = computed && factInputs.length > 0 ? { ...computed, inputs: [...computed.inputs, ...factInputs] } : computed;
   const shippedVendor = vendor && applied.some((a2) => a2.fact !== "local-entry") ? overlay?.baseline.byId.get(vendor.id) : void 0;
-  const baselineRule = shippedVendor ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId : void 0;
+  const baselineRule = local ? signals.some(
+    (s2) => s2.kind !== "dependency" && !(s2.kind !== "infrastructure" && isReservedHost(s2.matchedOn))
+  ) ? "transfer/unknown-vendor-egress" : void 0 : shippedVendor ? classifyExposure(shippedVendor, overlay?.baseline ?? kb, { region }).ruleId : void 0;
   return {
     id: fingerprint(
       vendor?.id ?? `unknown:${signals[0]?.matchedOn ?? ""}`,
@@ -18365,7 +18545,13 @@ function buildFinding(ruleId, vendor, signals, classified, region, kb, overlay) 
     confidence,
     signals,
     evidence,
-    remediation: buildRemediation(ruleId, vendor),
+    // Links come from the shipped entry only. A fact's URLs are the
+    // repository's, and a local vendor's are all the repository's: it gets
+    // the request-an-entry link instead.
+    remediation: buildRemediation(
+      ruleId,
+      local ? null : vendor ? overlay?.baseline.byId.get(vendor.id) ?? vendor : null
+    ),
     suppressed: false,
     suppression: null,
     ...baselineRule !== void 0 && baselineRule !== ruleId ? { baselineRuleId: baselineRule } : {}
@@ -18389,6 +18575,12 @@ function toEvidence(signal, vendor) {
 function byStrength(a2, b2) {
   const rank = (e2) => (e2.confidence === "high" ? 4 : e2.confidence === "medium" ? 2 : 0) + (e2.kind === "callsite" ? 1 : 0);
   return rank(b2) - rank(a2) || a2.file.localeCompare(b2.file) || a2.startLine - b2.startLine;
+}
+function shippedLinks(vendor) {
+  return {
+    dpaUrl: vendor.legal.dpa.url,
+    subprocessorsUrl: vendor.legal.subprocessors?.url
+  };
 }
 function toTransferFacts(vendor) {
   return {
@@ -18603,16 +18795,18 @@ function scan(options) {
     }
   }
   const engine = includeCallsites ? { callsite: degraded ? "unavailable" : "oxc", degraded } : { callsite: "disabled", degraded: false };
+  const before = /* @__PURE__ */ new Map();
   if (overlay) {
     for (const signal of signals) {
       if (signal.vendorId && overlay.localIds.has(signal.vendorId) && signal.confidence === "high") {
+        before.set(signal, signal.confidence);
         signal.confidence = "medium";
       }
     }
   }
   const filtered = signals.filter((signal) => {
     if (onlyVendor && (!signal.vendorId || !onlyVendor.includes(signal.vendorId))) return false;
-    return meetsConfidence(signal.confidence, minConfidence);
+    return meetsConfidence(before.get(signal) ?? signal.confidence, minConfidence);
   });
   const merged = mergeSignals(filtered, { kb, now, ...overlay ? { overlay } : {} });
   const reclassified = merged.filter((f3) => f3.baselineRuleId !== void 0).length;
@@ -18687,11 +18881,14 @@ function factsSummary(overlay, findings) {
     rejected: count("rejected"),
     localVendors: overlay.localIds.size,
     findingsDependingOnFacts: active.filter((f3) => (f3.transfer?.repositoryFacts?.length ?? 0) > 0).length,
+    // Measured on the finding, not on the fact's label: a fact can loosen in
+    // general and still leave this repository's finding stricter.
     loosened: active.filter(
-      (f3) => f3.baselineRuleId !== void 0 && (f3.transfer?.repositoryFacts ?? []).some((r3) => r3.effect === "loosens")
+      (f3) => f3.baselineRuleId !== void 0 && LEVEL[RULES[f3.ruleId].defaultLevel] < LEVEL[RULES[f3.baselineRuleId].defaultLevel]
     ).length
   };
 }
+var LEVEL = { note: 1, warning: 2, error: 3 };
 var ORDER2 = { low: 0, medium: 1, high: 2 };
 function meetsConfidence(value, floor) {
   return ORDER2[value] >= ORDER2[floor];
@@ -18760,6 +18957,9 @@ var explainCommand = defineCommand({
   }
 });
 
+// src/commands/facts.ts
+import { statSync as statSync3 } from "fs";
+
 // src/emit.ts
 function writeOut(text) {
   return new Promise((resolve5, reject) => {
@@ -18815,13 +19015,24 @@ var factsCommand = defineCommand({
 `);
       process.exit(EXIT.KB);
     }
+    const root = String(args.root);
+    if (!isDirectory(root)) {
+      process.stderr.write(`egressa: ${root} is not a directory
+`);
+      process.exit(EXIT.USAGE);
+    }
     let checked;
     try {
-      const parsed = loadFacts(String(args.root));
+      const parsed = loadFacts(root);
       checked = parsed ? applyOverlay(kb, checkFacts(parsed, kb, /* @__PURE__ */ new Date()), {
         trustFacts: args["trust-facts"] === true
       }) : null;
     } catch (error) {
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}
+`);
+        process.exit(EXIT.KB);
+      }
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}
 `);
@@ -18833,6 +19044,13 @@ var factsCommand = defineCommand({
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
   }
 });
+function isDirectory(path) {
+  try {
+    return statSync3(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
 function publicItem(item) {
   const { local: _local, ...rest } = item;
   return rest;
@@ -18863,7 +19081,7 @@ ${lines.join("\n")}
 }
 
 // src/commands/scan.ts
-import { statSync as statSync3, writeFileSync } from "fs";
+import { statSync as statSync4, writeFileSync } from "fs";
 import { resolve as resolve4 } from "path";
 
 // src/format/human.ts
@@ -18928,7 +19146,7 @@ function formatHuman(result, options) {
 }
 function formatFinding(finding, c3) {
   const marker = finding.severity === "warning" ? c3("yellow", "!") : finding.severity === "error" ? c3("red", "x") : c3("blue", "i");
-  const vendorName = displayName(finding);
+  const vendorName = printable(displayName(finding));
   const regions = [
     ...new Set(
       finding.evidence.filter((e2) => e2.region).map((e2) => e2.regionUnmapped ? `${e2.region} [unmapped]` : e2.region)
@@ -18951,7 +19169,7 @@ function formatFinding(finding, c3) {
       lines.push(c3("dim", "    relies on an adequacy decision that could be withdrawn"));
     }
     if (finding.transfer.disputed) {
-      lines.push(c3("yellow", `    disputed:   ${finding.transfer.disputed.summary}`));
+      lines.push(c3("yellow", `    disputed:   ${printable(finding.transfer.disputed.summary)}`));
     }
     lines.push(c3("dim", `    verified:   ${finding.transfer.lastVerified}`));
   }
@@ -19015,7 +19233,7 @@ function formatMarkdown(result, options = {}) {
     lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const f3 of shown) {
       lines.push(
-        `| ${displayName(f3)}${isReferenceOnly(f3) ? " (named, not called)" : ""} | ${reasonCell(f3)} | ${f3.transfer?.jurisdictions.join(", ") ?? "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
+        `| ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""} | ${reasonCell(f3)} | ${f3.transfer ? inert(f3.transfer.jurisdictions.join(", ")) : "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
       );
     }
     lines.push("");
@@ -19024,16 +19242,20 @@ function formatMarkdown(result, options = {}) {
     lines.push(`_${result.findings.length - shown.length} further finding(s) not shown._`, "");
   }
   for (const f3 of shown) {
-    lines.push(`### ${displayName(f3)}${isReferenceOnly(f3) ? " (named, not called)" : ""}`, "");
+    lines.push(
+      `### ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""}`,
+      ""
+    );
     if (f3.transfer) {
-      lines.push(`- Processing: ${f3.transfer.jurisdictions.join(", ")}`);
+      lines.push(`- Processing: ${inert(f3.transfer.jurisdictions.join(", "))}`);
       lines.push(`- EU region: ${euRegionCell(f3)}`);
-      if (f3.transfer.dpaUrl) lines.push(`- [Data processing agreement](${f3.transfer.dpaUrl})`);
+      if (f3.transfer.dpaUrl)
+        lines.push(`- [Data processing agreement](${markdownUrl(f3.transfer.dpaUrl)})`);
       if (f3.transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${f3.transfer.subprocessorsUrl})`);
+        lines.push(`- [Sub-processors](${markdownUrl(f3.transfer.subprocessorsUrl)})`);
       }
       lines.push(`- Entry last verified: ${f3.transfer.lastVerified}`);
-      if (f3.transfer.disputed) lines.push(`- **Disputed:** ${f3.transfer.disputed.summary}`);
+      if (f3.transfer.disputed) lines.push(`- **Disputed:** ${inert(f3.transfer.disputed.summary)}`);
     }
     lines.push("", "Evidence:", "");
     for (const e2 of f3.evidence.slice(0, 5)) {
@@ -19072,18 +19294,10 @@ function euRegionCell(finding) {
   return `available (${eu.scope ?? "scope not recorded"})`;
 }
 function inert(text) {
-  return plain(text).replace(/[\\`*_{}[\]()#+!<>|@]/g, "\\$&");
+  return markdownText(text);
 }
 function codeSpan(text) {
-  return `\`${plain(text).replace(/`/g, "'")}\``;
-}
-function plain(text) {
-  return Array.from(text, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    const control = code < 32 || code >= 127 && code <= 159;
-    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
-    return control || bidi ? " " : ch;
-  }).join("");
+  return `\`${plainText(text).replace(/`/g, "'")}\``;
 }
 var MAX_WARNINGS = 20;
 
@@ -19096,9 +19310,9 @@ function toStringArray(value) {
   if (Array.isArray(value)) return value.map(String);
   return [String(value)];
 }
-function isDirectory(path) {
+function isDirectory2(path) {
   try {
-    return statSync3(path).isDirectory();
+    return statSync4(path).isDirectory();
   } catch {
     return false;
   }
@@ -19169,7 +19383,7 @@ var scanCommand = defineCommand({
   },
   async run({ args, rawArgs: rawArgs2 }) {
     const root = resolve4(String(args.path ?? "."));
-    if (!isDirectory(root)) {
+    if (!isDirectory2(root)) {
       process.stderr.write(`egressa: ${root} is not a directory
 `);
       process.exit(EXIT.USAGE);
@@ -19188,6 +19402,11 @@ var scanCommand = defineCommand({
     try {
       facts = loadFacts(root);
     } catch (error) {
+      if (error instanceof KnowledgeBaseError) {
+        process.stderr.write(`egressa: could not load the knowledge base: ${error.message}
+`);
+        process.exit(EXIT.KB);
+      }
       if (!(error instanceof FactsError)) throw error;
       process.stderr.write(`egressa: ${error.message}
 `);
@@ -19461,10 +19680,14 @@ Run \`egressa ${command} --help\` for the options.
     process.exit(EXIT.USAGE);
   }
 }
-runMain(main, { rawArgs }).catch((error) => {
-  process.stderr.write(`egressa: ${error.message}
+var metaOnly = rawArgs.includes("--help") || rawArgs.includes("-h") || rawArgs.length === 1 && rawArgs[0] === "--version";
+var run = metaOnly ? runMain(main, { rawArgs }) : runCommand(main, { rawArgs });
+run.catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`egressa: ${message}
 `);
-  process.exit(EXIT.INTERNAL);
+  const usage = error instanceof Error && error.name === "CLIError";
+  process.exit(usage ? EXIT.USAGE : EXIT.INTERNAL);
 });
 export {
   withDefaultCommand

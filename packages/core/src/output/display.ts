@@ -38,3 +38,40 @@ export function isReferenceOnly(finding: Finding): boolean {
     !finding.evidence.some((e) => e.kind === 'callsite')
   );
 }
+
+/**
+ * Text from a finding, made inert for markdown. A vendor name, a note or a
+ * title can come from the scanned repository (a local vendor entry), and
+ * markdown output is posted as a PR comment and shown in GitHub's alert view.
+ * Control, line-break and bidi characters become spaces, so the text stays on
+ * its line in order, and markdown punctuation is escaped, so it cannot open a
+ * heading, a table cell, an image or a link.
+ */
+export function markdownText(text: string): string {
+  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, '\\$&');
+}
+
+/** Control and bidi-override characters as spaces. */
+export function plainText(text: string): string {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control =
+      code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
+    const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+    return control || bidi ? ' ' : ch;
+  }).join('');
+}
+
+/**
+ * A URL as a markdown link destination. Every character that could end the
+ * destination or the link, or start markup after it, is percent-encoded, so a
+ * URL that contains `)` cannot add text after its own link.
+ */
+export function markdownUrl(url: string): string {
+  return plainText(url)
+    .trim()
+    .replace(
+      /[\s()<>"'`\\[\]{}|^*_]/g,
+      (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, '0')}`,
+    );
+}

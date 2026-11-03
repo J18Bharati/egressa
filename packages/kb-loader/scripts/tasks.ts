@@ -11,11 +11,18 @@ import { knowledgeBaseTasks, loadKnowledgeBase } from '../src/index.js';
 const args = process.argv.slice(2);
 const at = args.indexOf('--as-of');
 const asOfArg = at >= 0 ? args[at + 1] : undefined;
-if (at >= 0 && (asOfArg === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(asOfArg))) {
-  process.stderr.write('kb:tasks: --as-of takes a date, YYYY-MM-DD\n');
+const asOf = asOfArg ? new Date(`${asOfArg}T00:00:00Z`) : new Date();
+// Round-tripped, because Date rolls 2026-02-30 over to March rather than refusing it.
+if (
+  at >= 0 &&
+  (asOfArg === undefined ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(asOfArg) ||
+    Number.isNaN(asOf.getTime()) ||
+    asOf.toISOString().slice(0, 10) !== asOfArg)
+) {
+  process.stderr.write('kb:tasks: --as-of takes a calendar date, YYYY-MM-DD\n');
   process.exit(2);
 }
-const asOf = asOfArg ? new Date(`${asOfArg}T00:00:00Z`) : new Date();
 
 const kb = loadKnowledgeBase({ kbPath: join(process.cwd(), 'kb') });
 const tasks = knowledgeBaseTasks(kb, asOf);
