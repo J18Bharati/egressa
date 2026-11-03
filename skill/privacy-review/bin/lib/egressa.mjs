@@ -15983,7 +15983,9 @@ function factRefText(ref, render2) {
 }
 function baselineText(finding) {
   if (!finding.baselineRuleId) return null;
-  const how = loosenedByFacts(finding) ? "loosened" : "changed";
+  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
+  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+  const how = now < before ? "loosened" : now > before ? "tightened" : "changed";
   return `${how} by ${FACTS_MARKER}; without them this finding is ${finding.baselineRuleId}`;
 }
 function confidenceForDependency(record2, alias) {
@@ -18752,6 +18754,161 @@ function publicOverlayItem(item) {
   const { local: _local, ...rest } = item;
   return rest;
 }
+var ContributionError = class extends Error {
+};
+var DRAFTED_BY = "contributor draft from repository facts; maintainer to re-verify";
+function contribution(vendorId, checked, kb, options = {}) {
+  const current = checked.items.filter((i2) => i2.state === "current");
+  const local = current.find((i2) => i2.kind === "local-entry" && i2.local?.entry.id === vendorId);
+  const facts = current.flatMap(
+    (i2) => i2.fact && i2.fact.vendor === vendorId ? [withoutLocalDecision(i2.fact)] : []
+  );
+  const shipped = kb.byId.get(vendorId);
+  if (!local && !shipped) {
+    throw new ContributionError(
+      `${checked.source} has no current local entry for this vendor, and the knowledge base has no entry to patch`
+    );
+  }
+  if (!local && facts.length === 0) {
+    throw new ContributionError(
+      `${checked.source} has no current fact about this vendor; an expired or rejected one is not contributed`
+    );
+  }
+  const kind = local ? "new-entry" : "field-patch";
+  const base = local?.local ? { ...local.local.entry, verifiedBy: DRAFTED_BY } : shipped;
+  const changes = [];
+  let draft = base;
+  for (const fact of facts) {
+    const next = withFact(draft, fact);
+    const path = PATHS[fact.fact];
+    changes.push({
+      path,
+      from: pick(draft, path),
+      to: pick(next, path),
+      source: { url: fact.source.url, retrievedAt: fact.source.retrievedAt }
+    });
+    draft = withSource(next, fact);
+  }
+  if (kind === "field-patch") draft = { ...draft, verifiedBy: DRAFTED_BY };
+  const issues = validate2(draft, kb, kind);
+  const evidenceUrls = [...new Set(draft.sources.map((s2) => s2.url))];
+  const checklist = CHECKLIST(kind);
+  const credits = options.keepVerifiedBy ? [
+    ...new Set(
+      facts.map((f3) => f3.verifiedBy).concat(local?.local ? [local.local.verifiedBy] : [])
+    )
+  ] : [];
+  return {
+    kind,
+    vendorId,
+    draft,
+    changes: kind === "field-patch" ? changes : [],
+    issues,
+    checklist,
+    evidenceUrls,
+    body: renderBody({ kind, vendorId, draft, changes, issues, checklist, evidenceUrls, credits })
+  };
+}
+var PATHS = {
+  dpf: "legal.transferMechanisms",
+  dpa: "legal.dpa",
+  subprocessors: "legal.subprocessors"
+};
+function pick(entry, path) {
+  return path.split(".").reduce((v2, key) => v2?.[key], entry);
+}
+function withoutLocalDecision(fact) {
+  if (fact.fact !== "dpf" || !fact.acceptQualifiedStatus) return fact;
+  const { acceptQualifiedStatus: _accepted, ...rest } = fact;
+  return rest;
+}
+function withSource(entry, fact) {
+  if (entry.sources.some((s2) => s2.url === fact.source.url)) return entry;
+  const title = fact.fact === "dpf" ? `Data Privacy Framework participant record (status read as "${fact.value.observedStatus}")` : fact.fact === "dpa" ? "Data processing agreement" : "Sub-processor list";
+  return {
+    ...entry,
+    sources: [
+      ...entry.sources,
+      {
+        url: fact.source.url,
+        title,
+        publisher: fact.fact === "dpf" ? "regulator" : "vendor",
+        accessedAt: fact.source.retrievedAt
+      }
+    ]
+  };
+}
+function validate2(draft, kb, kind) {
+  const others = kb.vendors.filter((v2) => v2.id !== draft.id);
+  const before = new Set(collisionIssues(others).map((i2) => i2.message));
+  const collisions = collisionIssues([...others, draft]).filter((i2) => !before.has(i2.message));
+  const forbidden = findForbiddenClaims(JSON.stringify(draft));
+  return [
+    ...bundledSchemaIssues("vendor-1.0.0.json", null, draft).map((m2) => `schema: ${m2}`),
+    ...entryIssues(draft).map((i2) => i2.redacted),
+    ...collisions.map((i2) => i2.redacted),
+    ...forbidden.length > 0 ? ["contains a forbidden claim word"] : [],
+    ...kind === "new-entry" && kb.byId.has(draft.id) ? ["the knowledge base already has this id; contribute a field patch instead"] : []
+  ].map(safeIssue);
+}
+var CHECKLIST = (kind) => [
+  "I opened every evidence URL below myself and each one says what the draft says, as of its date.",
+  "Any DPF status is copied verbatim from the participant record, and dpfCertified follows the status table.",
+  "Every fact is clean-room authored from vendor or regulator pages, and nothing comes from a source kb/PROVENANCE.md forbids.",
+  "The draft names no person and contains nothing from my own codebase.",
+  "I license this contribution under CC-BY-4.0, like the rest of kb/.",
+  ...kind === "new-entry" ? ["Hosts and packages are ones the vendor documents, not ones seen only in my code."] : []
+];
+function renderBody(b2) {
+  const json = JSON.stringify(b2.draft, null, 2);
+  const fence = "`".repeat(Math.max(3, longestRun(json, "`") + 1));
+  const lines = [
+    `## Knowledge base ${b2.kind === "new-entry" ? "entry" : "update"}: ${b2.vendorId}`,
+    "",
+    "Drafted offline by `egressa facts contribute` from a repository facts file. It contains this one vendor's entry and the pages it cites, and nothing else from the repository. Publishing it does say that a codebase you work on uses this vendor.",
+    ""
+  ];
+  if (b2.issues.length > 0) {
+    lines.push("### Not ready: `pnpm kb:validate` would refuse it", "");
+    for (const issue2 of b2.issues) lines.push(`- ${issue2}`);
+    lines.push("");
+  }
+  if (b2.changes.length > 0) {
+    lines.push("### Changes", "");
+    for (const c3 of b2.changes) {
+      lines.push(`- \`${c3.path}\`, read ${c3.source.retrievedAt} at ${c3.source.url}`);
+    }
+    lines.push("");
+  }
+  lines.push("### Checklist", "");
+  for (const item of b2.checklist) lines.push(`- [ ] ${item}`);
+  lines.push("", "### Evidence", "");
+  for (const url of b2.evidenceUrls) lines.push(`- ${url}`);
+  if (b2.credits.length > 0) {
+    lines.push("", `Checked by: ${b2.credits.join("; ")}`);
+  }
+  lines.push(
+    "",
+    "A maintainer re-fetches every source before merging and sets `lastVerified` to that date.",
+    "",
+    `### Draft \`kb/vendors/${b2.vendorId}.json\``,
+    "",
+    `${fence}json`,
+    json,
+    fence,
+    ""
+  );
+  return lines.join("\n");
+}
+function longestRun(text, ch) {
+  let best = 0;
+  let run2 = 0;
+  for (const c3 of text) {
+    run2 = c3 === ch ? run2 + 1 : 0;
+    best = Math.max(best, run2);
+  }
+  return best;
+}
 function displayName(finding) {
   return finding.vendor?.name ?? "Unrecognised destination";
 }
@@ -19057,21 +19214,39 @@ var EXIT = {
 var factsCommand = defineCommand({
   meta: { name: "facts", description: "Check a repository's .egressa/facts.json" },
   args: {
-    action: { type: "positional", required: false, default: "check", description: "check" },
-    root: { type: "positional", required: false, default: ".", description: "Repository root" },
+    action: {
+      type: "positional",
+      required: false,
+      default: "check",
+      description: "check | contribute"
+    },
+    target: {
+      type: "positional",
+      required: false,
+      description: "check: the repository root (default .); contribute: the vendor id"
+    },
+    root: { type: "string", description: "contribute: the repository root (default .)" },
     kb: { type: "string", description: "Path to a knowledge base directory" },
     json: { type: "boolean", default: false },
     "trust-facts": {
       type: "boolean",
       default: false,
       description: "Show the states a scan with --trust-facts would apply"
+    },
+    "keep-verified-by": {
+      type: "boolean",
+      default: false,
+      description: "contribute: credit whoever checked each fact in the draft body"
     }
   },
   async run({ args }) {
     const action = String(args.action);
-    if (action !== "check") {
-      process.stderr.write(`egressa: unknown facts action "${action}"; use check
-`);
+    if (action !== "check" && action !== "contribute") {
+      process.stderr.write("egressa: unknown facts action; use check or contribute\n");
+      process.exit(EXIT.USAGE);
+    }
+    if (action === "contribute" && !args.target) {
+      process.stderr.write("egressa: facts contribute needs a vendor id\n");
       process.exit(EXIT.USAGE);
     }
     let kb;
@@ -19083,11 +19258,18 @@ var factsCommand = defineCommand({
 `);
       process.exit(EXIT.KB);
     }
-    const root = String(args.root);
+    const root = String((action === "contribute" ? args.root : args.target) ?? ".");
     if (!isDirectory(root)) {
       process.stderr.write(`egressa: ${root} is not a directory
 `);
       process.exit(EXIT.USAGE);
+    }
+    if (action === "contribute") {
+      await contribute(String(args.target), root, kb, {
+        json: args.json === true,
+        keepVerifiedBy: args["keep-verified-by"] === true
+      });
+      return;
     }
     let checked;
     try {
@@ -19112,6 +19294,42 @@ var factsCommand = defineCommand({
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
   }
 });
+async function contribute(vendorId, root, kb, options) {
+  let parsed;
+  try {
+    parsed = loadFacts(root);
+  } catch (error) {
+    if (!(error instanceof FactsError)) throw error;
+    process.stderr.write(`egressa: ${error.message}
+`);
+    process.exit(EXIT.USAGE);
+  }
+  if (!parsed) {
+    process.stderr.write("egressa: no .egressa/facts.json in this repository\n");
+    process.exit(EXIT.USAGE);
+  }
+  try {
+    const bundle = contribution(vendorId, checkFacts(parsed, kb, /* @__PURE__ */ new Date()), kb, {
+      keepVerifiedBy: options.keepVerifiedBy
+    });
+    if (bundle.issues.length > 0) {
+      process.stderr.write(
+        `egressa: the draft would not pass pnpm kb:validate:
+${bundle.issues.map((i2) => `  - ${i2}`).join("\n")}
+`
+      );
+      process.exit(EXIT.USAGE);
+    }
+    const text = options.json ? `${JSON.stringify(bundle, null, 2)}
+` : bundle.body;
+    await writeOutAndExit(text, EXIT.CLEAN);
+  } catch (error) {
+    if (!(error instanceof ContributionError)) throw error;
+    process.stderr.write(`egressa: ${error.message}
+`);
+    process.exit(EXIT.USAGE);
+  }
+}
 function isDirectory(path) {
   try {
     return statSync3(path).isDirectory();

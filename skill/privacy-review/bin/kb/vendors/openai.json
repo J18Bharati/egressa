@@ -59,6 +59,13 @@
         "dpfCertified": false,
         "url": "https://openai.com/policies/data-processing-addendum/",
         "lastChecked": "2026-09-06"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": false,
+        "observedStatus": "not-listed",
+        "url": "https://www.dataprivacyframework.gov/list",
+        "lastChecked": "2026-11-03"
       }
     ]
   },
@@ -99,5 +106,5 @@
     }
   ],
   "lastVerified": "2026-09-06",
-  "notes": "OpenAI states that data sent to the OpenAI API is not used to train or improve OpenAI models unless the customer explicitly opts in. Abuse-monitoring logs, which may contain prompts and responses, are retained by default for up to 30 days; approved customers may enable Zero Data Retention or Modified Abuse Monitoring. No Data Privacy Framework certification is recorded: the vendor pages checked cite standard contractual clauses and the UK addendum as the transfer mechanism, and the DPF participant registry could not be read directly."
+  "notes": "OpenAI states that data sent to the OpenAI API is not used to train or improve OpenAI models unless the customer explicitly opts in. Abuse-monitoring logs, which may contain prompts and responses, are retained by default for up to 30 days; approved customers may enable Zero Data Retention or Modified Abuse Monitoring. No Data Privacy Framework certification is recorded: the vendor pages checked cite standard contractual clauses and the UK addendum as the transfer mechanism. The Data Privacy Framework participant list was searched on 2026-11-03, active and inactive, for OpenAI, Open AI, OpenAI OpCo, and returned no record; a control search for Stripe returned its record."
 }

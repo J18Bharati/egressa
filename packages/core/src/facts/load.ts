@@ -572,7 +572,7 @@ function lineOf(text: string, offset: number): number {
  * entry checks name package aliases, which the vendor schema does not
  * constrain: both are the file's own text.
  */
-function safeIssue(message: string): string {
+export function safeIssue(message: string): string {
   // Quoting is not a boundary: a value can contain the quote character, and
   // then pairs match across it. Unless every quoted span is a plain name and
   // nothing outside them holds a quote, everything from the first quote to the

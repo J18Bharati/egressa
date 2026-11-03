@@ -959,6 +959,25 @@ describe('egressa facts check', () => {
     expect(notion(['--trust-facts'])).toBe('transfer/adequate-country-egress');
   });
 
+  it('contribute prints a draft for a local entry, and exits 2 with nothing to contribute', () => {
+    const local = JSON.parse(readFileSync('fixtures/repos/overlay-dpf/.egressa/facts.json', 'utf8'))
+      .localVendors[0];
+    local.retrievedAt = today;
+    const root = repo(JSON.stringify({ version: 1, localVendors: [local] }));
+    const ok = run(['facts', 'contribute', 'acme-geo', '--root', root]);
+    expect(ok.code).toBe(EXIT.CLEAN);
+    expect(ok.stdout).toContain('### Draft `kb/vendors/acme-geo.json`');
+    const json = run(['facts', 'contribute', 'acme-geo', '--root', root, '--json']);
+    expect(JSON.parse(json.stdout)).toMatchObject({ kind: 'new-entry', issues: [] });
+
+    const none = run(['facts', 'contribute', 'nobody', '--root', root]);
+    expect(none.code).toBe(EXIT.USAGE);
+    expect(none.stdout).toBe('');
+    expect(run(['facts', 'contribute', '--root', root]).code).toBe(EXIT.USAGE);
+    const empty = mkdtempSync(join(tmpdir(), 'egressa-'));
+    expect(run(['facts', 'contribute', 'acme-geo', '--root', empty]).code).toBe(EXIT.USAGE);
+  });
+
   it('is a usage error, exit 2, when the file is not a facts document', () => {
     const { code, stderr } = run(['facts', 'check', repo('{"version": 1,}')]);
     expect(code).toBe(EXIT.USAGE);

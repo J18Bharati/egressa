@@ -197,8 +197,11 @@ export function applyOverlay(
   };
 }
 
-/** The vendor with one fact applied. Only legal fields move. */
-function withFact(vendor: VendorEntry, fact: RepositoryFact): VendorEntry {
+/**
+ * The vendor with one fact applied. Only legal fields move. Exported for
+ * `facts contribute`, so a contribution patches an entry exactly as a scan does.
+ */
+export function withFact(vendor: VendorEntry, fact: RepositoryFact): VendorEntry {
   switch (fact.fact) {
     case 'dpf': {
       const { observedStatus, participantUrl } = fact.value;
