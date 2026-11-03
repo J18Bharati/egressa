@@ -965,3 +965,42 @@ describe('egressa facts check', () => {
     expect(stderr).toMatch(/\.egressa\/facts\.json: not valid JSON/);
   });
 });
+
+describe('schema command', () => {
+  // Run from outside the checkout: the command used to read `schemas/` and
+  // `kb/schema/` relative to the working directory, so it failed anywhere else.
+  const tsx = join(process.cwd(), 'node_modules', '.bin', 'tsx');
+  const cli = join(process.cwd(), 'packages', 'cli', 'src', 'cli.ts');
+  const elsewhere = mkdtempSync(join(tmpdir(), 'egressa-schema-'));
+  const run = (args: string[]) => {
+    try {
+      // The root tsconfig is named, since tsx finds it from the working
+      // directory and its paths are what point the packages at source.
+      const tsconfig = join(process.cwd(), 'tsconfig.json');
+      const stdout = execFileSync(tsx, ['--tsconfig', tsconfig, cli, ...args], {
+        cwd: elsewhere,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, stdout };
+    } catch (error) {
+      const e = error as { status: number; stdout: string };
+      return { code: e.status, stdout: e.stdout ?? '' };
+    }
+  };
+  const source = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
+
+  it.each([
+    ['findings', `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`],
+    ['vendor', 'kb/schema/vendor-1.0.0.json'],
+    ['facts', 'kb/schema/facts-1.0.0.json'],
+  ])('prints the %s schema it shipped with, from any directory', (which, path) => {
+    const { code, stdout } = run(['schema', which]);
+    expect(code).toBe(EXIT.CLEAN);
+    expect(JSON.parse(stdout)).toEqual(source(path));
+  });
+
+  it('is a usage error for a schema it does not have', () => {
+    expect(run(['schema', 'nope']).code).toBe(EXIT.USAGE);
+  });
+});

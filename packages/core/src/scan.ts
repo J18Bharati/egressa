@@ -14,7 +14,7 @@ import { analyzeInfrastructure } from './infrastructure/index.js';
 import { analyzeManifests } from './manifests/index.js';
 import { confidenceForDependency } from './merge/confidence.js';
 import { mergeSignals } from './merge/index.js';
-import { RULES } from './rules.js';
+import { loosenedByFacts } from './output/provenance.js';
 import { FINDINGS_SCHEMA_VERSION } from './types.js';
 import type {
   Confidence,
@@ -403,15 +403,10 @@ function factsSummary(overlay: Overlay, findings: Finding[]): FactsSummary {
       .length,
     // Measured on the finding, not on the fact's label: a fact can loosen in
     // general and still leave this repository's finding stricter.
-    loosened: active.filter(
-      (f) =>
-        f.baselineRuleId !== undefined &&
-        LEVEL[RULES[f.ruleId].defaultLevel] < LEVEL[RULES[f.baselineRuleId].defaultLevel],
-    ).length,
+    loosened: active.filter(loosenedByFacts).length,
   };
 }
 
-const LEVEL: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
 const ORDER: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 function meetsConfidence(value: Confidence, floor: Confidence): boolean {
   return ORDER[value] >= ORDER[floor];

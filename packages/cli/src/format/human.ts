@@ -1,5 +1,14 @@
 import type { Finding, ScanResult } from '@egressa/core';
-import { DISCLAIMER_SHORT, displayName, isReferenceOnly } from '@egressa/core';
+import {
+  DISCLAIMER_SHORT,
+  FACTS_MARKER,
+  baselineText,
+  displayName,
+  factRefText,
+  factsHeadline,
+  isLocalVendor,
+  isReferenceOnly,
+} from '@egressa/core';
 
 /** Built at runtime so no literal control character appears in the source. */
 const ESC = String.fromCharCode(27);
@@ -24,6 +33,11 @@ export function formatHuman(result: ScanResult, options: HumanOptions): string {
   const c: Colorise = (style, text) => (options.color ? `${STYLES[style]}${text}${RESET}` : text);
 
   const lines: string[] = [];
+
+  // First, so it is read before any finding it changed.
+  if (result.facts) {
+    lines.push(c('yellow', factsHeadline(result.facts, printable)), '');
+  }
 
   if (result.findings.length === 0) {
     lines.push(c('green', 'No third-party data egress detected by the analyzers that ran.'));
@@ -77,6 +91,14 @@ export function formatHuman(result: ScanResult, options: HumanOptions): string {
     const n = result.scan.exclude.length;
     lines.push(c('yellow', `${n} path(s) excluded from this scan`));
   }
+  if (result.facts) {
+    lines.push(
+      c(
+        'yellow',
+        `${FACTS_MARKER} in ${printable(result.facts.source)}: review changes to it like code`,
+      ),
+    );
+  }
   lines.push(c('dim', DISCLAIMER_SHORT));
 
   return lines.join('\n');
@@ -112,8 +134,12 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   // site. Flagging it here means a reader can tell without opening the JSON,
   // even when evidence is truncated below. See docs/LIMITATIONS.md.
   const referenceOnly = isReferenceOnly(finding) ? c('dim', ' [named, not called]') : '';
+  // A local entry was written in the scanned repository; its dates and links
+  // are not knowledge base data and must not read as if they were.
+  const local = isLocalVendor(finding);
+  const origin = local ? c('yellow', ' [local entry]') : '';
 
-  const lines = [`${marker} ${c('bold', name)}${confidence}${suppressed}${referenceOnly}`];
+  const lines = [`${marker} ${c('bold', name)}${confidence}${suppressed}${referenceOnly}${origin}`];
 
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
@@ -137,8 +163,21 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
     if (finding.transfer.disputed) {
       lines.push(c('yellow', `    disputed:   ${printable(finding.transfer.disputed.summary)}`));
     }
-    lines.push(c('dim', `    verified:   ${finding.transfer.lastVerified}`));
+    lines.push(
+      c(
+        'dim',
+        `    verified:   ${finding.transfer.lastVerified}${local ? ' (by the repository, not the knowledge base)' : ''}`,
+      ),
+    );
+    if (local && finding.transfer.dpaUrl) {
+      lines.push(c('dim', `    DPA (repository-supplied): ${printable(finding.transfer.dpaUrl)}`));
+    }
+    for (const ref of finding.transfer.repositoryFacts ?? []) {
+      lines.push(c('yellow', `    facts:      ${factRefText(ref, printable)}`));
+    }
   }
+  const baseline = baselineText(finding);
+  if (baseline) lines.push(c('yellow', `    rule:       ${baseline}`));
 
   for (const evidence of finding.evidence.slice(0, 3)) {
     // `callsite` is the expected, unmarked case -- data left here. Anything
@@ -156,6 +195,12 @@ function formatFinding(finding: Finding, c: Colorise): string[] {
   for (const link of finding.remediation.links.slice(0, 2)) {
     lines.push(c('dim', `    ${link.label}: ${link.url}`));
   }
+  const tasks = finding.verification ?? [];
+  for (const task of tasks.slice(0, 2)) {
+    const where = task.where[0] ? `: ${task.where[0]}` : '';
+    lines.push(c('dim', `    verify:     ${task.fact} (${task.reason})${where}`));
+  }
+  if (tasks.length > 2) lines.push(c('dim', `    ... and ${tasks.length - 2} more to verify`));
 
   return lines;
 }

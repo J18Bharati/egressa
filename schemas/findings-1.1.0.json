@@ -871,6 +871,10 @@
         },
         "observedStatus": {
           "type": "string"
+        },
+        "suppliedUrl": {
+          "description": "For a dpa or subprocessors fact, the page the repository says is the vendor's. Provenance only: transfer.dpaUrl and transfer.subprocessorsUrl stay the knowledge base's.",
+          "type": "string"
         }
       }
     }

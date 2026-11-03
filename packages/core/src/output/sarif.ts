@@ -3,6 +3,14 @@ import { DISCLAIMER } from '../claims.js';
 import { RULES, RULE_IDS } from '../rules.js';
 import type { Finding, ScanResult, Severity } from '../types.js';
 import { displayName, isReferenceOnly, markdownText, markdownUrl, plainText } from './display.js';
+import {
+  FACTS_MARKER,
+  baselineText,
+  factRefText,
+  factsHeadline,
+  isLocalVendor,
+  loosenedByFacts,
+} from './provenance.js';
 
 /**
  * SARIF 2.1.0 emitter.
@@ -54,6 +62,11 @@ export function toSarif(result: ScanResult, options: SarifOptions): unknown {
             ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }
             : {}),
           ...(result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}),
+          // A repository's facts file can change classifications, so a SARIF
+          // shaped by it must say so where the run is described.
+          ...(result.facts
+            ? { facts: { ...result.facts, headline: factsHeadline(result.facts, plainText) } }
+            : {}),
         },
         ...(result.errors.length > 0 ? { invocations: [toInvocation(result)] } : {}),
         results: result.findings.map((finding) => toResult(finding, result)),
@@ -114,30 +127,41 @@ function buildHelpMarkdown(id: (typeof RULE_IDS)[number], result: ScanResult): s
   // Vendors matched by this rule in this run, with their sources. This is what
   // turns a generic rule description into an auditable claim.
   const vendors = result.findings.flatMap((f) =>
-    f.ruleId === id && f.vendor && f.transfer ? [{ vendor: f.vendor, transfer: f.transfer }] : [],
+    f.ruleId === id && f.vendor && f.transfer
+      ? [{ finding: f, vendor: f.vendor, transfer: f.transfer }]
+      : [],
   );
 
   if (vendors.length > 0) {
     lines.push('', '#### Vendors matched in this scan', '');
-    for (const { vendor, transfer } of vendors) {
+    for (const { finding, vendor, transfer } of vendors) {
+      // A local entry's links, sources and date are the repository's own, not
+      // the knowledge base's, and must not read as if they were.
+      const local = isLocalVendor(finding);
+      const supplied = local ? ' (supplied by this repository)' : '';
       lines.push(
-        `**${markdownText(vendor.name)}** — processing: ${markdownText(transfer.jurisdictions.join(', '))}`,
+        `**${markdownText(vendor.name)}**${local ? ` _(vendor entry from ${FACTS_MARKER})_` : ''} — processing: ${markdownText(transfer.jurisdictions.join(', '))}`,
       );
       if (transfer.euRegion.available) {
         lines.push(`- EU region: available (${transfer.euRegion.scope ?? 'scope not recorded'})`);
       }
       if (transfer.dpaUrl) {
-        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})`);
+        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})${supplied}`);
       }
       if (transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})`);
+        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})${supplied}`);
       }
       for (const source of transfer.kbSources) {
         lines.push(
-          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})`,
+          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})${supplied}`,
         );
       }
-      lines.push(`- Last verified: ${transfer.lastVerified}`);
+      lines.push(`- Last verified: ${transfer.lastVerified}${supplied}`);
+      for (const ref of transfer.repositoryFacts ?? []) {
+        lines.push(`- Repository fact: ${markdownText(factRefText(ref, plainText))}`);
+      }
+      const baseline = baselineText(finding);
+      if (baseline) lines.push(`- **${markdownText(baseline)}**`);
       if (transfer.disputed) {
         lines.push(
           `- **Disputed**: ${markdownText(transfer.disputed.summary)} ([issue](${markdownUrl(transfer.disputed.issueUrl)}))`,
@@ -183,6 +207,12 @@ function toResult(finding: Finding, result: ScanResult): unknown {
         : null,
       kbVersion: result.kb.version,
       evidenceCount: finding.evidence.length,
+      ...(finding.vendor?.origin ? { vendorOrigin: finding.vendor.origin } : {}),
+      ...(finding.baselineRuleId ? { baselineRuleId: finding.baselineRuleId } : {}),
+      ...(finding.transfer?.repositoryFacts
+        ? { repositoryFacts: finding.transfer.repositoryFacts }
+        : {}),
+      ...(finding.verification ? { verification: finding.verification } : {}),
     },
   };
 }
@@ -209,13 +239,34 @@ function buildMessageText(finding: Finding, render: (text: string) => string = p
   // site, and GitHub's alert view has no other field to carry that. A short
   // note, not a sentence: see docs/LIMITATIONS.md.
   const referenceOnly = isReferenceOnly(finding) ? ' Named, not called.' : '';
-  return `${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}`;
+  return `${factsPrefix(finding)}${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}${factsNote(finding)}`;
+}
+
+/**
+ * A finding a repository's facts made less severe leads with that, since the
+ * alert view shows the message before anything else and a quiet note at the
+ * end would read as the knowledge base's own answer.
+ */
+function factsPrefix(finding: Finding): string {
+  return loosenedByFacts(finding) ? `[loosened by ${FACTS_MARKER}] ` : '';
+}
+
+function factsNote(finding: Finding): string {
+  const notes: string[] = [];
+  if (isLocalVendor(finding)) {
+    notes.push(`Vendor entry from ${FACTS_MARKER}, not the knowledge base.`);
+  }
+  const baseline = baselineText(finding);
+  if (baseline) notes.push(`Rule ${baseline}.`);
+  else if (finding.transfer?.repositoryFacts?.length) notes.push(`Depends on ${FACTS_MARKER}.`);
+  return notes.length > 0 ? ` ${notes.join(' ')}` : '';
 }
 
 function buildMessage(finding: Finding): string {
   const text = buildMessageText(finding, markdownText);
   if (!finding.transfer?.dpaUrl) return text;
-  return `${text} [DPA](${markdownUrl(finding.transfer.dpaUrl)})`;
+  const label = isLocalVendor(finding) ? 'DPA, as supplied by this repository' : 'DPA';
+  return `${text} [${label}](${markdownUrl(finding.transfer.dpaUrl)})`;
 }
 
 function toSarifLocation(evidence: Finding['evidence'][number]): unknown {

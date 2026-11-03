@@ -1,5 +1,12 @@
 import { statSync } from 'node:fs';
-import { FactsError, type OverlayItem, applyOverlay, checkFacts, loadFacts } from '@egressa/core';
+import {
+  FactsError,
+  type OverlayItem,
+  applyOverlay,
+  checkFacts,
+  loadFacts,
+  publicOverlayItem,
+} from '@egressa/core';
 import { KnowledgeBaseError, loadKnowledgeBase } from '@egressa/kb';
 import { defineCommand } from 'citty';
 import { writeOutAndExit } from '../emit.js';
@@ -63,7 +70,7 @@ export const factsCommand = defineCommand({
       process.exit(EXIT.USAGE);
     }
     const text = args.json
-      ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicItem) } : { source: null, items: [] }, null, 2)}\n`
+      ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicOverlayItem) } : { source: null, items: [] }, null, 2)}\n`
       : formatCheck(checked);
     const rejected = checked?.items.some((i) => i.state === 'rejected') ?? false;
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
@@ -76,12 +83,6 @@ function isDirectory(path: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** What `--json` prints for an item: its state and provenance, not the whole local entry. */
-function publicItem(item: OverlayItem) {
-  const { local: _local, ...rest } = item;
-  return rest;
 }
 
 const STATES = [

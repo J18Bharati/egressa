@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -46,6 +46,8 @@ describe('mcp server surface', () => {
       'list_vendors',
       'lookup_vendor',
       'scan_repository',
+      'validate_facts',
+      'verification_tasks',
     ]);
   });
 
@@ -405,5 +407,52 @@ describe('the repository’s own .egressa/facts.json', () => {
     })) as { isError?: boolean; content: { text: string }[] };
     expect(response.isError).toBe(true);
     expect(response.content[0]?.text).toMatch(/^\.egressa\/facts\.json: not valid JSON/);
+  });
+
+  it('carries provenance in the default summary, not only in full', async () => {
+    const summary = await call('scan_repository', { path: repo(loosening), trustFacts: true });
+    expect(summary.facts).toMatchObject({ loosened: 1, findingsDependingOnFacts: 1 });
+    expect(summary.facts.headline).toMatch(/1 finding depends on repository-supplied facts/);
+    const notion = summary.findings.find((f: { vendorId: string }) => f.vendorId === 'notion');
+    expect(notion.baselineRuleId).toBe('transfer/third-country-egress-eu-region-available');
+    expect(notion.repositoryFacts[0]).toMatchObject({ fact: 'dpf', effect: 'loosens' });
+  });
+
+  it('lists verification tasks once each, with pages from knowledge base data', async () => {
+    const result = await call('verification_tasks', { path: repo(loosening) });
+    expect(result.count).toBe(result.tasks.length);
+    const ids = result.tasks.map((t: { id: string }) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(result.disclaimer).toContain('does not assess or certify GDPR compliance');
+  });
+
+  it('previews a draft and writes nothing', async () => {
+    const dir = repo(JSON.stringify({ version: 1 }));
+    const before = readFileSync(join(dir, '.egressa', 'facts.json'), 'utf8');
+    const listing = readdirSync(dir, { recursive: true }).sort();
+    const untrusted = await call('validate_facts', { path: dir, draft: loosening });
+    expect(untrusted.written).toBe(false);
+    expect(untrusted.items[0]).toMatchObject({ at: 'facts[0]', state: 'loosening-not-trusted' });
+    expect(untrusted.changes).toEqual([]);
+    const trusted = await call('validate_facts', { path: dir, draft: loosening, trustFacts: true });
+    expect(trusted.changes).toEqual([
+      expect.objectContaining({
+        vendorId: 'notion',
+        from: 'transfer/third-country-egress-eu-region-available',
+        to: 'transfer/adequate-country-egress',
+        loosened: true,
+      }),
+    ]);
+    expect(readFileSync(join(dir, '.egressa', 'facts.json'), 'utf8')).toBe(before);
+    expect(readdirSync(dir, { recursive: true }).sort()).toEqual(listing);
+  });
+
+  it('is a tool error, naming the draft, when the draft is not a facts document', async () => {
+    const response = (await client.callTool({
+      name: 'validate_facts',
+      arguments: { path: repo(JSON.stringify({ version: 1 })), draft: '{"version": 1,}' },
+    })) as { isError?: boolean; content: { text: string }[] };
+    expect(response.isError).toBe(true);
+    expect(response.content[0]?.text).toMatch(/^\.egressa\/facts\.json \(draft\): not valid JSON/);
   });
 });

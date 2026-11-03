@@ -1,7 +1,20 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { DISCLAIMER, NON_ASSESSMENT, findForbiddenClaims, scan, toSarif } from '@egressa/core';
+import {
+  DISCLAIMER,
+  DISCLAIMER_SHORT,
+  NON_ASSESSMENT,
+  applyOverlay,
+  checkFacts,
+  findForbiddenClaims,
+  loadFacts,
+  scan,
+  summarise,
+  toSarif,
+} from '@egressa/core';
+import { loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
+import { formatCheck } from '../packages/cli/src/commands/facts.js';
 import { formatHuman } from '../packages/cli/src/format/human.js';
 import { formatMarkdown } from '../packages/cli/src/format/markdown.js';
 
@@ -79,12 +92,48 @@ describe('the disclaimer reaches every surface', () => {
   });
 });
 
+// A scan a repository's facts file changed, trusted so every fact applies:
+// the provenance lines it adds are generated text like any other.
+const OVERLAY = 'fixtures/repos/overlay-dpf';
+const OVERLAY_NOW = new Date('2026-11-10T12:00:00.000Z');
+const overlayFacts = loadFacts(OVERLAY);
+const overlay = scan({
+  root: OVERLAY,
+  toolVersion: '0.1.0',
+  kbPath: 'kb',
+  includeCallsites: true,
+  now: OVERLAY_NOW,
+  facts: overlayFacts,
+  trustFacts: true,
+});
+const kb = loadKnowledgeBase({ kbPath: 'kb' });
+const factsCheck = overlayFacts
+  ? formatCheck(applyOverlay(kb, checkFacts(overlayFacts, kb, OVERLAY_NOW), { trustFacts: false }))
+  : '';
+
+describe('a scan shaped by repository facts keeps the claim scope', () => {
+  it('the fixture has facts to apply', () => {
+    expect(overlay.facts?.findingsDependingOnFacts).toBeGreaterThan(0);
+    expect(factsCheck).toContain('loosening-not-trusted');
+  });
+  it('markdown and human output still carry the disclaimer', () => {
+    expect(flat(formatMarkdown(overlay))).toContain(flat(DISCLAIMER));
+    expect(formatHuman(overlay, { color: false })).toContain(DISCLAIMER_SHORT);
+  });
+});
+
 describe('no generated output can claim compliance', () => {
   const surfaces: [string, string][] = [
     ['json', JSON.stringify(result)],
     ['sarif', JSON.stringify(toSarif(result, { toolVersion: '0.1.0' }))],
     ['markdown', formatMarkdown(result)],
     ['human', formatHuman(result, { color: false })],
+    ['json with facts', JSON.stringify(overlay)],
+    ['sarif with facts', JSON.stringify(toSarif(overlay, { toolVersion: '0.1.0' }))],
+    ['markdown with facts', formatMarkdown(overlay)],
+    ['human with facts', formatHuman(overlay, { color: false })],
+    ['MCP summary with facts', JSON.stringify(summarise(overlay))],
+    ['facts check', factsCheck],
   ];
 
   for (const [name, text] of surfaces) {

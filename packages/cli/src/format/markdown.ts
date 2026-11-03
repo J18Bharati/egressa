@@ -1,7 +1,12 @@
 import type { Finding, ScanResult } from '@egressa/core';
 import {
   DISCLAIMER,
+  FACTS_MARKER,
+  baselineText,
   displayName,
+  factRefText,
+  factsHeadline,
+  isLocalVendor,
   isReferenceOnly,
   markdownText,
   markdownUrl,
@@ -36,12 +41,21 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
     lines.push(`> ${result.scan.exclude.length} path(s) excluded from this scan.`, '');
   }
 
+  // Before the table, so it is read before any finding it changed.
+  if (result.facts) {
+    lines.push(
+      `> **${inert(factsHeadline(result.facts, plainText))}** ` +
+        `Review changes to ${codeSpan(result.facts.source)} like code.`,
+      '',
+    );
+  }
+
   if (shown.length > 0) {
     lines.push('| Vendor | Reason | Processing | EU region | Rule | Confidence |');
     lines.push('| --- | --- | --- | --- | --- | --- |');
     for (const f of shown) {
       lines.push(
-        `| ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''} | ${reasonCell(f)} ` +
+        `| ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''}${originCell(f)} | ${reasonCell(f)} ` +
           `| ${f.transfer ? inert(f.transfer.jurisdictions.join(', ')) : 'unknown'} ` +
           `| ${euRegionCell(f)} | \`${f.ruleId}\` | ${f.confidence} |`,
       );
@@ -55,25 +69,42 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
 
   for (const f of shown) {
     lines.push(
-      `### ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''}`,
+      `### ${inert(displayName(f))}${isReferenceOnly(f) ? ' (named, not called)' : ''}${originCell(f)}`,
       '',
     );
+    const baseline = baselineText(f);
+    if (baseline) lines.push(`> **${inert(baseline)}**`, '');
     if (f.transfer) {
+      // A local entry's links and date are the repository's own.
+      const supplied = isLocalVendor(f) ? ' (supplied by this repository)' : '';
       lines.push(`- Processing: ${inert(f.transfer.jurisdictions.join(', '))}`);
       lines.push(`- EU region: ${euRegionCell(f)}`);
       if (f.transfer.dpaUrl)
-        lines.push(`- [Data processing agreement](${markdownUrl(f.transfer.dpaUrl)})`);
+        lines.push(`- [Data processing agreement](${markdownUrl(f.transfer.dpaUrl)})${supplied}`);
       if (f.transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${markdownUrl(f.transfer.subprocessorsUrl)})`);
+        lines.push(`- [Sub-processors](${markdownUrl(f.transfer.subprocessorsUrl)})${supplied}`);
       }
-      lines.push(`- Entry last verified: ${f.transfer.lastVerified}`);
+      lines.push(`- Entry last verified: ${f.transfer.lastVerified}${supplied}`);
       if (f.transfer.disputed) lines.push(`- **Disputed:** ${inert(f.transfer.disputed.summary)}`);
+      for (const ref of f.transfer.repositoryFacts ?? []) {
+        lines.push(`- Facts: ${inert(factRefText(ref, plainText))}`);
+      }
     }
     lines.push('', 'Evidence:', '');
     for (const e of f.evidence.slice(0, 5)) {
       lines.push(`- \`${e.file}:${e.startLine}\` matched \`${e.matchedOn}\` (${e.kind})`);
     }
     lines.push('', f.remediation.summary, '');
+    const tasks = f.verification ?? [];
+    if (tasks.length > 0) {
+      lines.push('To verify:', '');
+      for (const t of tasks.slice(0, 5)) {
+        const where = t.where[0] ? ` ([source](${markdownUrl(t.where[0])}))` : '';
+        lines.push(`- ${t.fact}: ${t.reason}${where}`);
+      }
+      if (tasks.length > 5) lines.push(`- and ${tasks.length - 5} more`);
+      lines.push('');
+    }
   }
 
   if (result.unmatched.hosts.length > 0 || result.unmatched.packages.length > 0) {
@@ -118,6 +149,11 @@ function reasonCell(finding: Finding): string {
   if (finding.vendor) return '';
   const reasons = [...new Set(finding.evidence.map((e) => e.matchedOn))];
   return reasons.join('; ');
+}
+
+/** Marks a vendor whose entry the scanned repository wrote. */
+function originCell(finding: Finding): string {
+  return isLocalVendor(finding) ? ` (local entry, ${FACTS_MARKER})` : '';
 }
 
 function euRegionCell(finding: Finding): string {

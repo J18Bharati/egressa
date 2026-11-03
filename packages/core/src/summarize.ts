@@ -1,6 +1,7 @@
 import { isExpiredNoteFor } from './config/index.js';
-import { isReferenceOnly } from './output/display.js';
-import type { Finding, ScanResult } from './types.js';
+import { isReferenceOnly, plainText } from './output/display.js';
+import { factsHeadline } from './output/provenance.js';
+import type { FactsSummary, Finding, RepositoryFactRef, ScanResult, VerifyTask } from './types.js';
 
 /**
  * Token-budgeted view of a scan.
@@ -21,6 +22,9 @@ export interface SummaryOptions {
 
 /** Errors beyond this many are counted in `omittedErrors`, not listed. */
 const MAX_ERRORS = 20;
+
+/** Verification tasks listed per finding; `verificationTotal` counts them all. */
+const MAX_TASKS = 5;
 
 export interface SummarisedFinding {
   ruleId: string;
@@ -51,6 +55,19 @@ export interface SummarisedFinding {
   lastVerified?: string;
   disputed?: string;
   remediation: string;
+  /**
+   * `local` when the vendor entry came from the repository's facts file. Its
+   * `dpaUrl`, `subprocessorsUrl` and `lastVerified` are then the repository's
+   * own, not knowledge base data.
+   */
+  vendorOrigin?: 'local';
+  /** Facts from `.egressa/facts.json` this finding was computed from. */
+  repositoryFacts?: RepositoryFactRef[];
+  /** The rule before repository facts changed it. */
+  baselineRuleId?: string;
+  /** What to re-check, and where; at most five, `verificationTotal` counts all. */
+  verification?: VerifyTask[];
+  verificationTotal?: number;
 }
 
 export interface SummarisedScan {
@@ -83,6 +100,8 @@ export interface SummarisedScan {
   errors: ScanResult['errors'];
   omittedErrors: number;
   assumedAdequacyLapsed?: string[];
+  /** What the repository's facts file did to this scan, with a sentence saying so. */
+  facts?: FactsSummary & { headline: string };
 }
 
 export function summarise(result: ScanResult, options: SummaryOptions = {}): SummarisedScan {
@@ -118,6 +137,9 @@ export function summarise(result: ScanResult, options: SummaryOptions = {}): Sum
     omittedErrors: Math.max(0, result.errors.length - MAX_ERRORS),
     ...(result.scan.assumedAdequacyLapsed
       ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed }
+      : {}),
+    ...(result.facts
+      ? { facts: { ...result.facts, headline: factsHeadline(result.facts, plainText) } }
       : {}),
   };
 }
@@ -165,5 +187,16 @@ function toSummarised(finding: Finding, maxEvidence: number): SummarisedFinding 
     ...(finding.transfer?.lastVerified ? { lastVerified: finding.transfer.lastVerified } : {}),
     ...(finding.transfer?.disputed ? { disputed: finding.transfer.disputed.summary } : {}),
     remediation: finding.remediation.summary,
+    ...(finding.vendor?.origin ? { vendorOrigin: finding.vendor.origin } : {}),
+    ...(finding.transfer?.repositoryFacts
+      ? { repositoryFacts: finding.transfer.repositoryFacts }
+      : {}),
+    ...(finding.baselineRuleId ? { baselineRuleId: finding.baselineRuleId } : {}),
+    ...(finding.verification?.length
+      ? {
+          verification: finding.verification.slice(0, MAX_TASKS),
+          verificationTotal: finding.verification.length,
+        }
+      : {}),
   };
 }

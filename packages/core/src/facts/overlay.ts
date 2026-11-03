@@ -164,6 +164,7 @@ export function applyOverlay(
       expiresOn: item.expiresOn ?? '',
       effect,
       ...(fact.fact === 'dpf' ? { observedStatus: fact.value.observedStatus } : {}),
+      ...(fact.fact !== 'dpf' && fact.value.url ? { suppliedUrl: fact.value.url } : {}),
     });
     items.push({ ...item, state: 'applied', effect });
   }

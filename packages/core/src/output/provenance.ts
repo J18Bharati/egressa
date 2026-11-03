@@ -1,0 +1,78 @@
+import { RULES } from '../rules.js';
+import type { FactsSummary, Finding, RepositoryFactRef, Severity } from '../types.js';
+
+/**
+ * Provenance wording shared by every surface that renders a scan.
+ *
+ * A repository's `.egressa/facts.json` can change what a finding says, and a
+ * reader of SARIF, markdown or the terminal has to be able to see that without
+ * opening the JSON. The sentences live here, once, so the surfaces cannot drift
+ * apart: `scripts/provenance-contract.test.ts` checks each of them carries
+ * `FACTS_MARKER`.
+ *
+ * Every string a repository supplied (`verifiedBy`, `observedStatus`, a file
+ * path) is passed through `render`, which the caller picks for its medium.
+ */
+
+/** The phrase every surface carries when a scan read a facts file. */
+export const FACTS_MARKER = 'repository-supplied facts';
+
+const LEVEL: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
+
+/** True when repository facts moved this finding to a less severe rule. */
+export function loosenedByFacts(finding: Finding): boolean {
+  return (
+    finding.baselineRuleId !== undefined &&
+    LEVEL[RULES[finding.ruleId].defaultLevel] < LEVEL[RULES[finding.baselineRuleId].defaultLevel]
+  );
+}
+
+/** True when the vendor entry itself came from the scanned repository. */
+export function isLocalVendor(finding: Finding): boolean {
+  return finding.vendor?.origin === 'local';
+}
+
+/** The run-level sentence: how many findings rest on the file, and how many it loosened. */
+export function factsHeadline(facts: FactsSummary, render: (s: string) => string): string {
+  const n = facts.findingsDependingOnFacts;
+  const parts = [
+    `${n} finding${n === 1 ? '' : 's'} depend${n === 1 ? 's' : ''} on ${FACTS_MARKER} ` +
+      `(${render(facts.source)}), ${facts.loosened} loosened`,
+  ];
+  if (facts.notTrusted > 0) {
+    parts.push(
+      `${facts.notTrusted} loosening fact${facts.notTrusted === 1 ? '' : 's'} not applied (the caller did not trust this repository)`,
+    );
+  }
+  if (facts.expired > 0) parts.push(`${facts.expired} expired`);
+  if (facts.rejected > 0) parts.push(`${facts.rejected} rejected`);
+  if (facts.localVendors > 0) {
+    parts.push(
+      `${facts.localVendors} vendor entr${facts.localVendors === 1 ? 'y' : 'ies'} supplied by the repository`,
+    );
+  }
+  return `${parts.join('; ')}.`;
+}
+
+/**
+ * One fact as a line a reader can check by hand: what it is, where it sits in
+ * the file, what it says, the page it cites, and who read that page when.
+ */
+export function factRefText(ref: RepositoryFactRef, render: (s: string) => string): string {
+  const status = ref.observedStatus ? ` status "${render(ref.observedStatus)}"` : '';
+  const supplied = ref.suppliedUrl ? ` supplying ${render(ref.suppliedUrl)}` : '';
+  const source = ref.sourceUrl ? `, source ${render(ref.sourceUrl)}` : '';
+  return (
+    `${ref.fact}${status}${supplied} (${ref.effect}) from ${render(ref.file)} ${render(ref.at)}` +
+    `, retrieved ${ref.retrievedAt} by ${render(ref.verifiedBy)}, expires ${ref.expiresOn}${source}`
+  );
+}
+
+/** The per-finding note: the rule before facts were applied, when they changed it. */
+export function baselineText(finding: Finding): string | null {
+  if (!finding.baselineRuleId) return null;
+  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
+  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+  const how = now < before ? 'loosened' : now > before ? 'tightened' : 'changed';
+  return `${how} by ${FACTS_MARKER}; without them this finding is ${finding.baselineRuleId}`;
+}

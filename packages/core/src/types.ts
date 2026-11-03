@@ -199,6 +199,12 @@ export interface RepositoryFactRef {
   effect: FactEffect;
   /** For a `dpf` fact, the status as recorded, verbatim. */
   observedStatus?: string;
+  /**
+   * For a `dpa` or `subprocessors` fact, the page the repository says is the
+   * vendor's. Shown as provenance only: `dpaUrl` and `subprocessorsUrl` stay
+   * the knowledge base's, so a repository cannot swap the link readers follow.
+   */
+  suppliedUrl?: string;
 }
 
 // ---------------------------------------------------------------------------

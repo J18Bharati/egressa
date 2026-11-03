@@ -14748,14 +14748,14 @@ function printParseErrorCode(code) {
 }
 
 // ../core/dist/index.js
+import { statSync as statSync22 } from "fs";
 import { basename as basename3 } from "path";
 var import_yaml2 = __toESM(require_dist(), 1);
-var import_yaml3 = __toESM(require_dist(), 1);
-import { isAbsolute as isAbsolute3 } from "path";
-import { statSync as statSync22 } from "fs";
 import { basename as basename22 } from "path";
+var import_yaml3 = __toESM(require_dist(), 1);
 var import_yaml4 = __toESM(require_dist(), 1);
 import { createHash as createHash2 } from "crypto";
+import { isAbsolute as isAbsolute3 } from "path";
 var FINDINGS_SCHEMA_VERSION = "1.1.0";
 var TAGS = ["gdpr", "data-transfer", "third-party"];
 var RULES = {
@@ -15831,7 +15831,8 @@ function applyOverlay(baseline, checked, options) {
       verifiedBy: fact.verifiedBy,
       expiresOn: item.expiresOn ?? "",
       effect,
-      ...fact.fact === "dpf" ? { observedStatus: fact.value.observedStatus } : {}
+      ...fact.fact === "dpf" ? { observedStatus: fact.value.observedStatus } : {},
+      ...fact.fact !== "dpf" && fact.value.url ? { suppliedUrl: fact.value.url } : {}
     });
     items.push({ ...item, state: "applied", effect });
   }
@@ -15947,6 +15948,59 @@ function effectOf(before, after) {
   if (was === now) return "neutral";
   return now ? "loosens" : "tightens";
 }
+var FACTS_MARKER = "repository-supplied facts";
+var LEVEL = { note: 1, warning: 2, error: 3 };
+function loosenedByFacts(finding) {
+  return finding.baselineRuleId !== void 0 && LEVEL[RULES[finding.ruleId].defaultLevel] < LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+}
+function isLocalVendor(finding) {
+  return finding.vendor?.origin === "local";
+}
+function factsHeadline(facts, render2) {
+  const n2 = facts.findingsDependingOnFacts;
+  const parts = [
+    `${n2} finding${n2 === 1 ? "" : "s"} depend${n2 === 1 ? "s" : ""} on ${FACTS_MARKER} (${render2(facts.source)}), ${facts.loosened} loosened`
+  ];
+  if (facts.notTrusted > 0) {
+    parts.push(
+      `${facts.notTrusted} loosening fact${facts.notTrusted === 1 ? "" : "s"} not applied (the caller did not trust this repository)`
+    );
+  }
+  if (facts.expired > 0) parts.push(`${facts.expired} expired`);
+  if (facts.rejected > 0) parts.push(`${facts.rejected} rejected`);
+  if (facts.localVendors > 0) {
+    parts.push(
+      `${facts.localVendors} vendor entr${facts.localVendors === 1 ? "y" : "ies"} supplied by the repository`
+    );
+  }
+  return `${parts.join("; ")}.`;
+}
+function factRefText(ref, render2) {
+  const status = ref.observedStatus ? ` status "${render2(ref.observedStatus)}"` : "";
+  const supplied = ref.suppliedUrl ? ` supplying ${render2(ref.suppliedUrl)}` : "";
+  const source = ref.sourceUrl ? `, source ${render2(ref.sourceUrl)}` : "";
+  return `${ref.fact}${status}${supplied} (${ref.effect}) from ${render2(ref.file)} ${render2(ref.at)}, retrieved ${ref.retrievedAt} by ${render2(ref.verifiedBy)}, expires ${ref.expiresOn}${source}`;
+}
+function baselineText(finding) {
+  if (!finding.baselineRuleId) return null;
+  const how = loosenedByFacts(finding) ? "loosened" : "changed";
+  return `${how} by ${FACTS_MARKER}; without them this finding is ${finding.baselineRuleId}`;
+}
+function confidenceForDependency(record2, alias) {
+  if (!record2.direct) return "low";
+  if (record2.dev) return "medium";
+  return alias.kind === "official-sdk" ? "high" : "medium";
+}
+var ORDER = { low: 0, medium: 1, high: 2 };
+var CEILING = { reference: "medium" };
+function confidenceForKind(kind, raw) {
+  const ceiling = CEILING[kind];
+  if (!ceiling) return raw;
+  return ORDER[raw] > ORDER[ceiling] ? ceiling : raw;
+}
+function strongest(values) {
+  return values.reduce((best, v2) => ORDER[v2] > ORDER[best] ? v2 : best, "low");
+}
 var LineIndex = class {
   constructor(text) {
     this.text = text;
@@ -15992,976 +16046,6 @@ var LineIndex = class {
     return raw.length > maxLength ? `${raw.slice(0, maxLength - 1)}\u2026` : raw;
   }
 };
-function parseNpmLock(text, manifestPath) {
-  const index = new LineIndex(text);
-  const root = parseTree2(text, [], { allowTrailingComma: true });
-  if (!root || root.type !== "object") {
-    return {
-      dependencies: [],
-      errors: [{ file: manifestPath, message: "not a JSON object", fatal: false }]
-    };
-  }
-  const version = numberProperty(root, "lockfileVersion") ?? 1;
-  const packages = propertyValue(root, "packages");
-  const kind = version >= 3 ? "npm-v3" : version === 2 ? "npm-v2" : "npm-v1";
-  if (packages && packages.type === "object") {
-    return { dependencies: fromPackagesMap(packages, index, manifestPath), errors: [] };
-  }
-  const tree = propertyValue(root, "dependencies");
-  if (tree && tree.type === "object") {
-    const deps = [];
-    walkV1Tree(tree, index, manifestPath, [], deps);
-    return { dependencies: deps, errors: [] };
-  }
-  return {
-    dependencies: [],
-    errors: [
-      { file: manifestPath, message: `${kind}: no packages or dependencies block`, fatal: false }
-    ]
-  };
-}
-function fromPackagesMap(packages, index, manifestPath) {
-  const out = [];
-  for (const prop of packages.children ?? []) {
-    const key = prop.children?.[0]?.value;
-    const entry = prop.children?.[1];
-    if (typeof key !== "string" || key === "" || !entry || entry.type !== "object") continue;
-    if (key.startsWith("node_modules/") === false) continue;
-    const segments = key.split("node_modules/");
-    const name = segments[segments.length - 1];
-    if (!name) continue;
-    const via = segments.slice(1, -1).map((s2) => s2.replace(/\/$/, "")).filter(Boolean);
-    out.push({
-      name,
-      version: stringProperty(entry, "version") ?? "*",
-      ecosystem: "npm",
-      manifestPath,
-      loc: index.locationAt(manifestPath, prop.offset, prop.length),
-      snippet: index.snippetAt(prop.offset),
-      direct: false,
-      dev: booleanProperty(entry, "dev") ?? false,
-      ...via.length > 0 ? { transitiveVia: via } : {}
-    });
-  }
-  return out;
-}
-function walkV1Tree(node, index, manifestPath, via, out) {
-  for (const prop of node.children ?? []) {
-    const name = prop.children?.[0]?.value;
-    const entry = prop.children?.[1];
-    if (typeof name !== "string" || !entry || entry.type !== "object") continue;
-    out.push({
-      name,
-      version: stringProperty(entry, "version") ?? "*",
-      ecosystem: "npm",
-      manifestPath,
-      loc: index.locationAt(manifestPath, prop.offset, prop.length),
-      snippet: index.snippetAt(prop.offset),
-      direct: false,
-      dev: booleanProperty(entry, "dev") ?? false,
-      ...via.length > 0 ? { transitiveVia: [...via] } : {}
-    });
-    const nested = propertyValue(entry, "dependencies");
-    if (nested && nested.type === "object") {
-      walkV1Tree(nested, index, manifestPath, [...via, name], out);
-    }
-  }
-}
-function propertyValue(object, key) {
-  for (const prop of object.children ?? []) {
-    if (prop.children?.[0]?.value === key) return prop.children[1];
-  }
-  return void 0;
-}
-function stringProperty(o3, k2) {
-  const v2 = propertyValue(o3, k2)?.value;
-  return typeof v2 === "string" ? v2 : void 0;
-}
-function numberProperty(o3, k2) {
-  const v2 = propertyValue(o3, k2)?.value;
-  return typeof v2 === "number" ? v2 : void 0;
-}
-function booleanProperty(o3, k2) {
-  const v2 = propertyValue(o3, k2)?.value;
-  return typeof v2 === "boolean" ? v2 : void 0;
-}
-var RUNTIME_BLOCKS = ["dependencies", "optionalDependencies"];
-var DEV_BLOCKS = ["devDependencies"];
-function parsePackageJson(text, manifestPath, workspace) {
-  const errors = [];
-  const dependencies = [];
-  const index = new LineIndex(text);
-  const root = parseTree2(text, [], { allowTrailingComma: true, disallowComments: false });
-  if (!root || root.type !== "object") {
-    return {
-      dependencies,
-      errors: [{ file: manifestPath, message: "not a JSON object", fatal: false }],
-      workspaceGlobs: []
-    };
-  }
-  const name = stringProperty2(root, "name");
-  for (const [blocks, dev] of [
-    [RUNTIME_BLOCKS, false],
-    [DEV_BLOCKS, true]
-  ]) {
-    for (const block of blocks) {
-      const node = propertyValue2(root, block);
-      if (!node || node.type !== "object") continue;
-      for (const prop of node.children ?? []) {
-        const keyNode = prop.children?.[0];
-        const valueNode = prop.children?.[1];
-        if (!keyNode || typeof keyNode.value !== "string") continue;
-        const version = typeof valueNode?.value === "string" ? valueNode.value : "*";
-        dependencies.push({
-          name: keyNode.value,
-          version,
-          ecosystem: "npm",
-          manifestPath,
-          // Anchor on the property, so the annotation covers `"name": "^1.2.3"`.
-          loc: index.locationAt(manifestPath, prop.offset, prop.length),
-          snippet: index.snippetAt(prop.offset),
-          direct: true,
-          dev,
-          ...workspace ? { workspace } : {}
-        });
-      }
-    }
-  }
-  return { dependencies, errors, name, workspaceGlobs: readWorkspaceGlobs(root) };
-}
-function propertyValue2(object, key) {
-  for (const prop of object.children ?? []) {
-    if (prop.children?.[0]?.value === key) return prop.children[1];
-  }
-  return void 0;
-}
-function stringProperty2(object, key) {
-  const node = propertyValue2(object, key);
-  return typeof node?.value === "string" ? node.value : void 0;
-}
-function readWorkspaceGlobs(root) {
-  const node = propertyValue2(root, "workspaces");
-  if (!node) return [];
-  const arrayNode = node.type === "array" ? node : propertyValue2(node, "packages");
-  if (!arrayNode || arrayNode.type !== "array") return [];
-  return (arrayNode.children ?? []).map((child) => child.value).filter((value) => typeof value === "string");
-}
-function parsePnpmLock(text, manifestPath) {
-  const index = new LineIndex(text);
-  const errors = [];
-  const doc = (0, import_yaml2.parseDocument)(text, { keepSourceTokens: true });
-  if (doc.errors.length > 0) {
-    return {
-      dependencies: [],
-      errors: [
-        {
-          file: manifestPath,
-          // The parser's message quotes the failing line after its first one;
-          // the position is enough, and the excerpt is file content.
-          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
-          fatal: false
-        }
-      ]
-    };
-  }
-  const direct = collectDirectNames(
-    doc.get("importers"),
-    doc.get("dependencies"),
-    doc.get("devDependencies")
-  );
-  const packages = doc.get("packages");
-  const dependencies = [];
-  if ((0, import_yaml2.isMap)(packages)) {
-    for (const item of packages.items) {
-      if (!(0, import_yaml2.isPair)(item) || !(0, import_yaml2.isScalar)(item.key)) continue;
-      const rawKey = String(item.key.value);
-      const parsed = parsePackageKey(rawKey);
-      if (!parsed) continue;
-      const offset = item.key.range?.[0] ?? 0;
-      const length = (item.key.range?.[1] ?? offset) - offset;
-      const directEntry = direct.runtime.has(parsed.name) || direct.dev.has(parsed.name);
-      dependencies.push({
-        name: parsed.name,
-        version: parsed.version,
-        ecosystem: "npm",
-        manifestPath,
-        loc: index.locationAt(manifestPath, offset, length),
-        snippet: index.snippetAt(offset),
-        // pnpm's `packages` block is the flat resolved set; directness comes
-        // from importers/dependencies, which we consulted above.
-        direct: directEntry,
-        dev: !direct.runtime.has(parsed.name) && direct.dev.has(parsed.name)
-      });
-    }
-  } else {
-    errors.push({ file: manifestPath, message: "no packages block", fatal: false });
-  }
-  return { dependencies, errors };
-}
-function parsePackageKey(raw) {
-  let key = raw.startsWith("/") ? raw.slice(1) : raw;
-  const peerIndex = key.indexOf("(");
-  if (peerIndex > 0) key = key.slice(0, peerIndex);
-  const at = key.lastIndexOf("@");
-  if (at <= 0) return null;
-  const name = key.slice(0, at);
-  const version = key.slice(at + 1);
-  if (!name || !version) return null;
-  return { name, version };
-}
-function collectDirectNames(importers, deps, devDeps) {
-  const runtime = /* @__PURE__ */ new Set();
-  const dev = /* @__PURE__ */ new Set();
-  if ((0, import_yaml2.isMap)(importers)) {
-    for (const importer of importers.items) {
-      if (!(0, import_yaml2.isPair)(importer)) continue;
-      addNames(
-        runtime,
-        importer.value?.get?.("dependencies")
-      );
-      addNames(dev, importer.value?.get?.("devDependencies"));
-    }
-  }
-  addNames(runtime, deps);
-  addNames(dev, devDeps);
-  return { runtime, dev };
-}
-function addNames(target, node) {
-  if (!(0, import_yaml2.isMap)(node)) return;
-  for (const item of node.items) {
-    if ((0, import_yaml2.isPair)(item) && (0, import_yaml2.isScalar)(item.key)) target.add(String(item.key.value));
-  }
-}
-var DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
-function requirementName(text) {
-  const match = /^(\s*)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(\[[^\]]*\])?\s*(.*)$/s.exec(
-    text
-  );
-  if (!match) return null;
-  const rest = (match[4] ?? "").trim();
-  if (rest !== "" && !/^(?:[=<>!~;@]|\(\s*[=<>!~])/.test(rest)) return null;
-  return {
-    name: normalisePypiName(match[2]),
-    at: (match[1] ?? "").length,
-    spec: (rest.split(";")[0] ?? "").trim()
-  };
-}
-function record(index, path, offset, length, name, version, dev, direct = true, transitiveVia = []) {
-  return {
-    name,
-    version,
-    ecosystem: "pypi",
-    manifestPath: path,
-    loc: index.locationAt(path, offset, length),
-    snippet: index.snippetAt(offset),
-    direct,
-    dev,
-    ...transitiveVia.length > 0 ? { transitiveVia } : {}
-  };
-}
-function isRequirementsFile(path) {
-  const parts = path.split("/");
-  const file = parts.at(-1) ?? "";
-  if (!file.toLowerCase().endsWith(".txt")) return false;
-  if (/^constraints/i.test(file)) return false;
-  if (/^requirements([-_.].*)?\.txt$/i.test(file)) return true;
-  return parts.at(-2) === "requirements" && !/^(readme|license|licence|notes?|changelog|constraints)/i.test(file);
-}
-function isDevRequirementsFile(path) {
-  const file = path.split("/").pop() ?? "";
-  const stem = file.replace(/\.txt$/i, "").replace(/^requirements[-_.]?/i, "");
-  return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
-}
-var COMPILED_HEADER = /autogenerated by (?:pip-compile|uv via)/i;
-var SOURCE_ENTRY = /^-r\s+\S|\((?:[^()]*[/\\])?(?:pyproject\.toml|setup\.py|setup\.cfg)(?::[^()]*)?\)\s*$/;
-var PACKAGE_ENTRY = /^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?:\[[^\]]*\])?$/;
-var OMITTED_TRAILER = /^The following packages (?:were excluded from the output|are considered to be unsafe)/i;
-function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
-  const index = new LineIndex(text);
-  const found = [];
-  let header = false;
-  let offset = 0;
-  let continuation = false;
-  let current = null;
-  let inViaBlock = false;
-  const omitted = /* @__PURE__ */ new Set();
-  let inOmittedTrailer = false;
-  const annotate = (target, entries) => {
-    target.via ??= [];
-    target.via.push(...viaEntries(entries));
-    inViaBlock = entries.trim() === "";
-  };
-  for (const physical of text.split("\n")) {
-    const lineOffset = offset;
-    offset += physical.length + 1;
-    const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
-    const continued = continuation;
-    continuation = raw.trimEnd().endsWith("\\") && !/^\s*#/.test(raw);
-    if (continued) {
-      const via = /^via\b\s*(.*)$/.exec(/\s#\s*(.*)$/.exec(raw)?.[1]?.trim() ?? "");
-      if (via && current) annotate(current, via[1] ?? "");
-      continue;
-    }
-    const comment = /^(\s*)#\s?(.*)$/.exec(raw);
-    if (comment) {
-      const [, indent = "", body = ""] = comment;
-      if (COMPILED_HEADER.test(body)) header = true;
-      if (indent === "" || !current) {
-        current = null;
-        inViaBlock = false;
-        if (indent === "" && OMITTED_TRAILER.test(body.trim())) inOmittedTrailer = true;
-        else if (indent === "" && inOmittedTrailer) {
-          const name = requirementName(body.trim());
-          if (name) omitted.add(name.name);
-        }
-        continue;
-      }
-      const via = /^via\b\s*(.*)$/.exec(body.trim());
-      if (via) annotate(current, via[1] ?? "");
-      else if (inViaBlock && /^\s{2,}\S/.test(body)) current.via?.push(body.trim());
-      else inViaBlock = false;
-      continue;
-    }
-    inOmittedTrailer = false;
-    if (raw.trim() === "") {
-      current = null;
-      inViaBlock = false;
-      continue;
-    }
-    const inline = /(?:^|\s)#\s*(.*)$/.exec(raw)?.[1] ?? "";
-    const line = raw.replace(/(^|\s)#.*$/, "").replace(/\\\s*$/, "");
-    current = null;
-    inViaBlock = false;
-    if (line.trim() === "" || line.trim().startsWith("-")) continue;
-    const requirement = requirementName(line);
-    if (!requirement) continue;
-    const written = line.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
-    const inlineVia = /^via\b\s*(.*)$/.exec(inline.trim());
-    current = {
-      at: lineOffset + requirement.at,
-      length: written.length,
-      name: requirement.name,
-      spec: requirement.spec,
-      via: inlineVia ? viaEntries(inlineVia[1] ?? "") : null
-    };
-    found.push(current);
-  }
-  const inFile = new Set(found.map((f3) => f3.name));
-  const packageEntry = (entry) => {
-    const name = PACKAGE_ENTRY.exec(entry)?.[1];
-    return name === void 0 ? null : normalisePypiName(name);
-  };
-  const isSource = (entry) => {
-    if (SOURCE_ENTRY.test(entry)) return true;
-    const name = packageEntry(entry);
-    return name !== null && !inFile.has(name) && !omitted.has(name);
-  };
-  const wellFormed = (entry) => entry.startsWith("-") || SOURCE_ENTRY.test(entry) || packageEntry(entry) !== null;
-  const annotated = found.filter((f3) => f3.via !== null).length;
-  const compiled2 = header || found.length > 0 && annotated === found.length && found.every((f3) => f3.via?.every(wellFormed)) && found.some((f3) => f3.via?.some(isSource));
-  const errors = [];
-  const unannotated = header && annotated === 0 && found.length > 0;
-  if (unannotated) {
-    errors.push({
-      file: path,
-      message: "compiled without `# via` annotations, so its declared packages cannot be told from transitive ones; none is attributed. Scan the source file it was compiled from.",
-      fatal: false
-    });
-  }
-  const unsure = [];
-  const dependencies = found.map((f3) => {
-    const parents = (f3.via ?? []).map(packageEntry).filter((name) => name !== null && inFile.has(name));
-    const via = f3.via ?? [];
-    const excludedParent = via.some((entry) => omitted.has(packageEntry(entry) ?? ""));
-    const unrecognised = parents.length === 0 && via.some((entry) => !wellFormed(entry));
-    const doubtful = compiled2 && !unannotated && !via.some(isSource) && (excludedParent || unrecognised);
-    if (doubtful) unsure.push(f3.name);
-    const direct = !unannotated && (!compiled2 || f3.via === null || via.some(isSource) || doubtful);
-    const transitiveVia = direct ? [] : (f3.via ?? []).map(packageEntry).filter((name) => name !== null);
-    return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, transitiveVia);
-  });
-  if (unsure.length > 0) {
-    const shown = unsure.slice(0, 5).join(", ");
-    const more = unsure.length > 5 ? ` and ${unsure.length - 5} more` : "";
-    errors.push({
-      file: path,
-      message: `read as declared because their \`# via\` names a parent left out of this file, or no recognisable one: ${shown}${more}. If they are only pulled in by other packages, suppress them.`,
-      fatal: false
-    });
-  }
-  return { dependencies, errors };
-}
-function viaEntries(text) {
-  return text.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
-}
-function tokenise(text) {
-  const tokens = [];
-  let i2 = 0;
-  while (i2 < text.length) {
-    const ch = text[i2];
-    if (ch === "\n") {
-      tokens.push({ t: "nl" });
-      i2++;
-    } else if (ch === " " || ch === "	" || ch === "\r") {
-      i2++;
-    } else if (ch === "#") {
-      while (i2 < text.length && text[i2] !== "\n") i2++;
-    } else if (text.startsWith('"""', i2) || text.startsWith("'''", i2)) {
-      const quote = text.slice(i2, i2 + 3);
-      let end = i2 + 3;
-      while (end < text.length && !text.startsWith(quote, end)) {
-        end += quote === '"""' && text[end] === "\\" ? 2 : 1;
-      }
-      let close = end + 3;
-      while (close < text.length && text[close] === quote[0] && close < end + 5) close++;
-      tokens.push({ t: "str", v: text.slice(i2 + 3, end), start: i2, multiline: true });
-      for (let k2 = i2; k2 < Math.min(close, text.length); k2++) {
-        if (text[k2] === "\n") tokens.push({ t: "nl" });
-      }
-      i2 = close;
-    } else if (ch === '"' || ch === "'") {
-      let end = i2 + 1;
-      while (end < text.length && text[end] !== ch && text[end] !== "\n") {
-        end += ch === '"' && text[end] === "\\" ? 2 : 1;
-      }
-      tokens.push({ t: "str", v: text.slice(i2 + 1, end), start: i2, multiline: false });
-      i2 = text[end] === ch ? end + 1 : end;
-    } else if ("[]{}=,.".includes(ch)) {
-      tokens.push({ t: "punct", v: ch, start: i2 });
-      i2++;
-    } else if (/[A-Za-z0-9_-]/.test(ch)) {
-      let end = i2 + 1;
-      while (end < text.length && /[A-Za-z0-9_-]/.test(text[end])) end++;
-      tokens.push({ t: "bare", v: text.slice(i2, end), start: i2 });
-      i2 = end;
-    } else {
-      tokens.push({ t: "other", start: i2 });
-      i2++;
-    }
-  }
-  return tokens;
-}
-function tableKind(table) {
-  if (table === "project") return { kind: "array-key", key: "dependencies", dev: () => false };
-  if (table === "project.optional-dependencies") {
-    return { kind: "array-key", key: null, dev: (k2) => DEV_NAME.test(k2) };
-  }
-  if (table === "dependency-groups") return { kind: "array-key", key: null, dev: () => true };
-  if (table === "tool.poetry.dependencies") return { kind: "poetry", dev: false };
-  if (table === "tool.poetry.dev-dependencies") return { kind: "poetry", dev: true };
-  const group = /^tool\.poetry\.group\.([^.]+)\.dependencies$/.exec(table);
-  if (group) return { kind: "poetry", dev: DEV_NAME.test(group[1]) };
-  return null;
-}
-function parsePyprojectToml(text, path) {
-  const index = new LineIndex(text);
-  const dependencies = [];
-  const tokens = tokenise(text);
-  let table = null;
-  let i2 = 0;
-  const toLineEnd = () => {
-    while (i2 < tokens.length && tokens[i2]?.t !== "nl") i2++;
-  };
-  const valueEnd = (from) => {
-    const first = tokens[from];
-    if (first?.t === "punct" && (first.v === "[" || first.v === "{")) {
-      let depth = 0;
-      for (let k22 = from; k22 < tokens.length; k22++) {
-        const tok = tokens[k22];
-        if (tok?.t !== "punct") continue;
-        if (tok.v === "[" || tok.v === "{") depth++;
-        else if (tok.v === "]" || tok.v === "}") depth--;
-        if (depth === 0) return k22 + 1;
-      }
-      return tokens.length;
-    }
-    let k2 = from;
-    while (k2 < tokens.length && tokens[k2]?.t !== "nl") k2++;
-    return k2;
-  };
-  const readArray = (from, to, dev) => {
-    let depth = 0;
-    for (let k2 = from; k2 < to; k2++) {
-      const tok = tokens[k2];
-      if (tok?.t === "punct" && (tok.v === "[" || tok.v === "{")) depth++;
-      else if (tok?.t === "punct" && (tok.v === "]" || tok.v === "}")) depth--;
-      else if (tok?.t === "str" && depth === 1 && !tok.multiline) {
-        const requirement = requirementName(tok.v);
-        if (!requirement) continue;
-        const written = tok.v.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
-        dependencies.push(
-          record(
-            index,
-            path,
-            tok.start + 1 + requirement.at,
-            written.length,
-            requirement.name,
-            requirement.spec,
-            dev
-          )
-        );
-      }
-    }
-  };
-  while (i2 < tokens.length) {
-    const tok = tokens[i2];
-    if (tok?.t === "nl") {
-      i2++;
-      continue;
-    }
-    if (tok?.t === "punct" && tok.v === "[") {
-      const next = tokens[i2 + 1];
-      if (next?.t === "punct" && next.v === "[") {
-        table = null;
-        toLineEnd();
-        continue;
-      }
-      const name = [];
-      let k22 = i2 + 1;
-      let ok = true;
-      for (; k22 < tokens.length; k22++) {
-        const part = tokens[k22];
-        if (part?.t === "punct" && part.v === "]") break;
-        if (part?.t === "bare" || part?.t === "str" && !part.multiline) name.push(part.v);
-        else if (!(part?.t === "punct" && part.v === ".")) {
-          ok = false;
-          break;
-        }
-      }
-      table = ok ? tableKind(name.join(".")) : null;
-      toLineEnd();
-      continue;
-    }
-    const parts = [];
-    let k2 = i2;
-    while (k2 < tokens.length) {
-      const part = tokens[k2];
-      if (part?.t === "bare" || part?.t === "str" && !part.multiline) {
-        parts.push({ v: part.v, start: part.start + (part.t === "str" ? 1 : 0) });
-        k2++;
-        const dot = tokens[k2];
-        if (dot?.t === "punct" && dot.v === ".") {
-          k2++;
-          continue;
-        }
-      }
-      break;
-    }
-    const equals = tokens[k2];
-    if (parts.length === 0 || !(equals?.t === "punct" && equals.v === "=")) {
-      toLineEnd();
-      continue;
-    }
-    const valueStart = k2 + 1;
-    const end = valueEnd(valueStart);
-    const head = parts[0];
-    if (table?.kind === "poetry") {
-      if (head.v !== "python") {
-        const value = tokens[valueStart];
-        const version = parts.length === 1 && value?.t === "str" ? value.v : "";
-        dependencies.push(
-          record(
-            index,
-            path,
-            head.start,
-            head.v.length,
-            normalisePypiName(head.v),
-            version,
-            table.dev
-          )
-        );
-      }
-    } else if (table?.kind === "array-key" && parts.length === 1) {
-      const value = tokens[valueStart];
-      if ((table.key === null || head.v === table.key) && value?.t === "punct" && value.v === "[") {
-        readArray(valueStart, end, table.dev(head.v));
-      }
-    }
-    i2 = end;
-    toLineEnd();
-  }
-  return { dependencies, errors: [] };
-}
-var CLASSIC_HEADER = /^(?!\s)(.+):\s*$/;
-var CLASSIC_VERSION = /^\s+version\s+"?([^"\s]+)"?\s*$/;
-function parseYarnClassicLock(text, manifestPath) {
-  const index = new LineIndex(text);
-  const dependencies = [];
-  const lines = text.split("\n");
-  let offset = 0;
-  let pending = null;
-  for (const line of lines) {
-    const lineOffset = offset;
-    offset += line.length + 1;
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const header = CLASSIC_HEADER.exec(line);
-    if (header?.[1]) {
-      const firstSpec = header[1].split(",")[0]?.trim() ?? "";
-      const name = nameFromSpecifier(firstSpec);
-      pending = name ? { name, headerOffset: lineOffset, headerLength: line.replace(/\s+$/, "").length } : null;
-      continue;
-    }
-    const version = CLASSIC_VERSION.exec(line);
-    if (version?.[1] && pending) {
-      dependencies.push({
-        name: pending.name,
-        version: version[1],
-        ecosystem: "npm",
-        manifestPath,
-        loc: index.locationAt(manifestPath, pending.headerOffset, pending.headerLength),
-        snippet: index.snippetAt(pending.headerOffset),
-        direct: false,
-        dev: false
-        // yarn v1 lockfiles do not record dev-ness
-      });
-      pending = null;
-    }
-  }
-  return { dependencies, errors: [] };
-}
-function parseYarnBerryLock(text, manifestPath) {
-  const index = new LineIndex(text);
-  const doc = (0, import_yaml3.parseDocument)(text);
-  if (doc.errors.length > 0) {
-    return {
-      dependencies: [],
-      errors: [
-        {
-          file: manifestPath,
-          // The parser's message quotes the failing line after its first one;
-          // the position is enough, and the excerpt is file content.
-          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
-          fatal: false
-        }
-      ]
-    };
-  }
-  const dependencies = [];
-  const contents = doc.contents;
-  if (!(0, import_yaml3.isMap)(contents)) return { dependencies, errors: [] };
-  for (const item of contents.items) {
-    if (!(0, import_yaml3.isPair)(item) || !(0, import_yaml3.isScalar)(item.key)) continue;
-    const key = String(item.key.value);
-    if (key === "__metadata") continue;
-    const value = item.value;
-    const version = value?.get?.("version");
-    const resolution = value?.get?.("resolution");
-    const name = nameFromSpecifier(typeof resolution === "string" ? resolution : "") ?? nameFromSpecifier(key.split(",")[0]?.trim() ?? "");
-    if (!name) continue;
-    const offset = item.key.range?.[0] ?? 0;
-    const length = (item.key.range?.[1] ?? offset) - offset;
-    dependencies.push({
-      name,
-      version: version === void 0 || version === null ? "*" : String(version),
-      ecosystem: "npm",
-      manifestPath,
-      loc: index.locationAt(manifestPath, offset, length),
-      snippet: index.snippetAt(offset),
-      direct: false,
-      dev: false
-    });
-  }
-  return { dependencies, errors: [] };
-}
-function nameFromSpecifier(spec) {
-  const cleaned = spec.replace(/^["']|["']$/g, "").trim();
-  if (!cleaned) return null;
-  const at = cleaned.lastIndexOf("@");
-  if (at <= 0) return cleaned.startsWith("@") ? null : cleaned;
-  const name = cleaned.slice(0, at);
-  return name || null;
-}
-function isBerry(text) {
-  return /^__metadata:/m.test(text);
-}
-function analyzeManifests(options) {
-  const { root, manifestPaths, includeTransitive = false, includeDev = true } = options;
-  const errors = [];
-  const workspaces = [];
-  const declared = /* @__PURE__ */ new Map();
-  const manifestRecords = [];
-  const lockRecords = [];
-  for (const path of manifestPaths) {
-    let text;
-    try {
-      text = readInsideRoot(root, path);
-    } catch (error) {
-      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
-      continue;
-    }
-    const file = basename3(path);
-    if (file === "package.json") {
-      const result2 = parsePackageJson(text, path);
-      if (result2.name && path !== "package.json") workspaces.push(result2.name);
-      for (const dep of result2.dependencies) {
-        const existing = declared.get(dep.name);
-        declared.set(dep.name, { dev: (existing?.dev ?? true) && dep.dev });
-      }
-      manifestRecords.push(...result2.dependencies);
-      errors.push(...result2.errors);
-      continue;
-    }
-    if (file === "pyproject.toml" || isRequirementsFile(path)) {
-      const python = file === "pyproject.toml" ? parsePyprojectToml(text, path) : parseRequirementsTxt(text, path);
-      manifestRecords.push(...python.dependencies);
-      errors.push(...python.errors);
-      continue;
-    }
-    const result = file === "pnpm-lock.yaml" ? parsePnpmLock(text, path) : file === "yarn.lock" ? isBerry(text) ? parseYarnBerryLock(text, path) : parseYarnClassicLock(text, path) : parseNpmLock(text, path);
-    lockRecords.push(...result.dependencies);
-    errors.push(...result.errors);
-  }
-  for (const record2 of lockRecords) {
-    const declaration = declared.get(record2.name);
-    if (declaration) {
-      record2.direct = true;
-      record2.dev = declaration.dev;
-    }
-  }
-  const all = [...manifestRecords, ...lockRecords];
-  const filtered = all.filter((record2) => {
-    if (!includeTransitive && !record2.direct) return false;
-    if (!includeDev && record2.dev) return false;
-    return true;
-  });
-  return {
-    dependencies: dedupe(filtered),
-    errors,
-    workspaces,
-    manifestsScanned: manifestPaths.length
-  };
-}
-function dedupe(records) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const record2 of records) {
-    const key = `${record2.name}|${record2.manifestPath}|${record2.loc.startLine}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(record2);
-  }
-  return out.sort(
-    (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
-  );
-}
-function displayName(finding) {
-  return finding.vendor?.name ?? "Unrecognised destination";
-}
-function isReferenceOnly(finding) {
-  return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
-}
-function markdownText(text) {
-  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, "\\$&");
-}
-function plainText(text) {
-  return Array.from(text, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    const control = code < 32 || code >= 127 && code <= 159 || code === 8232 || code === 8233;
-    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
-    return control || bidi ? " " : ch;
-  }).join("");
-}
-function markdownUrl(url) {
-  return plainText(url).trim().replace(
-    /[\s()<>"'`\\[\]{}|^*_]/g,
-    (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
-}
-var SARIF_VERSION = "2.1.0";
-var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
-var INFORMATION_URI = "https://github.com/egressa-dev/egressa";
-function toSarif(result, options) {
-  return {
-    $schema: SARIF_SCHEMA,
-    version: SARIF_VERSION,
-    runs: [
-      {
-        tool: {
-          driver: {
-            name: "egressa",
-            version: options.toolVersion,
-            semanticVersion: options.toolVersion,
-            informationUri: INFORMATION_URI,
-            // The claim scope travels with the output, not just the README.
-            fullDescription: { text: DISCLAIMER },
-            rules: RULE_IDS.map((id) => toReportingDescriptor(id, result))
-          }
-        },
-        automationDetails: { id: "egressa/scan" },
-        // GitHub shows this in the alert; it makes the KB version auditable.
-        // `exclude` lives here rather than on individual results: it describes
-        // the run, not any one finding, and a SARIF narrowed by --exclude must
-        // not be byte-indistinguishable from a genuinely clean scan -- this is
-        // the one place in the document that provenance can hide.
-        properties: {
-          kbVersion: result.kb.version,
-          kbLicense: result.kb.license,
-          adequacyStatusAsOf: result.kb.adequacyStatusAsOf,
-          ...result.scan.assumedAdequacyLapsed ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed } : {},
-          ...result.scan.exclude?.length ? { exclude: result.scan.exclude } : {}
-        },
-        ...result.errors.length > 0 ? { invocations: [toInvocation(result)] } : {},
-        results: result.findings.map((finding) => toResult(finding, result))
-      }
-    ]
-  };
-}
-function toInvocation(result) {
-  return {
-    executionSuccessful: !result.errors.some((e2) => e2.fatal),
-    toolExecutionNotifications: result.errors.map((e2) => ({
-      level: e2.fatal ? "error" : "warning",
-      message: { text: e2.message },
-      // Located against the source root, like every result. A path that is the
-      // machine's, or that climbs out of the root (an explicit --config), has
-      // no location in the checkout to point at.
-      ...isAbsolute3(e2.file) || e2.file.startsWith("..") ? {} : {
-        locations: [
-          { physicalLocation: { artifactLocation: { uri: e2.file, uriBaseId: "%SRCROOT%" } } }
-        ]
-      }
-    }))
-  };
-}
-function toReportingDescriptor(id, result) {
-  const rule = RULES[id];
-  return {
-    id: rule.id,
-    name: rule.name,
-    shortDescription: { text: rule.shortDescription },
-    fullDescription: { text: rule.fullDescription },
-    defaultConfiguration: { level: rule.defaultLevel },
-    // GitHub renders help.markdown in the alert detail pane. Putting the DPA
-    // link, sub-processor list, sources and lastVerified here means the whole
-    // evidence trail is visible in the UI at zero UI cost.
-    help: {
-      text: rule.help,
-      markdown: buildHelpMarkdown(id, result)
-    },
-    properties: { tags: rule.tags },
-    helpUri: `${INFORMATION_URI}/blob/main/docs/rules/${rule.name}.md`
-  };
-}
-function buildHelpMarkdown(id, result) {
-  const rule = RULES[id];
-  const lines = [`### ${rule.shortDescription}`, "", rule.fullDescription, "", rule.help];
-  const vendors = result.findings.flatMap(
-    (f3) => f3.ruleId === id && f3.vendor && f3.transfer ? [{ vendor: f3.vendor, transfer: f3.transfer }] : []
-  );
-  if (vendors.length > 0) {
-    lines.push("", "#### Vendors matched in this scan", "");
-    for (const { vendor, transfer } of vendors) {
-      lines.push(
-        `**${markdownText(vendor.name)}** \u2014 processing: ${markdownText(transfer.jurisdictions.join(", "))}`
-      );
-      if (transfer.euRegion.available) {
-        lines.push(`- EU region: available (${transfer.euRegion.scope ?? "scope not recorded"})`);
-      }
-      if (transfer.dpaUrl) {
-        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})`);
-      }
-      if (transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})`);
-      }
-      for (const source of transfer.kbSources) {
-        lines.push(
-          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})`
-        );
-      }
-      lines.push(`- Last verified: ${transfer.lastVerified}`);
-      if (transfer.disputed) {
-        lines.push(
-          `- **Disputed**: ${markdownText(transfer.disputed.summary)} ([issue](${markdownUrl(transfer.disputed.issueUrl)}))`
-        );
-      }
-      lines.push("");
-    }
-  }
-  lines.push("", "---", "", DISCLAIMER);
-  return lines.join("\n");
-}
-function toResult(finding, result) {
-  const [primary, ...related] = finding.evidence;
-  return {
-    ruleId: finding.ruleId,
-    level: finding.severity,
-    message: { markdown: buildMessage(finding), text: buildMessageText(finding) },
-    locations: primary ? [toSarifLocation(primary)] : [],
-    ...related.length > 0 ? { relatedLocations: related.map(toSarifLocation) } : {},
-    // Fingerprints keep an alert from closing and reopening every time an
-    // unrelated edit shifts its line number.
-    partialFingerprints: { "egressa/vendorRule/v1": finding.id },
-    // GitHub sorts by rank, so severity x confidence produces a sensible order.
-    rank: toRank(finding.severity, finding.confidence),
-    ...finding.suppressed && finding.suppression ? {
-      suppressions: [{ kind: "external", justification: finding.suppression.reason }]
-    } : {},
-    properties: {
-      vendorId: finding.vendor?.id ?? null,
-      confidence: finding.confidence,
-      jurisdictions: finding.transfer?.jurisdictions ?? [],
-      exposure: finding.exposure ? {
-        thirdCountryTransfer: finding.exposure.thirdCountryTransfer,
-        euAlternativeAvailable: finding.exposure.euAlternativeAvailable,
-        adequacyDependent: finding.exposure.adequacyDependent,
-        level: finding.exposure.level
-      } : null,
-      kbVersion: result.kb.version,
-      evidenceCount: finding.evidence.length
-    }
-  };
-}
-function confidencePrefix(finding) {
-  return finding.confidence === "high" ? "" : `[${finding.confidence} confidence] `;
-}
-function buildMessageText(finding, render2 = plainText) {
-  const vendor = render2(displayName(finding));
-  const where = finding.transfer ? ` (processing: ${finding.transfer.jurisdictions.join(", ")})` : "";
-  const count = finding.evidence.length > 1 ? ` ${finding.evidence.length} references in this repository.` : "";
-  const referenceOnly = isReferenceOnly(finding) ? " Named, not called." : "";
-  return `${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}`;
-}
-function buildMessage(finding) {
-  const text = buildMessageText(finding, markdownText);
-  if (!finding.transfer?.dpaUrl) return text;
-  return `${text} [DPA](${markdownUrl(finding.transfer.dpaUrl)})`;
-}
-function toSarifLocation(evidence) {
-  return {
-    physicalLocation: {
-      artifactLocation: { uri: evidence.file, uriBaseId: "%SRCROOT%" },
-      region: {
-        startLine: evidence.startLine,
-        startColumn: evidence.startColumn,
-        endLine: evidence.endLine,
-        endColumn: evidence.endColumn,
-        snippet: { text: evidence.snippet }
-      }
-    },
-    properties: { kind: evidence.kind, matchedOn: evidence.matchedOn }
-  };
-}
-var SEVERITY_RANK = { error: 80, warning: 55, note: 25 };
-var CONFIDENCE_BONUS = { high: 20, medium: 10, low: 0 };
-function toRank(severity, confidence) {
-  return Math.min(100, SEVERITY_RANK[severity] + CONFIDENCE_BONUS[confidence]);
-}
-function confidenceForDependency(record2, alias) {
-  if (!record2.direct) return "low";
-  if (record2.dev) return "medium";
-  return alias.kind === "official-sdk" ? "high" : "medium";
-}
-var ORDER = { low: 0, medium: 1, high: 2 };
-var CEILING = { reference: "medium" };
-function confidenceForKind(kind, raw) {
-  const ceiling = CEILING[kind];
-  if (!ceiling) return raw;
-  return ORDER[raw] > ORDER[ceiling] ? ceiling : raw;
-}
-function strongest(values) {
-  return values.reduce((best, v2) => ORDER[v2] > ORDER[best] ? v2 : best, "low");
-}
 var MAX_DEPTH2 = 3;
 function hostFromUrlPrefix(prefix, hasMore) {
   const input = trimControls(prefix.replace(/[\t\n\r]/g, ""), !hasMore);
@@ -18297,7 +17381,7 @@ function analyzeInfrastructure(options) {
       errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
       continue;
     }
-    const name = basename22(path);
+    const name = basename3(path);
     try {
       if (name === "vercel.json") regions.push(...parseVercelJson(text, path));
       else if (name === "serverless.yml" || name === "serverless.yaml") {
@@ -18347,7 +17431,7 @@ function parseVercelJson(text, path) {
   return out;
 }
 function parseServerlessYaml(text, path) {
-  const doc = (0, import_yaml4.parseDocument)(text, { keepSourceTokens: true });
+  const doc = (0, import_yaml2.parseDocument)(text, { keepSourceTokens: true });
   if (doc.errors.length > 0) return [];
   const provider = doc.get("provider");
   if (!provider?.get) return [];
@@ -18365,6 +17449,759 @@ function parseServerlessYaml(text, path) {
       snippet: index.snippetAt(offset)
     }
   ];
+}
+function parseNpmLock(text, manifestPath) {
+  const index = new LineIndex(text);
+  const root = parseTree2(text, [], { allowTrailingComma: true });
+  if (!root || root.type !== "object") {
+    return {
+      dependencies: [],
+      errors: [{ file: manifestPath, message: "not a JSON object", fatal: false }]
+    };
+  }
+  const version = numberProperty(root, "lockfileVersion") ?? 1;
+  const packages = propertyValue(root, "packages");
+  const kind = version >= 3 ? "npm-v3" : version === 2 ? "npm-v2" : "npm-v1";
+  if (packages && packages.type === "object") {
+    return { dependencies: fromPackagesMap(packages, index, manifestPath), errors: [] };
+  }
+  const tree = propertyValue(root, "dependencies");
+  if (tree && tree.type === "object") {
+    const deps = [];
+    walkV1Tree(tree, index, manifestPath, [], deps);
+    return { dependencies: deps, errors: [] };
+  }
+  return {
+    dependencies: [],
+    errors: [
+      { file: manifestPath, message: `${kind}: no packages or dependencies block`, fatal: false }
+    ]
+  };
+}
+function fromPackagesMap(packages, index, manifestPath) {
+  const out = [];
+  for (const prop of packages.children ?? []) {
+    const key = prop.children?.[0]?.value;
+    const entry = prop.children?.[1];
+    if (typeof key !== "string" || key === "" || !entry || entry.type !== "object") continue;
+    if (key.startsWith("node_modules/") === false) continue;
+    const segments = key.split("node_modules/");
+    const name = segments[segments.length - 1];
+    if (!name) continue;
+    const via = segments.slice(1, -1).map((s2) => s2.replace(/\/$/, "")).filter(Boolean);
+    out.push({
+      name,
+      version: stringProperty(entry, "version") ?? "*",
+      ecosystem: "npm",
+      manifestPath,
+      loc: index.locationAt(manifestPath, prop.offset, prop.length),
+      snippet: index.snippetAt(prop.offset),
+      direct: false,
+      dev: booleanProperty(entry, "dev") ?? false,
+      ...via.length > 0 ? { transitiveVia: via } : {}
+    });
+  }
+  return out;
+}
+function walkV1Tree(node, index, manifestPath, via, out) {
+  for (const prop of node.children ?? []) {
+    const name = prop.children?.[0]?.value;
+    const entry = prop.children?.[1];
+    if (typeof name !== "string" || !entry || entry.type !== "object") continue;
+    out.push({
+      name,
+      version: stringProperty(entry, "version") ?? "*",
+      ecosystem: "npm",
+      manifestPath,
+      loc: index.locationAt(manifestPath, prop.offset, prop.length),
+      snippet: index.snippetAt(prop.offset),
+      direct: false,
+      dev: booleanProperty(entry, "dev") ?? false,
+      ...via.length > 0 ? { transitiveVia: [...via] } : {}
+    });
+    const nested = propertyValue(entry, "dependencies");
+    if (nested && nested.type === "object") {
+      walkV1Tree(nested, index, manifestPath, [...via, name], out);
+    }
+  }
+}
+function propertyValue(object, key) {
+  for (const prop of object.children ?? []) {
+    if (prop.children?.[0]?.value === key) return prop.children[1];
+  }
+  return void 0;
+}
+function stringProperty(o3, k2) {
+  const v2 = propertyValue(o3, k2)?.value;
+  return typeof v2 === "string" ? v2 : void 0;
+}
+function numberProperty(o3, k2) {
+  const v2 = propertyValue(o3, k2)?.value;
+  return typeof v2 === "number" ? v2 : void 0;
+}
+function booleanProperty(o3, k2) {
+  const v2 = propertyValue(o3, k2)?.value;
+  return typeof v2 === "boolean" ? v2 : void 0;
+}
+var RUNTIME_BLOCKS = ["dependencies", "optionalDependencies"];
+var DEV_BLOCKS = ["devDependencies"];
+function parsePackageJson(text, manifestPath, workspace) {
+  const errors = [];
+  const dependencies = [];
+  const index = new LineIndex(text);
+  const root = parseTree2(text, [], { allowTrailingComma: true, disallowComments: false });
+  if (!root || root.type !== "object") {
+    return {
+      dependencies,
+      errors: [{ file: manifestPath, message: "not a JSON object", fatal: false }],
+      workspaceGlobs: []
+    };
+  }
+  const name = stringProperty2(root, "name");
+  for (const [blocks, dev] of [
+    [RUNTIME_BLOCKS, false],
+    [DEV_BLOCKS, true]
+  ]) {
+    for (const block of blocks) {
+      const node = propertyValue2(root, block);
+      if (!node || node.type !== "object") continue;
+      for (const prop of node.children ?? []) {
+        const keyNode = prop.children?.[0];
+        const valueNode = prop.children?.[1];
+        if (!keyNode || typeof keyNode.value !== "string") continue;
+        const version = typeof valueNode?.value === "string" ? valueNode.value : "*";
+        dependencies.push({
+          name: keyNode.value,
+          version,
+          ecosystem: "npm",
+          manifestPath,
+          // Anchor on the property, so the annotation covers `"name": "^1.2.3"`.
+          loc: index.locationAt(manifestPath, prop.offset, prop.length),
+          snippet: index.snippetAt(prop.offset),
+          direct: true,
+          dev,
+          ...workspace ? { workspace } : {}
+        });
+      }
+    }
+  }
+  return { dependencies, errors, name, workspaceGlobs: readWorkspaceGlobs(root) };
+}
+function propertyValue2(object, key) {
+  for (const prop of object.children ?? []) {
+    if (prop.children?.[0]?.value === key) return prop.children[1];
+  }
+  return void 0;
+}
+function stringProperty2(object, key) {
+  const node = propertyValue2(object, key);
+  return typeof node?.value === "string" ? node.value : void 0;
+}
+function readWorkspaceGlobs(root) {
+  const node = propertyValue2(root, "workspaces");
+  if (!node) return [];
+  const arrayNode = node.type === "array" ? node : propertyValue2(node, "packages");
+  if (!arrayNode || arrayNode.type !== "array") return [];
+  return (arrayNode.children ?? []).map((child) => child.value).filter((value) => typeof value === "string");
+}
+function parsePnpmLock(text, manifestPath) {
+  const index = new LineIndex(text);
+  const errors = [];
+  const doc = (0, import_yaml3.parseDocument)(text, { keepSourceTokens: true });
+  if (doc.errors.length > 0) {
+    return {
+      dependencies: [],
+      errors: [
+        {
+          file: manifestPath,
+          // The parser's message quotes the failing line after its first one;
+          // the position is enough, and the excerpt is file content.
+          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
+          fatal: false
+        }
+      ]
+    };
+  }
+  const direct = collectDirectNames(
+    doc.get("importers"),
+    doc.get("dependencies"),
+    doc.get("devDependencies")
+  );
+  const packages = doc.get("packages");
+  const dependencies = [];
+  if ((0, import_yaml3.isMap)(packages)) {
+    for (const item of packages.items) {
+      if (!(0, import_yaml3.isPair)(item) || !(0, import_yaml3.isScalar)(item.key)) continue;
+      const rawKey = String(item.key.value);
+      const parsed = parsePackageKey(rawKey);
+      if (!parsed) continue;
+      const offset = item.key.range?.[0] ?? 0;
+      const length = (item.key.range?.[1] ?? offset) - offset;
+      const directEntry = direct.runtime.has(parsed.name) || direct.dev.has(parsed.name);
+      dependencies.push({
+        name: parsed.name,
+        version: parsed.version,
+        ecosystem: "npm",
+        manifestPath,
+        loc: index.locationAt(manifestPath, offset, length),
+        snippet: index.snippetAt(offset),
+        // pnpm's `packages` block is the flat resolved set; directness comes
+        // from importers/dependencies, which we consulted above.
+        direct: directEntry,
+        dev: !direct.runtime.has(parsed.name) && direct.dev.has(parsed.name)
+      });
+    }
+  } else {
+    errors.push({ file: manifestPath, message: "no packages block", fatal: false });
+  }
+  return { dependencies, errors };
+}
+function parsePackageKey(raw) {
+  let key = raw.startsWith("/") ? raw.slice(1) : raw;
+  const peerIndex = key.indexOf("(");
+  if (peerIndex > 0) key = key.slice(0, peerIndex);
+  const at = key.lastIndexOf("@");
+  if (at <= 0) return null;
+  const name = key.slice(0, at);
+  const version = key.slice(at + 1);
+  if (!name || !version) return null;
+  return { name, version };
+}
+function collectDirectNames(importers, deps, devDeps) {
+  const runtime = /* @__PURE__ */ new Set();
+  const dev = /* @__PURE__ */ new Set();
+  if ((0, import_yaml3.isMap)(importers)) {
+    for (const importer of importers.items) {
+      if (!(0, import_yaml3.isPair)(importer)) continue;
+      addNames(
+        runtime,
+        importer.value?.get?.("dependencies")
+      );
+      addNames(dev, importer.value?.get?.("devDependencies"));
+    }
+  }
+  addNames(runtime, deps);
+  addNames(dev, devDeps);
+  return { runtime, dev };
+}
+function addNames(target, node) {
+  if (!(0, import_yaml3.isMap)(node)) return;
+  for (const item of node.items) {
+    if ((0, import_yaml3.isPair)(item) && (0, import_yaml3.isScalar)(item.key)) target.add(String(item.key.value));
+  }
+}
+var DEV_NAME = /^(dev|develop|test|tests|testing|lint|docs|typing)$/i;
+function requirementName(text) {
+  const match = /^(\s*)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(\[[^\]]*\])?\s*(.*)$/s.exec(
+    text
+  );
+  if (!match) return null;
+  const rest = (match[4] ?? "").trim();
+  if (rest !== "" && !/^(?:[=<>!~;@]|\(\s*[=<>!~])/.test(rest)) return null;
+  return {
+    name: normalisePypiName(match[2]),
+    at: (match[1] ?? "").length,
+    spec: (rest.split(";")[0] ?? "").trim()
+  };
+}
+function record(index, path, offset, length, name, version, dev, direct = true, transitiveVia = []) {
+  return {
+    name,
+    version,
+    ecosystem: "pypi",
+    manifestPath: path,
+    loc: index.locationAt(path, offset, length),
+    snippet: index.snippetAt(offset),
+    direct,
+    dev,
+    ...transitiveVia.length > 0 ? { transitiveVia } : {}
+  };
+}
+function isRequirementsFile(path) {
+  const parts = path.split("/");
+  const file = parts.at(-1) ?? "";
+  if (!file.toLowerCase().endsWith(".txt")) return false;
+  if (/^constraints/i.test(file)) return false;
+  if (/^requirements([-_.].*)?\.txt$/i.test(file)) return true;
+  return parts.at(-2) === "requirements" && !/^(readme|license|licence|notes?|changelog|constraints)/i.test(file);
+}
+function isDevRequirementsFile(path) {
+  const file = path.split("/").pop() ?? "";
+  const stem = file.replace(/\.txt$/i, "").replace(/^requirements[-_.]?/i, "");
+  return stem.split(/[-_.]/).some((part) => DEV_NAME.test(part)) && stem !== "";
+}
+var COMPILED_HEADER = /autogenerated by (?:pip-compile|uv via)/i;
+var SOURCE_ENTRY = /^-r\s+\S|\((?:[^()]*[/\\])?(?:pyproject\.toml|setup\.py|setup\.cfg)(?::[^()]*)?\)\s*$/;
+var PACKAGE_ENTRY = /^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?:\[[^\]]*\])?$/;
+var OMITTED_TRAILER = /^The following packages (?:were excluded from the output|are considered to be unsafe)/i;
+function parseRequirementsTxt(text, path, dev = isDevRequirementsFile(path)) {
+  const index = new LineIndex(text);
+  const found = [];
+  let header = false;
+  let offset = 0;
+  let continuation = false;
+  let current = null;
+  let inViaBlock = false;
+  const omitted = /* @__PURE__ */ new Set();
+  let inOmittedTrailer = false;
+  const annotate = (target, entries) => {
+    target.via ??= [];
+    target.via.push(...viaEntries(entries));
+    inViaBlock = entries.trim() === "";
+  };
+  for (const physical of text.split("\n")) {
+    const lineOffset = offset;
+    offset += physical.length + 1;
+    const raw = physical.endsWith("\r") ? physical.slice(0, -1) : physical;
+    const continued = continuation;
+    continuation = raw.trimEnd().endsWith("\\") && !/^\s*#/.test(raw);
+    if (continued) {
+      const via = /^via\b\s*(.*)$/.exec(/\s#\s*(.*)$/.exec(raw)?.[1]?.trim() ?? "");
+      if (via && current) annotate(current, via[1] ?? "");
+      continue;
+    }
+    const comment = /^(\s*)#\s?(.*)$/.exec(raw);
+    if (comment) {
+      const [, indent = "", body = ""] = comment;
+      if (COMPILED_HEADER.test(body)) header = true;
+      if (indent === "" || !current) {
+        current = null;
+        inViaBlock = false;
+        if (indent === "" && OMITTED_TRAILER.test(body.trim())) inOmittedTrailer = true;
+        else if (indent === "" && inOmittedTrailer) {
+          const name = requirementName(body.trim());
+          if (name) omitted.add(name.name);
+        }
+        continue;
+      }
+      const via = /^via\b\s*(.*)$/.exec(body.trim());
+      if (via) annotate(current, via[1] ?? "");
+      else if (inViaBlock && /^\s{2,}\S/.test(body)) current.via?.push(body.trim());
+      else inViaBlock = false;
+      continue;
+    }
+    inOmittedTrailer = false;
+    if (raw.trim() === "") {
+      current = null;
+      inViaBlock = false;
+      continue;
+    }
+    const inline = /(?:^|\s)#\s*(.*)$/.exec(raw)?.[1] ?? "";
+    const line = raw.replace(/(^|\s)#.*$/, "").replace(/\\\s*$/, "");
+    current = null;
+    inViaBlock = false;
+    if (line.trim() === "" || line.trim().startsWith("-")) continue;
+    const requirement = requirementName(line);
+    if (!requirement) continue;
+    const written = line.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+    const inlineVia = /^via\b\s*(.*)$/.exec(inline.trim());
+    current = {
+      at: lineOffset + requirement.at,
+      length: written.length,
+      name: requirement.name,
+      spec: requirement.spec,
+      via: inlineVia ? viaEntries(inlineVia[1] ?? "") : null
+    };
+    found.push(current);
+  }
+  const inFile = new Set(found.map((f3) => f3.name));
+  const packageEntry = (entry) => {
+    const name = PACKAGE_ENTRY.exec(entry)?.[1];
+    return name === void 0 ? null : normalisePypiName(name);
+  };
+  const isSource = (entry) => {
+    if (SOURCE_ENTRY.test(entry)) return true;
+    const name = packageEntry(entry);
+    return name !== null && !inFile.has(name) && !omitted.has(name);
+  };
+  const wellFormed = (entry) => entry.startsWith("-") || SOURCE_ENTRY.test(entry) || packageEntry(entry) !== null;
+  const annotated = found.filter((f3) => f3.via !== null).length;
+  const compiled2 = header || found.length > 0 && annotated === found.length && found.every((f3) => f3.via?.every(wellFormed)) && found.some((f3) => f3.via?.some(isSource));
+  const errors = [];
+  const unannotated = header && annotated === 0 && found.length > 0;
+  if (unannotated) {
+    errors.push({
+      file: path,
+      message: "compiled without `# via` annotations, so its declared packages cannot be told from transitive ones; none is attributed. Scan the source file it was compiled from.",
+      fatal: false
+    });
+  }
+  const unsure = [];
+  const dependencies = found.map((f3) => {
+    const parents = (f3.via ?? []).map(packageEntry).filter((name) => name !== null && inFile.has(name));
+    const via = f3.via ?? [];
+    const excludedParent = via.some((entry) => omitted.has(packageEntry(entry) ?? ""));
+    const unrecognised = parents.length === 0 && via.some((entry) => !wellFormed(entry));
+    const doubtful = compiled2 && !unannotated && !via.some(isSource) && (excludedParent || unrecognised);
+    if (doubtful) unsure.push(f3.name);
+    const direct = !unannotated && (!compiled2 || f3.via === null || via.some(isSource) || doubtful);
+    const transitiveVia = direct ? [] : (f3.via ?? []).map(packageEntry).filter((name) => name !== null);
+    return record(index, path, f3.at, f3.length, f3.name, f3.spec, dev, direct, transitiveVia);
+  });
+  if (unsure.length > 0) {
+    const shown = unsure.slice(0, 5).join(", ");
+    const more = unsure.length > 5 ? ` and ${unsure.length - 5} more` : "";
+    errors.push({
+      file: path,
+      message: `read as declared because their \`# via\` names a parent left out of this file, or no recognisable one: ${shown}${more}. If they are only pulled in by other packages, suppress them.`,
+      fatal: false
+    });
+  }
+  return { dependencies, errors };
+}
+function viaEntries(text) {
+  return text.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+}
+function tokenise(text) {
+  const tokens = [];
+  let i2 = 0;
+  while (i2 < text.length) {
+    const ch = text[i2];
+    if (ch === "\n") {
+      tokens.push({ t: "nl" });
+      i2++;
+    } else if (ch === " " || ch === "	" || ch === "\r") {
+      i2++;
+    } else if (ch === "#") {
+      while (i2 < text.length && text[i2] !== "\n") i2++;
+    } else if (text.startsWith('"""', i2) || text.startsWith("'''", i2)) {
+      const quote = text.slice(i2, i2 + 3);
+      let end = i2 + 3;
+      while (end < text.length && !text.startsWith(quote, end)) {
+        end += quote === '"""' && text[end] === "\\" ? 2 : 1;
+      }
+      let close = end + 3;
+      while (close < text.length && text[close] === quote[0] && close < end + 5) close++;
+      tokens.push({ t: "str", v: text.slice(i2 + 3, end), start: i2, multiline: true });
+      for (let k2 = i2; k2 < Math.min(close, text.length); k2++) {
+        if (text[k2] === "\n") tokens.push({ t: "nl" });
+      }
+      i2 = close;
+    } else if (ch === '"' || ch === "'") {
+      let end = i2 + 1;
+      while (end < text.length && text[end] !== ch && text[end] !== "\n") {
+        end += ch === '"' && text[end] === "\\" ? 2 : 1;
+      }
+      tokens.push({ t: "str", v: text.slice(i2 + 1, end), start: i2, multiline: false });
+      i2 = text[end] === ch ? end + 1 : end;
+    } else if ("[]{}=,.".includes(ch)) {
+      tokens.push({ t: "punct", v: ch, start: i2 });
+      i2++;
+    } else if (/[A-Za-z0-9_-]/.test(ch)) {
+      let end = i2 + 1;
+      while (end < text.length && /[A-Za-z0-9_-]/.test(text[end])) end++;
+      tokens.push({ t: "bare", v: text.slice(i2, end), start: i2 });
+      i2 = end;
+    } else {
+      tokens.push({ t: "other", start: i2 });
+      i2++;
+    }
+  }
+  return tokens;
+}
+function tableKind(table) {
+  if (table === "project") return { kind: "array-key", key: "dependencies", dev: () => false };
+  if (table === "project.optional-dependencies") {
+    return { kind: "array-key", key: null, dev: (k2) => DEV_NAME.test(k2) };
+  }
+  if (table === "dependency-groups") return { kind: "array-key", key: null, dev: () => true };
+  if (table === "tool.poetry.dependencies") return { kind: "poetry", dev: false };
+  if (table === "tool.poetry.dev-dependencies") return { kind: "poetry", dev: true };
+  const group = /^tool\.poetry\.group\.([^.]+)\.dependencies$/.exec(table);
+  if (group) return { kind: "poetry", dev: DEV_NAME.test(group[1]) };
+  return null;
+}
+function parsePyprojectToml(text, path) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  const tokens = tokenise(text);
+  let table = null;
+  let i2 = 0;
+  const toLineEnd = () => {
+    while (i2 < tokens.length && tokens[i2]?.t !== "nl") i2++;
+  };
+  const valueEnd = (from) => {
+    const first = tokens[from];
+    if (first?.t === "punct" && (first.v === "[" || first.v === "{")) {
+      let depth = 0;
+      for (let k22 = from; k22 < tokens.length; k22++) {
+        const tok = tokens[k22];
+        if (tok?.t !== "punct") continue;
+        if (tok.v === "[" || tok.v === "{") depth++;
+        else if (tok.v === "]" || tok.v === "}") depth--;
+        if (depth === 0) return k22 + 1;
+      }
+      return tokens.length;
+    }
+    let k2 = from;
+    while (k2 < tokens.length && tokens[k2]?.t !== "nl") k2++;
+    return k2;
+  };
+  const readArray = (from, to, dev) => {
+    let depth = 0;
+    for (let k2 = from; k2 < to; k2++) {
+      const tok = tokens[k2];
+      if (tok?.t === "punct" && (tok.v === "[" || tok.v === "{")) depth++;
+      else if (tok?.t === "punct" && (tok.v === "]" || tok.v === "}")) depth--;
+      else if (tok?.t === "str" && depth === 1 && !tok.multiline) {
+        const requirement = requirementName(tok.v);
+        if (!requirement) continue;
+        const written = tok.v.slice(requirement.at).match(/^[A-Za-z0-9._-]+/)?.[0] ?? "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            tok.start + 1 + requirement.at,
+            written.length,
+            requirement.name,
+            requirement.spec,
+            dev
+          )
+        );
+      }
+    }
+  };
+  while (i2 < tokens.length) {
+    const tok = tokens[i2];
+    if (tok?.t === "nl") {
+      i2++;
+      continue;
+    }
+    if (tok?.t === "punct" && tok.v === "[") {
+      const next = tokens[i2 + 1];
+      if (next?.t === "punct" && next.v === "[") {
+        table = null;
+        toLineEnd();
+        continue;
+      }
+      const name = [];
+      let k22 = i2 + 1;
+      let ok = true;
+      for (; k22 < tokens.length; k22++) {
+        const part = tokens[k22];
+        if (part?.t === "punct" && part.v === "]") break;
+        if (part?.t === "bare" || part?.t === "str" && !part.multiline) name.push(part.v);
+        else if (!(part?.t === "punct" && part.v === ".")) {
+          ok = false;
+          break;
+        }
+      }
+      table = ok ? tableKind(name.join(".")) : null;
+      toLineEnd();
+      continue;
+    }
+    const parts = [];
+    let k2 = i2;
+    while (k2 < tokens.length) {
+      const part = tokens[k2];
+      if (part?.t === "bare" || part?.t === "str" && !part.multiline) {
+        parts.push({ v: part.v, start: part.start + (part.t === "str" ? 1 : 0) });
+        k2++;
+        const dot = tokens[k2];
+        if (dot?.t === "punct" && dot.v === ".") {
+          k2++;
+          continue;
+        }
+      }
+      break;
+    }
+    const equals = tokens[k2];
+    if (parts.length === 0 || !(equals?.t === "punct" && equals.v === "=")) {
+      toLineEnd();
+      continue;
+    }
+    const valueStart = k2 + 1;
+    const end = valueEnd(valueStart);
+    const head = parts[0];
+    if (table?.kind === "poetry") {
+      if (head.v !== "python") {
+        const value = tokens[valueStart];
+        const version = parts.length === 1 && value?.t === "str" ? value.v : "";
+        dependencies.push(
+          record(
+            index,
+            path,
+            head.start,
+            head.v.length,
+            normalisePypiName(head.v),
+            version,
+            table.dev
+          )
+        );
+      }
+    } else if (table?.kind === "array-key" && parts.length === 1) {
+      const value = tokens[valueStart];
+      if ((table.key === null || head.v === table.key) && value?.t === "punct" && value.v === "[") {
+        readArray(valueStart, end, table.dev(head.v));
+      }
+    }
+    i2 = end;
+    toLineEnd();
+  }
+  return { dependencies, errors: [] };
+}
+var CLASSIC_HEADER = /^(?!\s)(.+):\s*$/;
+var CLASSIC_VERSION = /^\s+version\s+"?([^"\s]+)"?\s*$/;
+function parseYarnClassicLock(text, manifestPath) {
+  const index = new LineIndex(text);
+  const dependencies = [];
+  const lines = text.split("\n");
+  let offset = 0;
+  let pending = null;
+  for (const line of lines) {
+    const lineOffset = offset;
+    offset += line.length + 1;
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    const header = CLASSIC_HEADER.exec(line);
+    if (header?.[1]) {
+      const firstSpec = header[1].split(",")[0]?.trim() ?? "";
+      const name = nameFromSpecifier(firstSpec);
+      pending = name ? { name, headerOffset: lineOffset, headerLength: line.replace(/\s+$/, "").length } : null;
+      continue;
+    }
+    const version = CLASSIC_VERSION.exec(line);
+    if (version?.[1] && pending) {
+      dependencies.push({
+        name: pending.name,
+        version: version[1],
+        ecosystem: "npm",
+        manifestPath,
+        loc: index.locationAt(manifestPath, pending.headerOffset, pending.headerLength),
+        snippet: index.snippetAt(pending.headerOffset),
+        direct: false,
+        dev: false
+        // yarn v1 lockfiles do not record dev-ness
+      });
+      pending = null;
+    }
+  }
+  return { dependencies, errors: [] };
+}
+function parseYarnBerryLock(text, manifestPath) {
+  const index = new LineIndex(text);
+  const doc = (0, import_yaml4.parseDocument)(text);
+  if (doc.errors.length > 0) {
+    return {
+      dependencies: [],
+      errors: [
+        {
+          file: manifestPath,
+          // The parser's message quotes the failing line after its first one;
+          // the position is enough, and the excerpt is file content.
+          message: doc.errors[0]?.message.split("\n")[0] ?? "YAML parse error",
+          fatal: false
+        }
+      ]
+    };
+  }
+  const dependencies = [];
+  const contents = doc.contents;
+  if (!(0, import_yaml4.isMap)(contents)) return { dependencies, errors: [] };
+  for (const item of contents.items) {
+    if (!(0, import_yaml4.isPair)(item) || !(0, import_yaml4.isScalar)(item.key)) continue;
+    const key = String(item.key.value);
+    if (key === "__metadata") continue;
+    const value = item.value;
+    const version = value?.get?.("version");
+    const resolution = value?.get?.("resolution");
+    const name = nameFromSpecifier(typeof resolution === "string" ? resolution : "") ?? nameFromSpecifier(key.split(",")[0]?.trim() ?? "");
+    if (!name) continue;
+    const offset = item.key.range?.[0] ?? 0;
+    const length = (item.key.range?.[1] ?? offset) - offset;
+    dependencies.push({
+      name,
+      version: version === void 0 || version === null ? "*" : String(version),
+      ecosystem: "npm",
+      manifestPath,
+      loc: index.locationAt(manifestPath, offset, length),
+      snippet: index.snippetAt(offset),
+      direct: false,
+      dev: false
+    });
+  }
+  return { dependencies, errors: [] };
+}
+function nameFromSpecifier(spec) {
+  const cleaned = spec.replace(/^["']|["']$/g, "").trim();
+  if (!cleaned) return null;
+  const at = cleaned.lastIndexOf("@");
+  if (at <= 0) return cleaned.startsWith("@") ? null : cleaned;
+  const name = cleaned.slice(0, at);
+  return name || null;
+}
+function isBerry(text) {
+  return /^__metadata:/m.test(text);
+}
+function analyzeManifests(options) {
+  const { root, manifestPaths, includeTransitive = false, includeDev = true } = options;
+  const errors = [];
+  const workspaces = [];
+  const declared = /* @__PURE__ */ new Map();
+  const manifestRecords = [];
+  const lockRecords = [];
+  for (const path of manifestPaths) {
+    let text;
+    try {
+      text = readInsideRoot(root, path);
+    } catch (error) {
+      errors.push({ file: path, message: `unreadable: ${readErrorMessage(error)}`, fatal: false });
+      continue;
+    }
+    const file = basename22(path);
+    if (file === "package.json") {
+      const result2 = parsePackageJson(text, path);
+      if (result2.name && path !== "package.json") workspaces.push(result2.name);
+      for (const dep of result2.dependencies) {
+        const existing = declared.get(dep.name);
+        declared.set(dep.name, { dev: (existing?.dev ?? true) && dep.dev });
+      }
+      manifestRecords.push(...result2.dependencies);
+      errors.push(...result2.errors);
+      continue;
+    }
+    if (file === "pyproject.toml" || isRequirementsFile(path)) {
+      const python = file === "pyproject.toml" ? parsePyprojectToml(text, path) : parseRequirementsTxt(text, path);
+      manifestRecords.push(...python.dependencies);
+      errors.push(...python.errors);
+      continue;
+    }
+    const result = file === "pnpm-lock.yaml" ? parsePnpmLock(text, path) : file === "yarn.lock" ? isBerry(text) ? parseYarnBerryLock(text, path) : parseYarnClassicLock(text, path) : parseNpmLock(text, path);
+    lockRecords.push(...result.dependencies);
+    errors.push(...result.errors);
+  }
+  for (const record2 of lockRecords) {
+    const declaration = declared.get(record2.name);
+    if (declaration) {
+      record2.direct = true;
+      record2.dev = declaration.dev;
+    }
+  }
+  const all = [...manifestRecords, ...lockRecords];
+  const filtered = all.filter((record2) => {
+    if (!includeTransitive && !record2.direct) return false;
+    if (!includeDev && record2.dev) return false;
+    return true;
+  });
+  return {
+    dependencies: dedupe(filtered),
+    errors,
+    workspaces,
+    manifestsScanned: manifestPaths.length
+  };
+}
+function dedupe(records) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const record2 of records) {
+    const key = `${record2.name}|${record2.manifestPath}|${record2.loc.startLine}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(record2);
+  }
+  return out.sort(
+    (a2, b2) => a2.name === b2.name ? a2.manifestPath.localeCompare(b2.manifestPath) || a2.loc.startLine - b2.loc.startLine : a2.name.localeCompare(b2.name)
+  );
 }
 function mergeSignals(signals, options) {
   const { kb, now, overlay } = options;
@@ -18883,12 +18720,9 @@ function factsSummary(overlay, findings) {
     findingsDependingOnFacts: active.filter((f3) => (f3.transfer?.repositoryFacts?.length ?? 0) > 0).length,
     // Measured on the finding, not on the fact's label: a fact can loosen in
     // general and still leave this repository's finding stricter.
-    loosened: active.filter(
-      (f3) => f3.baselineRuleId !== void 0 && LEVEL[RULES[f3.ruleId].defaultLevel] < LEVEL[RULES[f3.baselineRuleId].defaultLevel]
-    ).length
+    loosened: active.filter(loosenedByFacts).length
   };
 }
-var LEVEL = { note: 1, warning: 2, error: 3 };
 var ORDER2 = { low: 0, medium: 1, high: 2 };
 function meetsConfidence(value, floor) {
   return ORDER2[value] >= ORDER2[floor];
@@ -18913,6 +18747,240 @@ function summarise(findings) {
     unresolvedEgress: findings.filter((f3) => f3.ruleId === "transfer/unresolved-egress").length,
     suppressed: findings.filter((f3) => f3.suppressed).length
   };
+}
+function publicOverlayItem(item) {
+  const { local: _local, ...rest } = item;
+  return rest;
+}
+function displayName(finding) {
+  return finding.vendor?.name ?? "Unrecognised destination";
+}
+function isReferenceOnly(finding) {
+  return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
+}
+function markdownText(text) {
+  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, "\\$&");
+}
+function plainText(text) {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control = code < 32 || code >= 127 && code <= 159 || code === 8232 || code === 8233;
+    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
+    return control || bidi ? " " : ch;
+  }).join("");
+}
+function markdownUrl(url) {
+  return plainText(url).trim().replace(
+    /[\s()<>"'`\\[\]{}|^*_]/g,
+    (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
+var SARIF_VERSION = "2.1.0";
+var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
+var INFORMATION_URI = "https://github.com/egressa-dev/egressa";
+function toSarif(result, options) {
+  return {
+    $schema: SARIF_SCHEMA,
+    version: SARIF_VERSION,
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "egressa",
+            version: options.toolVersion,
+            semanticVersion: options.toolVersion,
+            informationUri: INFORMATION_URI,
+            // The claim scope travels with the output, not just the README.
+            fullDescription: { text: DISCLAIMER },
+            rules: RULE_IDS.map((id) => toReportingDescriptor(id, result))
+          }
+        },
+        automationDetails: { id: "egressa/scan" },
+        // GitHub shows this in the alert; it makes the KB version auditable.
+        // `exclude` lives here rather than on individual results: it describes
+        // the run, not any one finding, and a SARIF narrowed by --exclude must
+        // not be byte-indistinguishable from a genuinely clean scan -- this is
+        // the one place in the document that provenance can hide.
+        properties: {
+          kbVersion: result.kb.version,
+          kbLicense: result.kb.license,
+          adequacyStatusAsOf: result.kb.adequacyStatusAsOf,
+          ...result.scan.assumedAdequacyLapsed ? { assumedAdequacyLapsed: result.scan.assumedAdequacyLapsed } : {},
+          ...result.scan.exclude?.length ? { exclude: result.scan.exclude } : {},
+          // A repository's facts file can change classifications, so a SARIF
+          // shaped by it must say so where the run is described.
+          ...result.facts ? { facts: { ...result.facts, headline: factsHeadline(result.facts, plainText) } } : {}
+        },
+        ...result.errors.length > 0 ? { invocations: [toInvocation(result)] } : {},
+        results: result.findings.map((finding) => toResult(finding, result))
+      }
+    ]
+  };
+}
+function toInvocation(result) {
+  return {
+    executionSuccessful: !result.errors.some((e2) => e2.fatal),
+    toolExecutionNotifications: result.errors.map((e2) => ({
+      level: e2.fatal ? "error" : "warning",
+      message: { text: e2.message },
+      // Located against the source root, like every result. A path that is the
+      // machine's, or that climbs out of the root (an explicit --config), has
+      // no location in the checkout to point at.
+      ...isAbsolute3(e2.file) || e2.file.startsWith("..") ? {} : {
+        locations: [
+          { physicalLocation: { artifactLocation: { uri: e2.file, uriBaseId: "%SRCROOT%" } } }
+        ]
+      }
+    }))
+  };
+}
+function toReportingDescriptor(id, result) {
+  const rule = RULES[id];
+  return {
+    id: rule.id,
+    name: rule.name,
+    shortDescription: { text: rule.shortDescription },
+    fullDescription: { text: rule.fullDescription },
+    defaultConfiguration: { level: rule.defaultLevel },
+    // GitHub renders help.markdown in the alert detail pane. Putting the DPA
+    // link, sub-processor list, sources and lastVerified here means the whole
+    // evidence trail is visible in the UI at zero UI cost.
+    help: {
+      text: rule.help,
+      markdown: buildHelpMarkdown(id, result)
+    },
+    properties: { tags: rule.tags },
+    helpUri: `${INFORMATION_URI}/blob/main/docs/rules/${rule.name}.md`
+  };
+}
+function buildHelpMarkdown(id, result) {
+  const rule = RULES[id];
+  const lines = [`### ${rule.shortDescription}`, "", rule.fullDescription, "", rule.help];
+  const vendors = result.findings.flatMap(
+    (f3) => f3.ruleId === id && f3.vendor && f3.transfer ? [{ finding: f3, vendor: f3.vendor, transfer: f3.transfer }] : []
+  );
+  if (vendors.length > 0) {
+    lines.push("", "#### Vendors matched in this scan", "");
+    for (const { finding, vendor, transfer } of vendors) {
+      const local = isLocalVendor(finding);
+      const supplied = local ? " (supplied by this repository)" : "";
+      lines.push(
+        `**${markdownText(vendor.name)}**${local ? ` _(vendor entry from ${FACTS_MARKER})_` : ""} \u2014 processing: ${markdownText(transfer.jurisdictions.join(", "))}`
+      );
+      if (transfer.euRegion.available) {
+        lines.push(`- EU region: available (${transfer.euRegion.scope ?? "scope not recorded"})`);
+      }
+      if (transfer.dpaUrl) {
+        lines.push(`- [Data processing agreement](${markdownUrl(transfer.dpaUrl)})${supplied}`);
+      }
+      if (transfer.subprocessorsUrl) {
+        lines.push(`- [Sub-processors](${markdownUrl(transfer.subprocessorsUrl)})${supplied}`);
+      }
+      for (const source of transfer.kbSources) {
+        lines.push(
+          `- Source: [${markdownText(source.title)}](${markdownUrl(source.url)}) (${source.publisher})${supplied}`
+        );
+      }
+      lines.push(`- Last verified: ${transfer.lastVerified}${supplied}`);
+      for (const ref of transfer.repositoryFacts ?? []) {
+        lines.push(`- Repository fact: ${markdownText(factRefText(ref, plainText))}`);
+      }
+      const baseline = baselineText(finding);
+      if (baseline) lines.push(`- **${markdownText(baseline)}**`);
+      if (transfer.disputed) {
+        lines.push(
+          `- **Disputed**: ${markdownText(transfer.disputed.summary)} ([issue](${markdownUrl(transfer.disputed.issueUrl)}))`
+        );
+      }
+      lines.push("");
+    }
+  }
+  lines.push("", "---", "", DISCLAIMER);
+  return lines.join("\n");
+}
+function toResult(finding, result) {
+  const [primary, ...related] = finding.evidence;
+  return {
+    ruleId: finding.ruleId,
+    level: finding.severity,
+    message: { markdown: buildMessage(finding), text: buildMessageText(finding) },
+    locations: primary ? [toSarifLocation(primary)] : [],
+    ...related.length > 0 ? { relatedLocations: related.map(toSarifLocation) } : {},
+    // Fingerprints keep an alert from closing and reopening every time an
+    // unrelated edit shifts its line number.
+    partialFingerprints: { "egressa/vendorRule/v1": finding.id },
+    // GitHub sorts by rank, so severity x confidence produces a sensible order.
+    rank: toRank(finding.severity, finding.confidence),
+    ...finding.suppressed && finding.suppression ? {
+      suppressions: [{ kind: "external", justification: finding.suppression.reason }]
+    } : {},
+    properties: {
+      vendorId: finding.vendor?.id ?? null,
+      confidence: finding.confidence,
+      jurisdictions: finding.transfer?.jurisdictions ?? [],
+      exposure: finding.exposure ? {
+        thirdCountryTransfer: finding.exposure.thirdCountryTransfer,
+        euAlternativeAvailable: finding.exposure.euAlternativeAvailable,
+        adequacyDependent: finding.exposure.adequacyDependent,
+        level: finding.exposure.level
+      } : null,
+      kbVersion: result.kb.version,
+      evidenceCount: finding.evidence.length,
+      ...finding.vendor?.origin ? { vendorOrigin: finding.vendor.origin } : {},
+      ...finding.baselineRuleId ? { baselineRuleId: finding.baselineRuleId } : {},
+      ...finding.transfer?.repositoryFacts ? { repositoryFacts: finding.transfer.repositoryFacts } : {},
+      ...finding.verification ? { verification: finding.verification } : {}
+    }
+  };
+}
+function confidencePrefix(finding) {
+  return finding.confidence === "high" ? "" : `[${finding.confidence} confidence] `;
+}
+function buildMessageText(finding, render2 = plainText) {
+  const vendor = render2(displayName(finding));
+  const where = finding.transfer ? ` (processing: ${finding.transfer.jurisdictions.join(", ")})` : "";
+  const count = finding.evidence.length > 1 ? ` ${finding.evidence.length} references in this repository.` : "";
+  const referenceOnly = isReferenceOnly(finding) ? " Named, not called." : "";
+  return `${factsPrefix(finding)}${confidencePrefix(finding)}${vendor}${where}.${count}${referenceOnly}${factsNote(finding)}`;
+}
+function factsPrefix(finding) {
+  return loosenedByFacts(finding) ? `[loosened by ${FACTS_MARKER}] ` : "";
+}
+function factsNote(finding) {
+  const notes = [];
+  if (isLocalVendor(finding)) {
+    notes.push(`Vendor entry from ${FACTS_MARKER}, not the knowledge base.`);
+  }
+  const baseline = baselineText(finding);
+  if (baseline) notes.push(`Rule ${baseline}.`);
+  else if (finding.transfer?.repositoryFacts?.length) notes.push(`Depends on ${FACTS_MARKER}.`);
+  return notes.length > 0 ? ` ${notes.join(" ")}` : "";
+}
+function buildMessage(finding) {
+  const text = buildMessageText(finding, markdownText);
+  if (!finding.transfer?.dpaUrl) return text;
+  const label = isLocalVendor(finding) ? "DPA, as supplied by this repository" : "DPA";
+  return `${text} [${label}](${markdownUrl(finding.transfer.dpaUrl)})`;
+}
+function toSarifLocation(evidence) {
+  return {
+    physicalLocation: {
+      artifactLocation: { uri: evidence.file, uriBaseId: "%SRCROOT%" },
+      region: {
+        startLine: evidence.startLine,
+        startColumn: evidence.startColumn,
+        endLine: evidence.endLine,
+        endColumn: evidence.endColumn,
+        snippet: { text: evidence.snippet }
+      }
+    },
+    properties: { kind: evidence.kind, matchedOn: evidence.matchedOn }
+  };
+}
+var SEVERITY_RANK = { error: 80, warning: 55, note: 25 };
+var CONFIDENCE_BONUS = { high: 20, medium: 10, low: 0 };
+function toRank(severity, confidence) {
+  return Math.min(100, SEVERITY_RANK[severity] + CONFIDENCE_BONUS[confidence]);
 }
 
 // src/commands/explain.ts
@@ -19038,7 +19106,7 @@ var factsCommand = defineCommand({
 `);
       process.exit(EXIT.USAGE);
     }
-    const text = args.json ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicItem) } : { source: null, items: [] }, null, 2)}
+    const text = args.json ? `${JSON.stringify(checked ? { source: checked.source, items: checked.items.map(publicOverlayItem) } : { source: null, items: [] }, null, 2)}
 ` : formatCheck(checked);
     const rejected = checked?.items.some((i2) => i2.state === "rejected") ?? false;
     await writeOutAndExit(text, rejected ? EXIT.FINDINGS : EXIT.CLEAN);
@@ -19050,10 +19118,6 @@ function isDirectory(path) {
   } catch {
     return false;
   }
-}
-function publicItem(item) {
-  const { local: _local, ...rest } = item;
-  return rest;
 }
 var STATES = [
   "applied",
@@ -19098,6 +19162,9 @@ var STYLES = {
 function formatHuman(result, options) {
   const c3 = (style, text) => options.color ? `${STYLES[style]}${text}${RESET}` : text;
   const lines = [];
+  if (result.facts) {
+    lines.push(c3("yellow", factsHeadline(result.facts, printable)), "");
+  }
   if (result.findings.length === 0) {
     lines.push(c3("green", "No third-party data egress detected by the analyzers that ran."));
     lines.push(c3("dim", "That is not a statement that none exists. Server-side proxying, hosts"));
@@ -19141,6 +19208,14 @@ function formatHuman(result, options) {
     const n2 = result.scan.exclude.length;
     lines.push(c3("yellow", `${n2} path(s) excluded from this scan`));
   }
+  if (result.facts) {
+    lines.push(
+      c3(
+        "yellow",
+        `${FACTS_MARKER} in ${printable(result.facts.source)}: review changes to it like code`
+      )
+    );
+  }
   lines.push(c3("dim", DISCLAIMER_SHORT));
   return lines.join("\n");
 }
@@ -19156,7 +19231,9 @@ function formatFinding(finding, c3) {
   const suppressed = finding.suppressed ? c3("dim", " (suppressed)") : "";
   const confidence = finding.confidence === "high" ? "" : c3("dim", ` [${finding.confidence} confidence]`);
   const referenceOnly = isReferenceOnly(finding) ? c3("dim", " [named, not called]") : "";
-  const lines = [`${marker} ${c3("bold", name)}${confidence}${suppressed}${referenceOnly}`];
+  const local = isLocalVendor(finding);
+  const origin = local ? c3("yellow", " [local entry]") : "";
+  const lines = [`${marker} ${c3("bold", name)}${confidence}${suppressed}${referenceOnly}${origin}`];
   if (finding.transfer) {
     const eu = finding.transfer.euRegion;
     const narrowed = finding.exposure?.inputs.find((i2) => i2.startsWith("narrowedTo:"))?.slice("narrowedTo:".length);
@@ -19171,8 +19248,21 @@ function formatFinding(finding, c3) {
     if (finding.transfer.disputed) {
       lines.push(c3("yellow", `    disputed:   ${printable(finding.transfer.disputed.summary)}`));
     }
-    lines.push(c3("dim", `    verified:   ${finding.transfer.lastVerified}`));
+    lines.push(
+      c3(
+        "dim",
+        `    verified:   ${finding.transfer.lastVerified}${local ? " (by the repository, not the knowledge base)" : ""}`
+      )
+    );
+    if (local && finding.transfer.dpaUrl) {
+      lines.push(c3("dim", `    DPA (repository-supplied): ${printable(finding.transfer.dpaUrl)}`));
+    }
+    for (const ref of finding.transfer.repositoryFacts ?? []) {
+      lines.push(c3("yellow", `    facts:      ${factRefText(ref, printable)}`));
+    }
   }
+  const baseline = baselineText(finding);
+  if (baseline) lines.push(c3("yellow", `    rule:       ${baseline}`));
   for (const evidence of finding.evidence.slice(0, 3)) {
     const kindTag = evidence.kind === "callsite" ? "" : ` [${evidence.kind}]`;
     lines.push(
@@ -19185,6 +19275,12 @@ function formatFinding(finding, c3) {
   for (const link of finding.remediation.links.slice(0, 2)) {
     lines.push(c3("dim", `    ${link.label}: ${link.url}`));
   }
+  const tasks = finding.verification ?? [];
+  for (const task of tasks.slice(0, 2)) {
+    const where = task.where[0] ? `: ${task.where[0]}` : "";
+    lines.push(c3("dim", `    verify:     ${task.fact} (${task.reason})${where}`));
+  }
+  if (tasks.length > 2) lines.push(c3("dim", `    ... and ${tasks.length - 2} more to verify`));
   return lines;
 }
 function summaryLine(result, c3) {
@@ -19228,12 +19324,18 @@ function formatMarkdown(result, options = {}) {
   if (result.scan.exclude?.length) {
     lines.push(`> ${result.scan.exclude.length} path(s) excluded from this scan.`, "");
   }
+  if (result.facts) {
+    lines.push(
+      `> **${inert(factsHeadline(result.facts, plainText))}** Review changes to ${codeSpan(result.facts.source)} like code.`,
+      ""
+    );
+  }
   if (shown.length > 0) {
     lines.push("| Vendor | Reason | Processing | EU region | Rule | Confidence |");
     lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const f3 of shown) {
       lines.push(
-        `| ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""} | ${reasonCell(f3)} | ${f3.transfer ? inert(f3.transfer.jurisdictions.join(", ")) : "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
+        `| ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""}${originCell(f3)} | ${reasonCell(f3)} | ${f3.transfer ? inert(f3.transfer.jurisdictions.join(", ")) : "unknown"} | ${euRegionCell(f3)} | \`${f3.ruleId}\` | ${f3.confidence} |`
       );
     }
     lines.push("");
@@ -19243,25 +19345,41 @@ function formatMarkdown(result, options = {}) {
   }
   for (const f3 of shown) {
     lines.push(
-      `### ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""}`,
+      `### ${inert(displayName(f3))}${isReferenceOnly(f3) ? " (named, not called)" : ""}${originCell(f3)}`,
       ""
     );
+    const baseline = baselineText(f3);
+    if (baseline) lines.push(`> **${inert(baseline)}**`, "");
     if (f3.transfer) {
+      const supplied = isLocalVendor(f3) ? " (supplied by this repository)" : "";
       lines.push(`- Processing: ${inert(f3.transfer.jurisdictions.join(", "))}`);
       lines.push(`- EU region: ${euRegionCell(f3)}`);
       if (f3.transfer.dpaUrl)
-        lines.push(`- [Data processing agreement](${markdownUrl(f3.transfer.dpaUrl)})`);
+        lines.push(`- [Data processing agreement](${markdownUrl(f3.transfer.dpaUrl)})${supplied}`);
       if (f3.transfer.subprocessorsUrl) {
-        lines.push(`- [Sub-processors](${markdownUrl(f3.transfer.subprocessorsUrl)})`);
+        lines.push(`- [Sub-processors](${markdownUrl(f3.transfer.subprocessorsUrl)})${supplied}`);
       }
-      lines.push(`- Entry last verified: ${f3.transfer.lastVerified}`);
+      lines.push(`- Entry last verified: ${f3.transfer.lastVerified}${supplied}`);
       if (f3.transfer.disputed) lines.push(`- **Disputed:** ${inert(f3.transfer.disputed.summary)}`);
+      for (const ref of f3.transfer.repositoryFacts ?? []) {
+        lines.push(`- Facts: ${inert(factRefText(ref, plainText))}`);
+      }
     }
     lines.push("", "Evidence:", "");
     for (const e2 of f3.evidence.slice(0, 5)) {
       lines.push(`- \`${e2.file}:${e2.startLine}\` matched \`${e2.matchedOn}\` (${e2.kind})`);
     }
     lines.push("", f3.remediation.summary, "");
+    const tasks = f3.verification ?? [];
+    if (tasks.length > 0) {
+      lines.push("To verify:", "");
+      for (const t2 of tasks.slice(0, 5)) {
+        const where = t2.where[0] ? ` ([source](${markdownUrl(t2.where[0])}))` : "";
+        lines.push(`- ${t2.fact}: ${t2.reason}${where}`);
+      }
+      if (tasks.length > 5) lines.push(`- and ${tasks.length - 5} more`);
+      lines.push("");
+    }
   }
   if (result.unmatched.hosts.length > 0 || result.unmatched.packages.length > 0) {
     lines.push("### Not in the knowledge base", "");
@@ -19286,6 +19404,9 @@ function reasonCell(finding) {
   if (finding.vendor) return "";
   const reasons = [...new Set(finding.evidence.map((e2) => e2.matchedOn))];
   return reasons.join("; ");
+}
+function originCell(finding) {
+  return isLocalVendor(finding) ? ` (local entry, ${FACTS_MARKER})` : "";
 }
 function euRegionCell(finding) {
   const eu = finding.transfer?.euRegion;
@@ -19499,8 +19620,1528 @@ function parseConfidence(value) {
   process.exit(EXIT.USAGE);
 }
 
+// ../../kb/schema/facts-1.0.0.json
+var facts_1_0_0_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://egressa.dev/schemas/facts-1.0.0.json",
+  title: "Egressa repository facts",
+  description: "Legal facts a repository records in .egressa/facts.json after checking them against a cited source, and vendor entries it drafts locally. Read as untrusted input: only this bundled copy of the schema is used, each fact is checked on its own, and a fact may never change a vendor's jurisdictions, region map, hosts, packages, name or category.",
+  type: "object",
+  additionalProperties: false,
+  required: ["version"],
+  properties: {
+    $schema: { type: "string", maxLength: 200 },
+    version: { const: 1 },
+    facts: { type: "array", items: { type: "object" } },
+    localVendors: { type: "array", items: { type: "object" } }
+  },
+  $defs: {
+    isoDate: {
+      type: "string",
+      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    text: {
+      type: "string",
+      minLength: 1,
+      maxLength: 200,
+      pattern: "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    httpsUrl: {
+      type: "string",
+      maxLength: 500,
+      pattern: "^https://[^\\s]+$"
+    },
+    dpfUrl: {
+      type: "string",
+      maxLength: 200,
+      pattern: "^https://www\\.dataprivacyframework\\.gov/[^\\s]*$"
+    },
+    source: {
+      type: "object",
+      additionalProperties: false,
+      required: ["url", "retrievedAt"],
+      properties: {
+        url: { $ref: "#/$defs/httpsUrl" },
+        retrievedAt: { $ref: "#/$defs/isoDate" }
+      }
+    },
+    acceptance: {
+      type: "object",
+      additionalProperties: false,
+      required: ["acceptedBy", "reason"],
+      properties: {
+        acceptedBy: { $ref: "#/$defs/text" },
+        reason: { $ref: "#/$defs/text" }
+      }
+    },
+    fact: {
+      description: "One legal fact about a shipped vendor, checked against `source.url` on `source.retrievedAt`. It expires 30 days after retrieval at the latest.",
+      type: "object",
+      additionalProperties: false,
+      required: ["vendor", "fact", "value", "source", "verifiedBy"],
+      properties: {
+        vendor: { type: "string", pattern: "^[a-z0-9-]{1,64}$" },
+        fact: { enum: ["dpf", "dpa", "subprocessors"] },
+        value: { type: "object" },
+        source: { $ref: "#/$defs/source" },
+        verifiedBy: { $ref: "#/$defs/text" },
+        expires: { $ref: "#/$defs/isoDate" },
+        acceptQualifiedStatus: { $ref: "#/$defs/acceptance" }
+      },
+      if: { properties: { fact: { const: "dpf" } } },
+      then: {
+        properties: {
+          value: { $ref: "#/$defs/dpfValue" },
+          source: {
+            type: "object",
+            properties: { url: { $ref: "#/$defs/dpfUrl" } }
+          }
+        }
+      }
+    },
+    dpfValue: {
+      type: "object",
+      additionalProperties: false,
+      required: ["observedStatus", "organizationName", "participantUrl"],
+      properties: {
+        observedStatus: {
+          description: "The status shown on the participant record, copied verbatim, or `not-listed` when the organisation does not appear on the list.",
+          type: "string",
+          minLength: 1,
+          maxLength: 100,
+          pattern: "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        organizationName: { $ref: "#/$defs/text" },
+        participantUrl: {
+          type: "string",
+          maxLength: 200,
+          pattern: "^https://www\\.dataprivacyframework\\.gov/(participant/\\d{1,8}|list)$"
+        }
+      }
+    },
+    dpaValue: {
+      type: "object",
+      additionalProperties: false,
+      required: ["available"],
+      properties: {
+        available: { type: "boolean" },
+        url: { $ref: "#/$defs/httpsUrl" }
+      }
+    },
+    subprocessorsValue: {
+      type: "object",
+      additionalProperties: false,
+      required: ["url"],
+      properties: {
+        url: { $ref: "#/$defs/httpsUrl" }
+      }
+    },
+    localVendor: {
+      description: "A vendor entry drafted for a destination the shipped knowledge base does not know. `entry` follows vendor-1.0.0.json. A local entry is reported at medium confidence at most and is never DPF certified by its own claim.",
+      type: "object",
+      additionalProperties: false,
+      required: ["entry", "retrievedAt", "verifiedBy"],
+      properties: {
+        entry: { type: "object" },
+        retrievedAt: { $ref: "#/$defs/isoDate" },
+        verifiedBy: { $ref: "#/$defs/text" },
+        expires: { $ref: "#/$defs/isoDate" }
+      }
+    }
+  }
+};
+
+// ../../kb/schema/vendor-1.0.0.json
+var vendor_1_0_0_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://egressa.dev/schemas/vendor-1.0.0.json",
+  title: "Egressa vendor knowledge base entry",
+  description: "Factual, sourced record of one vendor. Entries state facts and cite them. Nothing evaluative belongs here: exposure is computed by the engine (docs/METHODOLOGY.md).",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schemaVersion",
+    "id",
+    "name",
+    "category",
+    "homepage",
+    "aliases",
+    "processing",
+    "legal",
+    "dataCategories",
+    "sources",
+    "lastVerified"
+  ],
+  properties: {
+    schemaVersion: {
+      const: "1.0.0"
+    },
+    id: {
+      type: "string",
+      pattern: "^[a-z0-9][a-z0-9-]*$",
+      maxLength: 64
+    },
+    name: {
+      type: "string",
+      minLength: 1,
+      description: "Legal entity name where known."
+    },
+    product: {
+      type: "string"
+    },
+    category: {
+      enum: [
+        "analytics",
+        "error-tracking",
+        "apm",
+        "session-replay",
+        "email",
+        "sms",
+        "crm",
+        "marketing",
+        "payments",
+        "identity",
+        "ai",
+        "search",
+        "media",
+        "hosting",
+        "database",
+        "support",
+        "other"
+      ]
+    },
+    homepage: {
+      type: "string",
+      pattern: "^https://"
+    },
+    aliases: {
+      type: "object",
+      additionalProperties: false,
+      required: ["packages", "hosts"],
+      properties: {
+        packages: {
+          type: "object",
+          additionalProperties: false,
+          description: "Keyed by ecosystem so a new language is a data addition, not a schema change.",
+          properties: {
+            npm: {
+              type: "array",
+              items: {
+                $ref: "#/$defs/packageAlias"
+              }
+            },
+            pypi: {
+              type: "array",
+              items: {
+                $ref: "#/$defs/packageAlias"
+              }
+            }
+          }
+        },
+        hosts: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/hostAlias"
+          }
+        },
+        clientConstructors: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["module"],
+            properties: {
+              module: {
+                type: "string"
+              },
+              export: {
+                type: "string"
+              },
+              hostOption: {
+                oneOf: [
+                  {
+                    type: "null"
+                  },
+                  {
+                    type: "string"
+                  }
+                ]
+              },
+              regionOption: {
+                type: "string",
+                description: "Option carrying a region identifier rather than a host, e.g. `region` on an AWS SDK client. Resolved against this vendor's regions[] map; a region is never inferred from the identifier's prefix."
+              }
+            }
+          }
+        }
+      }
+    },
+    processing: {
+      type: "object",
+      additionalProperties: false,
+      required: ["jurisdictions", "euRegion"],
+      properties: {
+        jurisdictions: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["country", "role"],
+            properties: {
+              country: {
+                type: "string",
+                pattern: "^([A-Z]{2}|EEA)$"
+              },
+              role: {
+                enum: ["primary", "support", "backup", "cdn"]
+              },
+              note: {
+                type: "string"
+              },
+              regionSelected: {
+                type: "boolean",
+                description: "True when this jurisdiction is the one a customer's region setting selects. Defaults to false, so a jurisdiction is never narrowed away unless an author has asserted, with a source, that the region setting governs it. A contracting entity's jurisdiction is not region selected: a project hosted in Frankfurt is still contracted with the entity named in the data processing addendum."
+              }
+            }
+          }
+        },
+        euRegion: {
+          type: "object",
+          additionalProperties: false,
+          required: ["available"],
+          properties: {
+            available: {
+              type: "boolean"
+            },
+            scope: {
+              enum: ["full", "partial", "product-specific"],
+              description: "Required when available is true. EU regions are usually partial; a bare boolean overstates coverage."
+            },
+            docUrl: {
+              type: "string",
+              pattern: "^https://"
+            },
+            notes: {
+              type: "string"
+            }
+          },
+          if: {
+            properties: {
+              available: {
+                const: true
+              }
+            }
+          },
+          then: {
+            required: ["available", "scope", "docUrl"]
+          }
+        }
+      }
+    },
+    legal: {
+      type: "object",
+      additionalProperties: false,
+      required: ["dpa", "transferMechanisms"],
+      properties: {
+        dpa: {
+          type: "object",
+          additionalProperties: false,
+          required: ["available"],
+          properties: {
+            available: {
+              type: "boolean"
+            },
+            url: {
+              type: "string",
+              pattern: "^https://"
+            },
+            type: {
+              enum: ["click-through", "incorporated-by-reference", "negotiated", "unknown"]
+            },
+            lastChecked: {
+              $ref: "#/$defs/isoDate"
+            }
+          },
+          if: {
+            properties: {
+              available: {
+                const: true
+              }
+            }
+          },
+          then: {
+            required: ["available", "url"]
+          }
+        },
+        subprocessors: {
+          type: "object",
+          additionalProperties: false,
+          required: ["url"],
+          properties: {
+            url: {
+              type: "string",
+              pattern: "^https://"
+            },
+            listType: {
+              enum: ["page", "pdf", "json", "unknown"]
+            },
+            notifications: {
+              enum: ["email-subscribe", "rss", "page-only", "none", "unknown"]
+            },
+            lastChecked: {
+              $ref: "#/$defs/isoDate"
+            }
+          }
+        },
+        transferMechanisms: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["mechanism"],
+            properties: {
+              mechanism: {
+                enum: ["DPF", "SCC", "BCR", "adequacy", "derogation", "none"]
+              },
+              dpfCertified: {
+                type: "boolean"
+              },
+              url: {
+                type: "string",
+                pattern: "^https://"
+              },
+              lastChecked: {
+                $ref: "#/$defs/isoDate"
+              },
+              observedStatus: {
+                type: "string",
+                minLength: 1,
+                maxLength: 100,
+                description: "The participant's public status exactly as the Data Privacy Framework list showed it on lastChecked, e.g. 'Active' or 'Active - Re-certification under Review'. dpfCertified must agree with it under the engine's closed status table."
+              },
+              acceptQualifiedStatus: {
+                type: "object",
+                additionalProperties: false,
+                required: ["acceptedBy", "reason"],
+                properties: {
+                  acceptedBy: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reason: {
+                    type: "string",
+                    minLength: 1
+                  }
+                },
+                description: "A named person's acceptance that a qualified status ('Active - Re-certification under Review') counts as certified for this record. Without it, a qualified status is not certified."
+              }
+            }
+          }
+        }
+      }
+    },
+    dataCategories: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["category", "typical"],
+        properties: {
+          category: {
+            enum: [
+              "email",
+              "name",
+              "ip_address",
+              "device_id",
+              "cookie_id",
+              "user_id",
+              "location",
+              "payment_data",
+              "phone",
+              "content",
+              "prompt_content",
+              "usage_telemetry",
+              "stack_traces",
+              "session_recording"
+            ]
+          },
+          typical: {
+            type: "boolean"
+          },
+          note: {
+            type: "string"
+          }
+        }
+      }
+    },
+    sources: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["url", "title", "publisher", "accessedAt"],
+        properties: {
+          url: {
+            type: "string",
+            pattern: "^https://"
+          },
+          title: {
+            type: "string"
+          },
+          publisher: {
+            enum: ["vendor", "regulator", "other"]
+          },
+          accessedAt: {
+            $ref: "#/$defs/isoDate"
+          }
+        }
+      }
+    },
+    lastVerified: {
+      $ref: "#/$defs/isoDate"
+    },
+    verifiedBy: {
+      type: "string"
+    },
+    disputed: {
+      oneOf: [
+        {
+          type: "null"
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["issueUrl", "raisedAt", "summary"],
+          properties: {
+            issueUrl: {
+              type: "string",
+              pattern: "^https://"
+            },
+            raisedAt: {
+              $ref: "#/$defs/isoDate"
+            },
+            summary: {
+              type: "string"
+            }
+          }
+        }
+      ]
+    },
+    notes: {
+      type: "string",
+      description: "Neutral, factual prose only. No adjectives."
+    },
+    sdkDefaults: {
+      description: "Privacy-relevant behaviour the SDK applies when the option is not set. Facts about a shipped default, each with the vendor page that documents it. Nothing here is evaluative: whether a default matters is computed elsewhere, and no field records an opinion about it.",
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["option", "defaultValue", "effect", "sourceUrl", "lastChecked"],
+        properties: {
+          package: {
+            type: "string",
+            description: "Package the option belongs to, when the vendor ships more than one SDK."
+          },
+          option: {
+            type: "string",
+            description: "Option path as written in the SDK, e.g. dom.inputSanitizer."
+          },
+          defaultValue: {
+            type: ["string", "boolean", "number", "null"],
+            description: "The documented default, verbatim."
+          },
+          effect: {
+            type: "string",
+            description: "What that default does, stated factually and without evaluation."
+          },
+          appliesFrom: {
+            type: "string",
+            description: "SDK version range the default is documented for, when the vendor states one."
+          },
+          sourceUrl: {
+            type: "string",
+            pattern: "^https://"
+          },
+          lastChecked: {
+            $ref: "#/$defs/isoDate"
+          }
+        }
+      }
+    },
+    regions: {
+      description: "Region identifiers this vendor accepts in configuration, and the country each one places processing in. A fact the vendor publishes, cited like any other, and never inferred from the identifier: eu-west-2 is London and eu-central-2 is Zurich.",
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["code", "country", "sourceUrl", "lastChecked"],
+        properties: {
+          code: {
+            type: "string",
+            minLength: 1,
+            description: "Region identifier exactly as written in configuration, e.g. eu-west-2."
+          },
+          country: {
+            type: "string",
+            pattern: "^[A-Z]{2}$",
+            description: "ISO 3166-1 alpha-2. Not EEA: a region resolves to one country or it is not a region entry."
+          },
+          label: {
+            type: "string",
+            description: "The vendor's own name for the region, e.g. Europe (London)."
+          },
+          note: {
+            type: "string"
+          },
+          sourceUrl: {
+            type: "string",
+            pattern: "^https://"
+          },
+          lastChecked: {
+            $ref: "#/$defs/isoDate"
+          }
+        }
+      }
+    }
+  },
+  $defs: {
+    isoDate: {
+      type: "string",
+      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    packageAlias: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "kind"],
+      properties: {
+        name: {
+          type: "string",
+          minLength: 1,
+          description: "An exact package name, or a registry namespace written with a trailing `/*` (e.g. `@sentry/*`). An exact alias always wins over a namespace alias, and a name matched by two vendors' namespaces is refused rather than attributed."
+        },
+        kind: {
+          enum: ["official-sdk", "wrapper", "plugin", "framework-integration", "scope"],
+          description: "`scope` is the kind for a `/*` namespace alias: it records that the registry namespace is the vendor's, which is all that is known about a name nobody enumerated. It is deliberately not `official-sdk`, because a namespace also carries build plugins, type packages and test helpers, and `official-sdk` is what raises a direct dependency to high confidence."
+        },
+        detectTransitive: {
+          type: "boolean",
+          default: false
+        }
+      }
+    },
+    hostAlias: {
+      type: "object",
+      additionalProperties: false,
+      required: ["pattern", "match", "purpose"],
+      properties: {
+        pattern: {
+          type: "string",
+          pattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        },
+        match: {
+          enum: ["exact", "suffix"]
+        },
+        purpose: {
+          enum: ["api", "browser-sdk", "ingest", "cdn", "auth", "other"]
+        },
+        note: {
+          type: "string"
+        }
+      }
+    }
+  }
+};
+
+// ../../schemas/findings-1.1.0.json
+var findings_1_1_0_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://egressa.dev/schemas/findings-1.1.0.json",
+  title: "Egressa findings document",
+  description: "Output of an Egressa scan. Egressa detects third-party data-egress patterns in source code and their cross-border transfer exposure. It does not assess or certify GDPR compliance.",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schemaVersion",
+    "disclaimer",
+    "tool",
+    "kb",
+    "scan",
+    "summary",
+    "findings",
+    "unmatched",
+    "errors"
+  ],
+  properties: {
+    $schema: {
+      type: "string"
+    },
+    schemaVersion: {
+      const: "1.1.0"
+    },
+    disclaimer: {
+      type: "string",
+      minLength: 1
+    },
+    tool: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "version"],
+      properties: {
+        name: {
+          const: "egressa"
+        },
+        version: {
+          type: "string"
+        }
+      }
+    },
+    kb: {
+      type: "object",
+      additionalProperties: false,
+      required: ["version", "entryCount", "license", "adequacyStatusAsOf", "staleEntryCount"],
+      properties: {
+        version: {
+          type: "string"
+        },
+        entryCount: {
+          type: "integer",
+          minimum: 0
+        },
+        license: {
+          const: "CC-BY-4.0"
+        },
+        adequacyStatusAsOf: {
+          $ref: "#/$defs/isoDate"
+        },
+        staleEntryCount: {
+          type: "integer",
+          minimum: 0
+        }
+      }
+    },
+    scan: {
+      type: "object",
+      additionalProperties: false,
+      required: ["root", "startedAt", "durationMs", "filesScanned", "manifestsScanned", "engine"],
+      properties: {
+        root: {
+          type: "string"
+        },
+        startedAt: {
+          type: "string",
+          format: "date-time"
+        },
+        durationMs: {
+          type: "integer",
+          minimum: 0
+        },
+        filesScanned: {
+          type: "integer",
+          minimum: 0
+        },
+        manifestsScanned: {
+          type: "integer",
+          minimum: 0
+        },
+        engine: {
+          type: "object",
+          additionalProperties: false,
+          required: ["callsite", "degraded"],
+          properties: {
+            callsite: {
+              enum: ["oxc", "unavailable", "disabled"]
+            },
+            degraded: {
+              type: "boolean"
+            }
+          }
+        },
+        assumedAdequacyLapsed: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        },
+        exclude: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        },
+        config: {
+          type: ["string", "null"],
+          description: "The repository's own configuration file, relative to the root, or null when none was applied."
+        }
+      }
+    },
+    summary: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "vendorCount",
+        "findingCount",
+        "byRule",
+        "bySeverity",
+        "byConfidence",
+        "unresolvedEgress",
+        "suppressed"
+      ],
+      properties: {
+        vendorCount: {
+          type: "integer",
+          minimum: 0
+        },
+        findingCount: {
+          type: "integer",
+          minimum: 0
+        },
+        byRule: {
+          type: "object",
+          additionalProperties: {
+            type: "integer",
+            minimum: 0
+          }
+        },
+        bySeverity: {
+          type: "object",
+          additionalProperties: {
+            type: "integer",
+            minimum: 0
+          }
+        },
+        byConfidence: {
+          type: "object",
+          additionalProperties: {
+            type: "integer",
+            minimum: 0
+          }
+        },
+        unresolvedEgress: {
+          type: "integer",
+          minimum: 0
+        },
+        suppressed: {
+          type: "integer",
+          minimum: 0
+        }
+      }
+    },
+    findings: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/finding"
+      }
+    },
+    unmatched: {
+      type: "object",
+      additionalProperties: false,
+      required: ["hosts", "packages"],
+      properties: {
+        hosts: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        },
+        packages: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        }
+      }
+    },
+    errors: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["file", "message", "fatal"],
+        properties: {
+          file: {
+            type: "string"
+          },
+          message: {
+            type: "string"
+          },
+          fatal: {
+            type: "boolean"
+          }
+        }
+      }
+    },
+    facts: {
+      description: "Present when the repository has a .egressa/facts.json. Counts of what its facts did to this scan.",
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "source",
+        "trusted",
+        "applied",
+        "redundant",
+        "notTrusted",
+        "superseded",
+        "expired",
+        "rejected",
+        "localVendors",
+        "findingsDependingOnFacts",
+        "loosened"
+      ],
+      properties: {
+        source: {
+          type: "string"
+        },
+        trusted: {
+          type: "boolean"
+        },
+        applied: {
+          type: "integer",
+          minimum: 0
+        },
+        redundant: {
+          type: "integer",
+          minimum: 0
+        },
+        notTrusted: {
+          type: "integer",
+          minimum: 0
+        },
+        superseded: {
+          type: "integer",
+          minimum: 0
+        },
+        expired: {
+          type: "integer",
+          minimum: 0
+        },
+        rejected: {
+          type: "integer",
+          minimum: 0
+        },
+        localVendors: {
+          type: "integer",
+          minimum: 0
+        },
+        findingsDependingOnFacts: {
+          type: "integer",
+          minimum: 0
+        },
+        loosened: {
+          type: "integer",
+          minimum: 0
+        }
+      }
+    }
+  },
+  $defs: {
+    isoDate: {
+      type: "string",
+      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    ruleId: {
+      enum: [
+        "transfer/third-country-egress",
+        "transfer/third-country-egress-eu-region-available",
+        "transfer/adequate-country-egress",
+        "transfer/eu-processing",
+        "transfer/unknown-vendor-egress",
+        "transfer/unresolved-egress",
+        "kb/stale-entry",
+        "config/expired-suppression"
+      ]
+    },
+    severity: {
+      enum: ["error", "warning", "note"]
+    },
+    confidence: {
+      enum: ["high", "medium", "low"]
+    },
+    signalKind: {
+      enum: ["dependency", "callsite", "reference", "html-script", "infrastructure"]
+    },
+    location: {
+      type: "object",
+      required: ["file", "startLine", "startColumn", "endLine", "endColumn"],
+      properties: {
+        file: {
+          type: "string"
+        },
+        startLine: {
+          type: "integer",
+          minimum: 1
+        },
+        startColumn: {
+          type: "integer",
+          minimum: 1
+        },
+        endLine: {
+          type: "integer",
+          minimum: 1
+        },
+        endColumn: {
+          type: "integer",
+          minimum: 1
+        }
+      }
+    },
+    kbSource: {
+      type: "object",
+      additionalProperties: false,
+      required: ["url", "title", "publisher", "accessedAt"],
+      properties: {
+        url: {
+          type: "string",
+          pattern: "^https://"
+        },
+        title: {
+          type: "string"
+        },
+        publisher: {
+          enum: ["vendor", "regulator", "other"]
+        },
+        accessedAt: {
+          $ref: "#/$defs/isoDate"
+        }
+      }
+    },
+    transferFacts: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "jurisdictions",
+        "euRegion",
+        "mechanisms",
+        "dataCategories",
+        "kbSources",
+        "lastVerified"
+      ],
+      properties: {
+        jurisdictions: {
+          type: "array",
+          items: {
+            type: "string",
+            pattern: "^([A-Z]{2}|EEA)$"
+          },
+          minItems: 1
+        },
+        euRegion: {
+          type: "object",
+          additionalProperties: false,
+          required: ["available"],
+          properties: {
+            available: {
+              type: "boolean"
+            },
+            scope: {
+              enum: ["full", "partial", "product-specific"]
+            },
+            docUrl: {
+              type: "string",
+              pattern: "^https://"
+            },
+            notes: {
+              type: "string"
+            }
+          }
+        },
+        mechanisms: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["mechanism"],
+            properties: {
+              mechanism: {
+                enum: ["DPF", "SCC", "BCR", "adequacy", "derogation", "none"]
+              },
+              dpfCertified: {
+                type: "boolean"
+              },
+              url: {
+                type: "string",
+                pattern: "^https://"
+              },
+              lastChecked: {
+                $ref: "#/$defs/isoDate"
+              }
+            }
+          }
+        },
+        dpaUrl: {
+          type: "string",
+          pattern: "^https://"
+        },
+        subprocessorsUrl: {
+          type: "string",
+          pattern: "^https://"
+        },
+        dataCategories: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        },
+        kbSources: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/kbSource"
+          },
+          minItems: 1
+        },
+        lastVerified: {
+          $ref: "#/$defs/isoDate"
+        },
+        disputed: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["issueUrl", "raisedAt", "summary"],
+              properties: {
+                issueUrl: {
+                  type: "string",
+                  pattern: "^https://"
+                },
+                raisedAt: {
+                  $ref: "#/$defs/isoDate"
+                },
+                summary: {
+                  type: "string"
+                }
+              }
+            }
+          ]
+        },
+        repositoryFacts: {
+          type: "array",
+          minItems: 1,
+          items: {
+            $ref: "#/$defs/repositoryFact"
+          }
+        }
+      }
+    },
+    exposure: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "thirdCountryTransfer",
+        "euAlternativeAvailable",
+        "adequacyDependent",
+        "additionalSafeguardsRequired",
+        "level",
+        "rulesVersion",
+        "inputs"
+      ],
+      properties: {
+        thirdCountryTransfer: {
+          type: "boolean"
+        },
+        euAlternativeAvailable: {
+          type: "boolean"
+        },
+        adequacyDependent: {
+          type: "boolean"
+        },
+        additionalSafeguardsRequired: {
+          type: "boolean"
+        },
+        level: {
+          enum: ["none", "low", "moderate", "elevated"]
+        },
+        rulesVersion: {
+          type: "string"
+        },
+        inputs: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        }
+      }
+    },
+    finding: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "id",
+        "ruleId",
+        "vendor",
+        "transfer",
+        "exposure",
+        "severity",
+        "confidence",
+        "signals",
+        "evidence",
+        "remediation",
+        "suppressed",
+        "suppression"
+      ],
+      properties: {
+        id: {
+          type: "string",
+          minLength: 8
+        },
+        ruleId: {
+          $ref: "#/$defs/ruleId"
+        },
+        vendor: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["id", "name", "category"],
+              properties: {
+                id: {
+                  type: "string",
+                  pattern: "^[a-z0-9-]+$"
+                },
+                name: {
+                  type: "string"
+                },
+                category: {
+                  type: "string"
+                },
+                origin: {
+                  const: "local",
+                  description: "The entry came from the scanned repository's .egressa/facts.json, not the knowledge base."
+                }
+              }
+            }
+          ]
+        },
+        transfer: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              $ref: "#/$defs/transferFacts"
+            }
+          ]
+        },
+        exposure: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              $ref: "#/$defs/exposure"
+            }
+          ]
+        },
+        severity: {
+          $ref: "#/$defs/severity"
+        },
+        confidence: {
+          $ref: "#/$defs/confidence"
+        },
+        signals: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["kind", "vendorId", "matchedOn", "confidence", "location", "snippet"],
+            properties: {
+              kind: {
+                $ref: "#/$defs/signalKind"
+              },
+              vendorId: {
+                oneOf: [
+                  {
+                    type: "null"
+                  },
+                  {
+                    type: "string"
+                  }
+                ]
+              },
+              matchedOn: {
+                type: "string"
+              },
+              confidence: {
+                $ref: "#/$defs/confidence"
+              },
+              location: {
+                $ref: "#/$defs/location"
+              },
+              snippet: {
+                type: "string"
+              },
+              devOnly: {
+                type: "boolean"
+              },
+              transitiveVia: {
+                type: "array",
+                items: {
+                  type: "string"
+                }
+              },
+              unresolvedReason: {
+                type: "string"
+              },
+              region: {
+                type: "string",
+                description: "Region identifier read from configuration, verbatim. Resolved against the vendor's own regions map, never from its prefix."
+              }
+            }
+          }
+        },
+        evidence: {
+          type: "array",
+          minItems: 1,
+          items: {
+            allOf: [
+              {
+                $ref: "#/$defs/location"
+              },
+              {
+                type: "object",
+                required: ["kind", "matchedOn", "snippet", "confidence"],
+                properties: {
+                  kind: {
+                    $ref: "#/$defs/signalKind"
+                  },
+                  matchedOn: {
+                    type: "string"
+                  },
+                  snippet: {
+                    type: "string"
+                  },
+                  confidence: {
+                    $ref: "#/$defs/confidence"
+                  },
+                  devOnly: {
+                    type: "boolean"
+                  },
+                  transitiveVia: {
+                    type: "array",
+                    items: {
+                      type: "string"
+                    }
+                  },
+                  region: {
+                    type: "string",
+                    description: "Region identifier read from configuration, verbatim. Resolved against the vendor's own regions map, never from its prefix."
+                  },
+                  regionUnmapped: {
+                    const: true,
+                    description: "Present when region could not be resolved to a country -- the vendor's regions map lacks it, or the vendor has no map yet -- so it narrowed nothing. The identifier is still what the configuration declares."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        remediation: {
+          type: "object",
+          additionalProperties: false,
+          required: ["summary", "links"],
+          properties: {
+            summary: {
+              type: "string"
+            },
+            links: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["label", "url"],
+                properties: {
+                  label: {
+                    type: "string"
+                  },
+                  url: {
+                    type: "string",
+                    pattern: "^https://"
+                  }
+                }
+              }
+            }
+          }
+        },
+        suppressed: {
+          type: "boolean"
+        },
+        suppression: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["reason", "source"],
+              properties: {
+                reason: {
+                  type: "string",
+                  minLength: 1
+                },
+                acceptedBy: {
+                  type: "string"
+                },
+                expires: {
+                  $ref: "#/$defs/isoDate"
+                },
+                expired: {
+                  type: "boolean"
+                },
+                source: {
+                  enum: ["config", "inline"]
+                }
+              }
+            }
+          ]
+        },
+        verification: {
+          type: "array",
+          description: "Legal facts behind this finding to re-check, and where. Every URL in `where` comes from knowledge base data, never from the scanned repository.",
+          items: {
+            $ref: "#/$defs/verifyTask"
+          }
+        },
+        baselineRuleId: {
+          description: "The rule before repository facts were applied, present only when they changed it.",
+          $ref: "#/$defs/ruleId"
+        }
+      }
+    },
+    verifyTask: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "vendorId", "fact", "reason", "current", "where"],
+      properties: {
+        id: {
+          type: "string",
+          pattern: "^[0-9a-f]{16}$"
+        },
+        vendorId: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "string"
+            }
+          ]
+        },
+        fact: {
+          enum: ["dpf", "dpa", "subprocessors", "local-entry"]
+        },
+        reason: {
+          enum: [
+            "stale-entry",
+            "dpf-unknown",
+            "dpf-status-unobserved",
+            "dpf-status-qualified",
+            "dpf-status-unrecognised",
+            "unknown-vendor",
+            "overlay-expired"
+          ]
+        },
+        current: {
+          type: "object",
+          additionalProperties: false,
+          required: ["value", "asOf", "url"],
+          properties: {
+            value: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  type: "string"
+                }
+              ]
+            },
+            asOf: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "#/$defs/isoDate"
+                }
+              ]
+            },
+            url: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  type: "string"
+                }
+              ]
+            }
+          }
+        },
+        where: {
+          type: "array",
+          items: {
+            type: "string"
+          }
+        },
+        subject: {
+          type: "string"
+        }
+      }
+    },
+    repositoryFact: {
+      description: "A fact the scanned repository supplied, as provenance: where it is in the file, what it cites, when that page was read and by whom, and until when it counts.",
+      type: "object",
+      additionalProperties: false,
+      required: ["fact", "file", "at", "retrievedAt", "verifiedBy", "expiresOn", "effect"],
+      properties: {
+        fact: {
+          enum: ["dpf", "dpa", "subprocessors", "local-entry"]
+        },
+        file: {
+          type: "string"
+        },
+        at: {
+          type: "string"
+        },
+        sourceUrl: {
+          type: "string"
+        },
+        retrievedAt: {
+          $ref: "#/$defs/isoDate"
+        },
+        verifiedBy: {
+          type: "string"
+        },
+        expiresOn: {
+          $ref: "#/$defs/isoDate"
+        },
+        effect: {
+          enum: ["loosens", "tightens", "neutral"]
+        },
+        observedStatus: {
+          type: "string"
+        },
+        suppliedUrl: {
+          description: "For a dpa or subprocessors fact, the page the repository says is the vendor's. Provenance only: transfer.dpaUrl and transfer.subprocessorsUrl stay the knowledge base's.",
+          type: "string"
+        }
+      }
+    }
+  }
+};
+
 // src/commands/schema.ts
-import { readFileSync as readFileSync4 } from "fs";
+var SCHEMAS = { findings: findings_1_1_0_default, vendor: vendor_1_0_0_default, facts: facts_1_0_0_default };
 var schemaCommand = defineCommand({
   meta: { name: "schema", description: "Print a published JSON schema" },
   args: {
@@ -19508,19 +21149,20 @@ var schemaCommand = defineCommand({
       type: "positional",
       required: false,
       default: "findings",
-      description: "findings | vendor"
+      description: "findings | vendor | facts"
     }
   },
   run({ args }) {
     const which = String(args.which);
-    const path = which === "vendor" ? "kb/schema/vendor-1.0.0.json" : `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
-    try {
-      process.stdout.write(readFileSync4(path, "utf8"));
-    } catch {
-      process.stderr.write(`egressa: schema "${which}" not found
-`);
+    if (!Object.hasOwn(SCHEMAS, which)) {
+      process.stderr.write(
+        `egressa: unknown schema (expected one of ${Object.keys(SCHEMAS).join(", ")})
+`
+      );
       process.exit(2);
     }
+    process.stdout.write(`${JSON.stringify(SCHEMAS[which], null, 2)}
+`);
   }
 });
 

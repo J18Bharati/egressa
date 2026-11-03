@@ -1,6 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { FINDINGS_SCHEMA_VERSION } from '@egressa/core';
 import { defineCommand } from 'citty';
+import facts from '../../../../kb/schema/facts-1.0.0.json' with { type: 'json' };
+import vendor from '../../../../kb/schema/vendor-1.0.0.json' with { type: 'json' };
+import findings from '../../../../schemas/findings-1.1.0.json' with { type: 'json' };
+
+/**
+ * The published schemas, inlined at build time. Reading them from disk at run
+ * time resolved against the working directory, so outside a checkout of this
+ * repository the command failed, and inside someone else's it printed whatever
+ * file sat at that path. `cli.test.ts` holds each one to its source file, and
+ * the findings one to `FINDINGS_SCHEMA_VERSION`.
+ */
+export const SCHEMAS = { findings, vendor, facts } as const;
 
 /** Prints the published schemas, so a consumer can pin against them offline. */
 export const schemaCommand = defineCommand({
@@ -10,20 +20,17 @@ export const schemaCommand = defineCommand({
       type: 'positional',
       required: false,
       default: 'findings',
-      description: 'findings | vendor',
+      description: 'findings | vendor | facts',
     },
   },
   run({ args }) {
     const which = String(args.which);
-    const path =
-      which === 'vendor'
-        ? 'kb/schema/vendor-1.0.0.json'
-        : `schemas/findings-${FINDINGS_SCHEMA_VERSION}.json`;
-    try {
-      process.stdout.write(readFileSync(path, 'utf8'));
-    } catch {
-      process.stderr.write(`egressa: schema "${which}" not found\n`);
+    if (!Object.hasOwn(SCHEMAS, which)) {
+      process.stderr.write(
+        `egressa: unknown schema (expected one of ${Object.keys(SCHEMAS).join(', ')})\n`,
+      );
       process.exit(2);
     }
+    process.stdout.write(`${JSON.stringify(SCHEMAS[which as keyof typeof SCHEMAS], null, 2)}\n`);
   },
 });
