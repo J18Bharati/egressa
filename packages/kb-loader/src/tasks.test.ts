@@ -53,15 +53,37 @@ describe('verify tasks', () => {
     expect(vendorTasks(unobserved, fresh).map((t) => t.reason)).toEqual(['dpf-status-unobserved']);
   });
 
+  /** A copy of a shipped entry with no DPF record, whatever today's data holds. */
+  const noDpf = (e: VendorEntry): VendorEntry => ({
+    ...e,
+    legal: {
+      ...e.legal,
+      transferMechanisms: e.legal.transferMechanisms.filter((m) => m.mechanism !== 'DPF'),
+    },
+  });
+
   it('lists a US vendor with no DPF record at all', () => {
-    const tasks = kb.verifyTasks(entry('openai'), freshDay(entry('openai')));
+    const openai = noDpf(entry('openai'));
+    const tasks = kb.verifyTasks(openai, freshDay(openai));
     expect(tasks.map((t) => t.reason)).toEqual(['dpf-unknown']);
     expect(tasks[0]?.where).toEqual(['https://www.dataprivacyframework.gov/list']);
   });
 
+  it('lists nothing once a search of the list is recorded as not-listed', () => {
+    const openai = structuredClone(noDpf(entry('openai')));
+    openai.legal.transferMechanisms.push({
+      mechanism: 'DPF',
+      dpfCertified: false,
+      observedStatus: 'not-listed',
+      url: 'https://www.dataprivacyframework.gov/list',
+      lastChecked: openai.lastVerified,
+    });
+    expect(kb.verifyTasks(openai, freshDay(openai))).toEqual([]);
+  });
+
   it('stops listing dpf-unknown when the DPF decision is assumed withdrawn', () => {
     const lapsed = loadKnowledgeBase({ kbPath: 'kb', assumeAdequacyLapsed: ['US:DPF'] });
-    const openai = lapsed.byId.get('openai') as VendorEntry;
+    const openai = noDpf(lapsed.byId.get('openai') as VendorEntry);
     expect(lapsed.verifyTasks(openai, freshDay(openai))).toEqual([]);
   });
 

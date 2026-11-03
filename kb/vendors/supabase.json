@@ -81,6 +81,13 @@
         "dpfCertified": false,
         "url": "https://supabase.com/legal/dpa",
         "lastChecked": "2026-09-10"
+      },
+      {
+        "mechanism": "DPF",
+        "dpfCertified": false,
+        "observedStatus": "not-listed",
+        "url": "https://www.dataprivacyframework.gov/list",
+        "lastChecked": "2026-11-03"
       }
     ]
   },
@@ -166,5 +173,5 @@
   ],
   "lastVerified": "2026-09-10",
   "verifiedBy": "egressa-kb",
-  "notes": "The contracting entity is Singaporean, which is a separate question from where a project's data sits: the Addendum names Supabase Pte. Ltd of Singapore, while the project region is an AWS region the customer picks. Singapore has no European Commission adequacy decision, and the Addendum accordingly names the 2021 EU Standard Contractual Clauses and the UK Approved Addendum version B.1.0 as the transfer mechanisms, with 30 days' notice before sub-processor changes and an email subscription for those notices. No Data Privacy Framework certification is recorded: a search of the Data Privacy Framework participant registry for Supabase returned no matching record on the date checked, and the Addendum does not mention the framework. The registry admits only organisations subject to the jurisdiction of the FTC or the Department of Transportation, which the Singapore entity would not be. Six npm package names were confirmed individually on the registry; @supabase/auth-js, @supabase/postgrest-js and @supabase/realtime-js are marked detectTransitive because @supabase/supabase-js depends on them, so their presence in a lockfile does not by itself indicate a direct integration. hostOption is null for createClient because the project URL is its first positional argument rather than a named option."
+  "notes": "The contracting entity is Singaporean, which is a separate question from where a project's data sits: the Addendum names Supabase Pte. Ltd of Singapore, while the project region is an AWS region the customer picks. Singapore has no European Commission adequacy decision, and the Addendum accordingly names the 2021 EU Standard Contractual Clauses and the UK Approved Addendum version B.1.0 as the transfer mechanisms, with 30 days' notice before sub-processor changes and an email subscription for those notices. No Data Privacy Framework certification is recorded: a search of the Data Privacy Framework participant registry for Supabase returned no matching record on the date checked, and the Addendum does not mention the framework. The registry admits only organisations subject to the jurisdiction of the FTC or the Department of Transportation, which the Singapore entity would not be. Six npm package names were confirmed individually on the registry; @supabase/auth-js, @supabase/postgrest-js and @supabase/realtime-js are marked detectTransitive because @supabase/supabase-js depends on them, so their presence in a lockfile does not by itself indicate a direct integration. hostOption is null for createClient because the project URL is its first positional argument rather than a named option. The Data Privacy Framework participant list was searched on 2026-11-03, active and inactive, for Supabase, Supabase, Inc, and returned no record; a control search for Stripe returned its record."
 }

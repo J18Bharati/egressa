@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadKnowledgeBase } from '@egressa/kb';
+import { type KnowledgeBase, buildKnowledgeBase, loadKnowledgeBase } from '@egressa/kb';
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +12,30 @@ import { applyOverlay } from './overlay.js';
 
 const ROOT = 'fixtures/repos/overlay-dpf';
 const NOW = new Date('2026-11-10T12:00:00Z');
-const kb = loadKnowledgeBase({ kbPath: 'kb' });
+/**
+ * The shipped knowledge base with one vendor's DPF records removed. The
+ * fixture's OpenAI fact stands for "a US vendor with no DPF record", and these
+ * tests must not stop testing that case when the shipped entry gains one.
+ */
+function withoutDpf(base: KnowledgeBase, id: string): KnowledgeBase {
+  return buildKnowledgeBase({
+    version: base.version,
+    adequacy: base.adequacy,
+    assumeAdequacyLapsed: base.assumeAdequacyLapsed,
+    vendors: base.vendors.map((v) =>
+      v.id !== id
+        ? v
+        : {
+            ...v,
+            legal: {
+              ...v.legal,
+              transferMechanisms: v.legal.transferMechanisms.filter((m) => m.mechanism !== 'DPF'),
+            },
+          },
+    ),
+  });
+}
+const kb = withoutDpf(loadKnowledgeBase({ kbPath: 'kb' }), 'openai');
 const fixtureText = readFileSync(`${ROOT}/.egressa/facts.json`, 'utf8');
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
@@ -26,7 +49,9 @@ function run({ trustFacts = false, now = NOW, text, lapsed }: Options = {}): Sca
   return scan({
     root: ROOT,
     toolVersion: '0.1.0',
-    kbPath: 'kb',
+    kb: lapsed
+      ? withoutDpf(loadKnowledgeBase({ kbPath: 'kb', assumeAdequacyLapsed: lapsed }), 'openai')
+      : kb,
     now,
     includeCallsites: true,
     facts: text === undefined ? loadFacts(ROOT) : parseFacts(text, '.egressa/facts.json'),
@@ -102,7 +127,7 @@ describe('applying facts', () => {
     const plain = scan({
       root: ROOT,
       toolVersion: '0.1.0',
-      kbPath: 'kb',
+      kb,
       now: NOW,
       includeCallsites: true,
     });
@@ -340,7 +365,7 @@ describe('review findings, each pinned', () => {
     scan({
       root,
       toolVersion: '0.1.0',
-      kbPath: 'kb',
+      kb,
       now,
       includeCallsites: true,
       facts: loadFacts(root),
@@ -582,7 +607,7 @@ describe('security review findings, each pinned', () => {
     const result = scan({
       root,
       toolVersion: '0.1.0',
-      kbPath: 'kb',
+      kb,
       now: NOW,
       includeCallsites: true,
       facts: loadFacts(root),
@@ -607,7 +632,7 @@ describe('security review findings, each pinned', () => {
       'package.json': '{"name":"x"}',
       '.egressa/facts.json': localDoc(() => {}),
     });
-    const options = { root, toolVersion: '0.1.0', kbPath: 'kb', now: NOW, includeCallsites: true };
+    const options = { root, toolVersion: '0.1.0', kb, now: NOW, includeCallsites: true };
     const plain = scan({ ...options, minConfidence: 'high' });
     const withFacts = scan({ ...options, minConfidence: 'high', facts: loadFacts(root) });
     expect(plain.findings.length).toBeGreaterThan(0);
@@ -754,7 +779,7 @@ describe('contracts review findings, each pinned', () => {
     const result = scan({
       root: ROOT,
       toolVersion: '0.1.0',
-      kbPath: 'kb',
+      kb,
       now: NOW,
       includeCallsites: true,
       facts: loadFacts(ROOT),
@@ -818,7 +843,7 @@ describe('contracts review findings, each pinned', () => {
     const plain = scan({
       root: ROOT,
       toolVersion: '0.1.0',
-      kbPath: 'kb',
+      kb,
       now: NOW,
       includeCallsites: true,
     });
