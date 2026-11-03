@@ -40,9 +40,8 @@ packages/*/LICENSE
 packages/*/NOTICE
 packages/*/THIRD_PARTY_NOTICES
 
-# Confidential working material: field-test triage written against private
-# codebases, and the internal design record (customer names, pricing). Kept
-# locally under private/ and scrubbed from history; never committed.
+# Local working notes: field-test triage written against private codebases,
+# and internal design records. Never committed.
 /private/
 docs/reviews/*
 docs/designs/*

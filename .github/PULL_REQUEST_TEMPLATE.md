@@ -10,7 +10,18 @@
       DuckDuckGo Tracker Radar, Ghostery TrackerDB, Disconnect, the IAB TCF vendor list, or any
       other database** (see `kb/PROVENANCE.md`)
 - [ ] The entry contains facts only — no adjectives, no risk ratings
+- [ ] Any DPF status is copied verbatim from the participant record, which is the cited `url`
+- [ ] Contributed under CC-BY-4.0, like the rest of `kb/`
+- [ ] If drafted with `egressa facts contribute`, its checklist is ticked here too, and the draft
+      names no person and carries nothing from my own codebase
 - [ ] `pnpm kb:validate` passes
+
+A maintainer re-reads every cited source before merging and sets `lastVerified` to that date.
+
+## For changes touching code
+
+- [ ] `pnpm verify` passes
+- [ ] Contributed under the MIT License
 
 ## For changes touching detection
 

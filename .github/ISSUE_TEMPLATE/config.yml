@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: An entry is wrong about my company
+    url: https://github.com/J18Bharati/egressa/blob/main/kb/KB_POLICY.md#corrections
+    about: Vendor corrections follow the knowledge base policy, and an entry is marked disputed while one is reviewed.
+  - name: Security report
+    url: https://github.com/J18Bharati/egressa/blob/main/SECURITY.md
+    about: Report a vulnerability privately, never in a public issue.

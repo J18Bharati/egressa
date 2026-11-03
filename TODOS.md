@@ -7,22 +7,20 @@ roadmap too, and say so in the item.
 
 ## Distribution
 
-### Create the GitHub repository and push
+### Install the plugin from the private repository, then make it public
 
-**What:** Create `github.com/J18Bharati/egressa` (private first, Actions off), push `main`, then install the plugin from a
-clean machine to confirm the documented path works.
+**What:** `github.com/J18Bharati/egressa` exists (created private on 2026-11-04, `main` pushed,
+`release.yml` and `link-check.yml` disabled). Install the plugin from a clean machine with access
+to it, to confirm the documented path works, then make the repository public and enable private
+vulnerability reporting, which `SECURITY.md` points at.
 
-**Why:** The README's primary install instruction cannot work today. There is no git remote at all,
-so `/plugin marketplace add J18Bharati/egressa` resolves to nothing. Every install instruction in
-the repository currently documents a 404, which is the worst possible first impression for a tool
-whose entire pitch is precision.
+**Why:** Until the repository is public, `/plugin marketplace add J18Bharati/egressa` resolves for
+nobody else, and every install instruction in the README documents a 404.
 
-**Context:** `git remote -v` is empty. Three files already name the org: `repository` in
-`.claude-plugin/plugin.json`, the marketplace manifest, and `action.yml`, which pins
-`uses: J18Bharati/egressa@v1`. Decided 2026-11-04: publish from the maintainer's personal account,
-with an npm organisation `egressa` for the `@egressa/*` scope; `docs/RELEASING.md` steps 3-5 hold the
-sequence. `claude plugin validate .` passes
-locally, which validates the manifests but not the install, because the install needs a remote.
+**Context:** `docs/RELEASING.md` holds the ordered steps that remain, including npm trusted
+publishing for all four packages before `release.yml` is re-enabled: its guard matches this
+repository, and an enabled workflow would start a release on push. `claude plugin validate .`
+passes locally, which validates the manifests but not the install.
 
 **Effort:** S
 **Priority:** P0

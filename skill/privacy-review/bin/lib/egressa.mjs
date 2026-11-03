@@ -18849,7 +18849,7 @@ function contribution(vendorId, checked, kb, options = {}) {
   const reported = kind === "field-patch" ? changes : [];
   const issues = validate2(draft, kb, kind);
   const evidenceUrls = [...new Set(draft.sources.map((s2) => s2.url))];
-  const checklist = CHECKLIST(kind);
+  const checklist = contributionChecklist(kind);
   const credits = options.keepVerifiedBy ? [
     ...new Set(
       facts.map((f3) => f3.verifiedBy).concat(local?.local ? [local.local.verifiedBy] : [])
@@ -18931,7 +18931,7 @@ function validate2(draft, kb, kind) {
     ...kind === "new-entry" && kb.byId.has(draft.id) ? ["the knowledge base already has this id; contribute a field patch instead"] : []
   ].map(safeIssue);
 }
-var CHECKLIST = (kind) => [
+var contributionChecklist = (kind) => [
   "I opened every evidence URL below myself and each one says what the draft says, as of its date.",
   "Any DPF status is copied verbatim from the participant record, and dpfCertified follows the status table.",
   "Every fact is clean-room authored from vendor or regulator pages, and nothing comes from a source kb/PROVENANCE.md forbids.",

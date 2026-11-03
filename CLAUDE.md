@@ -24,6 +24,7 @@ pnpm lint:fix        # biome check --write
 pnpm kb:validate     # schema + source + collision checks over kb/
 pnpm kb:coverage     # fraction of detected hosts/packages matching a KB entry
 pnpm kb:tasks        # verification tasks the KB itself generates (JSON; --as-of YYYY-MM-DD)
+pnpm skill:bundle    # rebuild skill/privacy-review/bin/ (committed) after a KB or engine change
 pnpm schema:check    # asserts types.ts, schemas/, and the disclaimer agree
 ```
 
@@ -65,7 +66,8 @@ file its own way, and `scan()` applies it. When only the CLI applied it, MCP sil
 team's suppressions and excludes.
 
 **Pipeline.** `discovery/walk.ts` (honours `.gitignore`/`.egressaignore`) → `manifests/` and
-`callsites/` produce signals → `merge/` matches signals to KB entries and aggregates to one finding
+`callsites/` produce signals → `facts/` loads `.egressa/facts.json` and lays it over a copy of the
+KB → `merge/` matches signals to KB entries and aggregates to one finding
 per `(vendorId, ruleId)` with an `evidence[]` array → `exposure/rules.ts` derives flags from KB
 facts → `output/sarif.ts` or the CLI formatters.
 
@@ -188,6 +190,25 @@ it compares the kinds as well as the rule ids, because they were hand-synced pas
 privacy findings in GitHub's Security tab dressed as vulnerabilities. CI failure is expressed only
 through `--fail-on` and exit codes (`0` clean, `1` findings, `2` usage, `3` internal, `4` KB load).
 Default is `--fail-on none`.
+
+**Repository facts are untrusted, closed-vocabulary and visible.** `.egressa/facts.json`
+(`packages/core/src/facts/`) lets a repository record a DPF status, a DPA or a sub-processor list it
+checked, and draft entries for vendors the KB lacks. Anyone with commit access writes it, so:
+- it is read through the same hardened reader as `.egressa.yml` and checked against the *bundled*
+  `kb/schema/facts-1.0.0.json`, never one the repository or `--kb` supplies;
+- a DPF status goes through the one closed table in `kb-loader/src/dpf-status.ts`, shared with the
+  shipped KB, and anything it does not know is not certified;
+- a fact can change only legal facts. Jurisdictions, regions, hosts, packages and adequacy decisions
+  of a shipped vendor are out of reach, and a local entry can never certify itself;
+- a fact that **loosens** a finding applies only with `--trust-facts` / MCP `trustFacts`, and a
+  repository that is not trusted also cannot close verification tasks or freshen staleness
+  (`taskSource()` in `merge/index.ts`), or it could tell an agent there is nothing to re-check;
+- every surface says how many findings depend on the file and how many it loosened, a changed rule
+  carries `baselineRuleId`, and its URLs and names render as code spans, never links.
+`scripts/provenance-contract.test.ts` renders every surface and fails if one drops the marker. No
+check is on the truth of a fact, only on its shape; `docs/LIMITATIONS.md` says what that costs.
+`egressa facts contribute` turns a fact into an offline KB draft and never sends it. Exposure rules
+are `1.3.0` because `factSource:` inputs joined them.
 
 **DPF is per-organisation, not country-level adequacy.** `exposure/rules.ts` gates the DPF decision
 on `vendorIsDpfCertified()`. Treating it as blanket US adequacy clears every US vendor including
@@ -480,7 +501,11 @@ the failure arrives as a `SyntaxError` at link time before any code runs. `parse
 
 ## Current state
 
-v1 is complete and **unpublished** — nothing on npm, no git remote. The release pipeline exists
+v1 is complete and **unpublished**. Nothing is on npm. The repository is `J18Bharati/egressa`,
+**private** until the first release, with `release.yml` and `link-check.yml` disabled on GitHub
+until npm trusted publishing is configured. Code is MIT; `kb/` is CC-BY-4.0, attributed to "The
+Egressa Authors"; `THIRD_PARTY_NOTICES` is generated from the bundles by
+`scripts/third-party-notices.mjs` during `pnpm build`. The release pipeline exists
 (`.changeset/`, `.github/workflows/release.yml`, npm trusted publishing over OIDC, no token) but has
 never run; `docs/RELEASING.md` holds the ordered human-gated steps that remain. `egressa` and
 `@egressa/mcp` bundle core and the knowledge base loader, so their only runtime dependencies are
@@ -494,19 +519,12 @@ The knowledge base holds 27 vendors. `pnpm kb:coverage` reports the matched frac
 fixture repositories — note that the package denominator counts every declared dependency including
 frameworks and build tools, so that figure is a floor rather than an accuracy measure.
 
-The approved design record lives in `private/designs/publish-first-linter-wedge.md`, gitignored and
-kept out of git as internal business material: corrected ICP, the
-"complementary not better" claim about code-based vendor discovery, why the sub-processor register
-framing was rejected, and the ordered publish steps. Read it before proposing product direction when
-it is present; a fresh clone will not have it.
-
-`private/` also holds the field-test triage notes (`private/reviews/`) that `TODOS.md` and some test
-comments cite by date. They were written against private codebases, so they never enter git:
-`.gitignore` covers `private/`, `docs/reviews/*` and `docs/designs/*`.
+`private/` is gitignored local working material (design records, field-test notes some comments cite
+by date); read `private/designs/` before proposing product direction when it is present.
 
 `TODOS.md` tracks actionable engineering work, and is deliberately not the roadmap: the roadmap
-records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is that
-no git remote exists, so every documented plugin install path currently resolves to nothing.
+records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is
+installing the plugin from the private repository, then making it public.
 
 `docs/ROADMAP.md` records what v1 deliberately excludes (Python call sites, cross-module constants, HTML
 `<script src>`, tag managers, PII data-flow) and what is not planned at all. Infrastructure as code

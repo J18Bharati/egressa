@@ -385,6 +385,30 @@ Even a high-confidence, resolved call site only shows that code *references* a v
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
 
+## Repository facts
+
+`.egressa/facts.json` lets a repository record legal facts it checked, and the scan applies them
+with their provenance on every surface. The checks are on the file's shape, not on whether it is
+true:
+
+- **A fabricated but well-formed citation is accepted.** A fact needs an https source on the right
+  domain, a retrieval date that is not in the future, and a status from the closed table. A
+  committer can write a participant URL that does not exist, or a status the list never showed,
+  and the scan cannot tell: it reaches no network, by design. The defence is visibility, not
+  verification. Every finding that depends on the file says so, a loosened one names the rule it
+  had without the file, the URL is one click from being checked, and the fact is in the
+  repository's diff. A fact that would loosen a finding applies only when whoever runs the scan
+  passes `--trust-facts`, which is for a repository they own. Review `.egressa/` like code, and
+  give it a CODEOWNERS line.
+- **Commit state is not checked.** The file is read from the working tree, whether or not it is
+  committed, reviewed or merged. Reading git history would mean believing the repository's `.git`,
+  which is hostile input (see the privacy review's file set, below). A CI job that scans a checkout
+  of a pull request therefore applies the pull request's own facts file; without `--trust-facts`
+  that file can only tighten findings.
+- **Whether an agent records facts correctly is not measured.** The skills tell an agent to fetch
+  only the task's pages and copy a status verbatim, and a test pins that wording. Whether agents
+  follow it is visible only in `egressa facts check`, and there is no telemetry to say more.
+
 ## The privacy review's file set
 
 `skill/privacy-review/scripts/scope.sh` decides which files the privacy review reads, and in a git

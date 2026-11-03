@@ -6,9 +6,9 @@ Report a vulnerability through GitHub's private vulnerability reporting on this 
 <https://github.com/J18Bharati/egressa/security/advisories/new>. Please do not open a public issue
 for a security problem.
 
-<!-- Remove this note once the repository exists and private vulnerability reporting is enabled. -->
-**Not open yet.** The repository `J18Bharati/egressa` has not been created, so the link above does
-not resolve, and there is no other reporting channel at the moment.
+<!-- Remove this note once the repository is public and private vulnerability reporting is enabled. -->
+**Not open yet.** The repository `J18Bharati/egressa` is private until the first release, so the
+link above does not resolve for anyone else, and there is no other reporting channel at the moment.
 
 ## Threat model
 

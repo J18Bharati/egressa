@@ -1,0 +1,59 @@
+name: Knowledge base contribution
+description: Offer a vendor entry or an updated legal fact, drafted with `egressa facts contribute`
+title: "[kb] <vendor id>: <what changed>"
+labels: ["kb-contribution"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run `egressa facts contribute <vendorId> --root <repo>` and paste what it prints below.
+        It contains one vendor's entry and the pages it cites, and nothing from your code, but
+        opening this issue does say publicly that a codebase you work on uses this vendor.
+
+        A maintainer re-reads every cited page before merging. To dispute an existing entry
+        instead, use the vendor correction form.
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor id
+      description: The `id` in `kb/vendors/<id>.json`, or the id of the new entry.
+      placeholder: notion
+    validations: { required: true }
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - field-patch (a legal fact on an existing entry)
+        - new-entry (a vendor the knowledge base does not have)
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence URLs
+      description: One per line, each a vendor- or regulator-published page.
+    validations: { required: true }
+  - type: textarea
+    id: body
+    attributes:
+      label: Draft
+      description: The full output of `egressa facts contribute`.
+      render: markdown
+    validations: { required: true }
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I opened every evidence URL below myself and each one says what the draft says, as of its date.
+          required: true
+        - label: Any DPF status is copied verbatim from the participant record, and dpfCertified follows the status table.
+          required: true
+        - label: Every fact is clean-room authored from vendor or regulator pages, and nothing comes from a source kb/PROVENANCE.md forbids.
+          required: true
+        - label: The draft names no person and contains nothing from my own codebase.
+          required: true
+        - label: I license this contribution under CC-BY-4.0, like the rest of kb/.
+          required: true
+        - label: "New entries only: Hosts and packages are ones the vendor documents, not ones seen only in my code."
+          required: false

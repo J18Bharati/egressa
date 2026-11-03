@@ -111,6 +111,34 @@ Entries were verified in clusters, so they go stale in clusters: ten were last v
 Run `pnpm kb:tasks` at the start of each week's turn: what it lists is the work, and an empty list
 is the only evidence that nothing is due.
 
+## Contributions
+
+Anyone can offer a new entry or an updated legal fact. The usual route starts in a user's own
+repository: a fact checked into `.egressa/facts.json`, then `egressa facts contribute <vendorId>`,
+which drafts the entry or field patch with its sources and refuses a draft that fails the checks
+`kb:validate` runs. Egressa never submits anything; the contributor opens the
+`.github/ISSUE_TEMPLATE/kb-contribution.yml` issue, or a pull request, themselves.
+
+**Agent-verified is not maintainer-verified.** Before merging, a maintainer:
+
+1. Re-reads every cited page, whoever drafted it, and changes nothing a page does not support.
+2. Sets `lastChecked` on the facts re-read, and `lastVerified` only when the whole entry was, to the
+   date of that reading, never the draft's.
+3. Replaces the draft's `verifiedBy` with "maintainer re-verified <date>; drafted from repository
+   facts".
+4. Drops `acceptQualifiedStatus` and any person's name, if a draft carries one.
+
+A contribution that contradicts an entry's current claim is a correction: the entry is marked
+`disputed` while it is reviewed, as above. A contributor affirms that what they offer is authored
+from vendor or regulator pages, takes nothing from a source `kb/PROVENANCE.md` forbids, and is
+licensed under CC-BY-4.0 like the rest of `kb/`.
+
+## Attribution
+
+The knowledge base is licensed under CC-BY-4.0 (`kb/LICENSE`), separately from the MIT-licensed
+code. Attribute it as "Egressa knowledge base, by The Egressa Authors, CC-BY-4.0", with a link to
+the licence and a note of any changes you made.
+
 ## What we will not do
 
 - We will not publish a claim we cannot cite to a primary source.

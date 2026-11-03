@@ -61,8 +61,8 @@ in [docs/CLAIMS.md](docs/CLAIMS.md).
 ## Status: not released yet
 
 Nothing is published to npm, and the GitHub repository `J18Bharati/egressa` that the plugin, the
-Action and the issue links refer to has not been created. **Until the first release, the only path
-that works is a checkout:**
+Action and the issue links refer to stays private until the first release. **Until then, the only
+path that works is a checkout:**
 
 ```bash
 pnpm install
@@ -227,6 +227,56 @@ merge key, a file that is not UTF-8 or not a mapping, and a symlink that does no
 usage errors (exit 2), never "no config". A suppression that matches nothing is reported as a
 warning. The MCP server applies the same file the same way, and both name it in `scan.config`.
 
+## When the knowledge base is out of date: repository facts
+
+A vendor's DPF status, DPA and sub-processor list change faster than any shared knowledge base can
+re-check them. Every such fact in `kb/` carries the date it was read, a scan lists the ones due for
+re-checking as verification tasks, and a repository can record what it checked itself in
+`.egressa/facts.json`:
+
+```json
+{
+  "version": 1,
+  "facts": [
+    {
+      "vendor": "clerk",
+      "fact": "dpf",
+      "value": {
+        "observedStatus": "Active",
+        "organizationName": "Clerk, Inc.",
+        "participantUrl": "https://www.dataprivacyframework.gov/participant/2718"
+      },
+      "source": {
+        "url": "https://www.dataprivacyframework.gov/participant/2718",
+        "retrievedAt": "2026-09-10"
+      },
+      "verifiedBy": "platform team"
+    }
+  ]
+}
+```
+
+The scan stays offline: the file is read, never fetched. Each fact needs an https source and a
+retrieval date, stops counting 30 days after it, and can change only a vendor's legal facts, never
+its jurisdictions, hosts or regions. Every finding that depends on the file says so in every output
+format, and a finding the file changed names the rule it had without it.
+
+**A fact that would loosen a finding applies only with `--trust-facts`**, which is for a repository
+you own. Without it the knowledge base's answer stands and the fact is reported as not applied, so
+a pull request cannot clear its own findings. Anyone with commit access can write the file, so
+review it like code and give it an owner:
+
+```
+# .github/CODEOWNERS
+/.egressa/    @your-org/privacy-reviewers
+```
+
+`egressa facts check` shows what the file would do. The transfer triage skill can look facts up for
+you from the pages a task names; see
+[skill/egressa/references/verifying-facts.md](skill/egressa/references/verifying-facts.md). The
+checks are on the file's shape, not on its truth, which [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
+spells out.
+
 ## The other surfaces
 
 The CLI, the MCP server and the skills' scan step all run the same engine and produce the same
@@ -263,5 +313,12 @@ Every entry cites its sources and carries a `lastVerified` date. If an entry is 
 [correction](.github/ISSUE_TEMPLATE/vendor-correction.yml). Under
 [kb/KB_POLICY.md](kb/KB_POLICY.md), a correction with a primary source is merged the same day, and
 an entry is marked `disputed` as soon as a good-faith objection is raised.
+
+**Contributing a fact back.** When a fact you checked is current, `egressa facts contribute
+<vendorId>` prints a draft for the shared knowledge base: the entry with your change and its
+sources, a checklist and an issue body. It contains nothing from your code. Egressa never sends it
+anywhere; you open the [knowledge base contribution](.github/ISSUE_TEMPLATE/kb-contribution.yml)
+issue or a pull request yourself, and a maintainer re-reads every source before merging. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 Security reports: [SECURITY.md](SECURITY.md). Release history: [CHANGELOG.md](CHANGELOG.md).

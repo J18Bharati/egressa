@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledSchemaIssues, loadKnowledgeBase } from '@egressa/kb';
 import { describe, expect, it } from 'vitest';
-import { ContributionError, contribution } from './contribute.js';
+import { parse as parseYaml } from 'yaml';
+import { ContributionError, contribution, contributionChecklist } from './contribute.js';
 import { type FactsCheck, checkFacts, loadFacts } from './load.js';
 
 const ROOT = 'fixtures/repos/overlay-dpf';
@@ -209,5 +210,20 @@ describe('facts contribute', () => {
     });
     const body = contribution('stripe', checked(root), kb, { keepVerifiedBy: true }).body;
     expect(body).toContain('Checked by: `@org/legal see www.evil.example`');
+  });
+});
+
+describe('the issue form a contribution is pasted into', () => {
+  it('asks for exactly the checklist the draft carries', () => {
+    const form = parseYaml(readFileSync('.github/ISSUE_TEMPLATE/kb-contribution.yml', 'utf8')) as {
+      body: { id?: string; attributes: { options?: { label: string; required: boolean }[] } }[];
+    };
+    const options = form.body.find((b) => b.id === 'checklist')?.attributes.options ?? [];
+    const always = contributionChecklist('field-patch');
+    const newOnly = contributionChecklist('new-entry').filter((l) => !always.includes(l));
+    expect(options.filter((o) => o.required).map((o) => o.label)).toEqual(always);
+    expect(options.filter((o) => !o.required).map((o) => o.label)).toEqual(
+      newOnly.map((l) => `New entries only: ${l}`),
+    );
   });
 });

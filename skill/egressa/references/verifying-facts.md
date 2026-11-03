@@ -59,18 +59,18 @@ same way you draft a suppression:
   "version": 1,
   "facts": [
     {
-      "vendor": "notion",
+      "vendor": "clerk",
       "fact": "dpf",
       "value": {
         "observedStatus": "Active",
-        "organizationName": "Notion Labs, Inc.",
-        "participantUrl": "https://www.dataprivacyframework.gov/participant/6134"
+        "organizationName": "Clerk, Inc.",
+        "participantUrl": "https://www.dataprivacyframework.gov/participant/2718"
       },
       "source": {
-        "url": "https://www.dataprivacyframework.gov/participant/6134",
-        "retrievedAt": "2026-11-03"
+        "url": "https://www.dataprivacyframework.gov/participant/2718",
+        "retrievedAt": "2026-09-10"
       },
-      "verifiedBy": "agent-checked for the repository owner, 2026-11-03"
+      "verifiedBy": "agent-checked for the repository owner, 2026-09-10"
     }
   ]
 }

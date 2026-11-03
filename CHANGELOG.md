@@ -9,8 +9,9 @@ no code moving at all. A reader working out why today's findings differ from las
 know which half moved. Knowledge base versions are dates (`kb.version`); the tool version is semver.
 
 <!-- Update at the first release: the next sentence stops being true then. -->
-Nothing has been published yet — there is no npm release and no git remote — so every version below
-describes the state of the repository rather than an artifact anyone can install.
+Nothing has been published yet. There is no npm release, and the repository is private until the
+first one, so every version below describes the state of the repository rather than an artifact
+anyone can install.
 
 ## [Unreleased]
 
@@ -50,6 +51,32 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
   - With no facts file, output is unchanged. Exposure rules are `1.3.0`.
   - `egressa facts check [root] [--trust-facts]` lists each item as applied, redundant,
     loosening-not-trusted, superseded, expired or rejected.
+  - *Every surface shows it.* JSON, SARIF (`run.properties.egressa.facts`, result `factOrigins` and
+    `baselineRuleId`), human and markdown output and the MCP results all say how many findings
+    depend on repository-supplied facts and how many were loosened, and a loosened finding's message
+    says so first. A URL or name from the file is shown as a code span, never as a link.
+    `egressa schema facts` prints the file's schema.
+- **MCP `verification_tasks` and `validate_facts`.** The first lists every task in a scan once; the
+  second previews what a draft facts file would apply and which rules it would change, and writes
+  nothing.
+- **`egressa facts contribute <vendorId> [--root]`** prints an offline draft for the shared
+  knowledge base from a repository's facts: the entry with the change and its sources, a checklist,
+  and an issue or pull request body. It runs the checks `kb:validate` runs and exits 2 on a draft
+  that fails them. It carries nothing from the repository's code, drops `acceptQualifiedStatus` and
+  recomputes certification without it, and never sends anything: submitting is the user's own
+  issue or pull request.
+- **The skills verify facts.** `skill/egressa/references/verifying-facts.md` is the procedure: work
+  only from the scan's tasks, fetch only their `where` pages, copy a DPF status verbatim, write the
+  file only with consent, never write `acceptQualifiedStatus`, and pass `--trust-facts` only for a
+  repository the user owns. The privacy review reports a loosened finding as a question, never as
+  settled, and never passes `--trust-facts` itself.
+- **DPF records are re-verified on their own clock.** `kb:tasks` and a scan list a DPF record 90
+  days after it was read, from 30 days before its `certificationEndDate` (a new optional field,
+  copied from the participant record), and 30 days after an accepted qualified status was read. DPA
+  and sub-processor facts keep the 180-day staleness threshold.
+- **`THIRD_PARTY_NOTICES`** ships in `egressa`, `@egressa/mcp` and beside the skill bundle, generated
+  from the bundles themselves, with the licence of each package they inline and of the axios code
+  the axios request resolution is adapted from.
 - **`pnpm kb:tasks`** lists the verification tasks the shipped knowledge base generates, as JSON,
   using the builder a scan uses. It reads no repository and reaches no network. `kb/KB_POLICY.md`
   describes the re-verification flow it feeds.
@@ -295,6 +322,8 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
   status the table does not know are not. `kb:validate` refuses a record that disagrees, and the
   engine applies the same table at scan time, so a `--kb` directory cannot read a status two ways.
   A certified record with no observed status is a validation warning and a verification task.
+- **Code is licensed MIT, not Apache-2.0.** `kb/` stays CC-BY-4.0. Nothing had been published under
+  Apache-2.0.
 - **The authored-override layer is removed.** `kb/ratings/exposure-overrides.json` was read by
   nothing at run time. The knowledge base checks beyond the schema now live in
   `packages/kb-loader/src/checks.ts`, shared by `kb:validate` and anything that judges one entry.
@@ -346,6 +375,14 @@ regulator page fetched on 2026-11-02 or 2026-11-03.
   Stripe's record moved from participant 6436 (Stripe, Inc., which carries no certification) to
   10014 (Stripe, LLC, the entity Stripe's DPA and DPF notice name), and the Google entries now cite
   Google LLC's participant record 5780 rather than Google's own pages.
+- **Six vendors recorded as not on the DPF list.** Algolia, Anthropic, Hugging Face, IPinfo, OpenAI
+  and Supabase had a US jurisdiction and no DPF record, which raised a `dpf-unknown` task on every
+  scan. Each was searched for on the list on 2026-11-03 and is recorded `observedStatus:
+  "not-listed"`, citing the list. Their transfer findings do not change: none was treated as
+  certified before.
+- **Hugging Face relies on SCCs, not on nothing.** Its DPA, incorporated by reference, includes the
+  Standard Contractual Clauses, so its transfer mechanism is `SCC` rather than `none`. Canada is
+  added as a support jurisdiction, and the sub-processor list is recorded as a PDF.
 
 ### Knowledge base — `2026.10.09` → `2026.11.02`
 
@@ -365,7 +402,7 @@ regulator page fetched on 2026-11-02 or 2026-11-03.
 
 ### Knowledge base — `2026.09.21` → `2026.10.09`
 
-- **`google-gmail-api`: the Gmail API.** A field run against a Gmail-ingesting backend reported it
+- **`google-gmail-api`: the Gmail API.** A field run against a Gmail-integrating app reported it
   as `unknown-vendor-egress`. Only the Gmail-dedicated host (`gmail.googleapis.com`) and package
   (`@googleapis/gmail`): Google's OAuth token endpoint, `www.googleapis.com` and the general client
   packages serve Google APIs generally, and host matching cannot see a path or a scope, so they stay

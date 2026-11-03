@@ -113,7 +113,7 @@ export function contribution(
 
   const issues = validate(draft, kb, kind);
   const evidenceUrls = [...new Set(draft.sources.map((s) => s.url))];
-  const checklist = CHECKLIST(kind);
+  const checklist = contributionChecklist(kind);
   const credits = options.keepVerifiedBy
     ? [
         ...new Set(
@@ -222,7 +222,11 @@ function validate(draft: VendorEntry, kb: KnowledgeBase, kind: ContributionKind)
   ].map(safeIssue);
 }
 
-const CHECKLIST = (kind: ContributionKind): string[] => [
+/**
+ * What a contributor affirms. `.github/ISSUE_TEMPLATE/kb-contribution.yml`
+ * carries the same lines as required checkboxes, and a test holds them equal.
+ */
+export const contributionChecklist = (kind: ContributionKind): string[] => [
   'I opened every evidence URL below myself and each one says what the draft says, as of its date.',
   'Any DPF status is copied verbatim from the participant record, and dpfCertified follows the status table.',
   'Every fact is clean-room authored from vendor or regulator pages, and nothing comes from a source kb/PROVENANCE.md forbids.',
