@@ -13,7 +13,7 @@ permissions:
 jobs:
   links:
     # A scheduled run on a fork would open issues in the fork.
-    if: github.repository == 'egressa-dev/egressa'
+    if: github.repository == 'J18Bharati/egressa'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -31,7 +31,7 @@ import {
 const SARIF_VERSION = '2.1.0';
 const SARIF_SCHEMA =
   'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json';
-const INFORMATION_URI = 'https://github.com/egressa-dev/egressa';
+const INFORMATION_URI = 'https://github.com/J18Bharati/egressa';
 
 export interface SarifOptions {
   /** Repo-relative paths are emitted as-is; GitHub resolves them against the checkout. */

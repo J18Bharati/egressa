@@ -52,30 +52,46 @@ later locally, 2FA on your npm account.
        && npm publish --access public --tag bootstrap)
    done
    ```
-3. **Create the GitHub organisation `egressa-dev` and a public repository `egressa`.** It must be public:
-   npm generates provenance only for public repositories. Confirm `repository.url` in all four
-   `packages/*/package.json` is exactly `git+https://github.com/egressa-dev/egressa.git`; npm rejects a
-   trusted publish from any other value.
-4. **Push, without triggering a publish.** Anything pushed to `main` that contains `release.yml` runs it, so
-   push `main` at the initial commit (which predates it), then the working branch:
+3. **Create the repository `J18Bharati/egressa`, private first, with Actions off.** It lives on a
+   personal account for now; a later transfer to an organisation keeps GitHub's redirects, but the
+   trusted publisher (step 7) and the `github.repository` guards in `release.yml` and
+   `link-check.yml` must then be updated to the new name. Turn Actions off before the first push:
+   `release.yml` is already in `main`'s history, and its guard matches this repository, so the first
+   push would otherwise start a release run.
    ```bash
-   git remote add origin git@github.com:egressa-dev/egressa.git
-   git push origin "$(git rev-list --max-parents=0 HEAD)":refs/heads/main
-   git push origin v1-build
+   gh repo create J18Bharati/egressa --private --description "Detects third-party data-egress patterns in source code"
+   gh api -X PUT repos/J18Bharati/egressa/actions/permissions -F enabled=false
    ```
-5. **Repository settings** (none of these can be set from the repository):
+   Confirm `repository.url` in all four `packages/*/package.json` is exactly
+   `git+https://github.com/J18Bharati/egressa.git`; npm rejects a trusted publish from any other value.
+4. **Push `main`, then turn on everything except the release workflows.** `git push` sends only the
+   branch named, never the reflog, stashes or unreachable objects.
+   ```bash
+   git remote add origin https://github.com/J18Bharati/egressa.git
+   git push -u origin main
+   gh api -X PUT repos/J18Bharati/egressa/actions/permissions -F enabled=true -f allowed_actions=all
+   gh workflow disable release.yml --repo J18Bharati/egressa
+   gh workflow disable link-check.yml --repo J18Bharati/egressa
+   ```
+   Then test the plugin install from the private repository (`/plugin marketplace add
+   J18Bharati/egressa`; Claude Code uses the machine's git credentials). Make the repository public
+   only when the history is final: commits stay reachable by hash after any force-push.
+5. **Repository settings, after it is public** (most are free only on public repositories, and none
+   can be set from the repository):
    - Settings > Actions > General > Workflow permissions: enable "Allow GitHub Actions to create and approve pull requests".
-   - Settings > Advanced Security: enable private vulnerability reporting. `SECURITY.md` relies on it.
-   - Branch protection on `main`: require the `CI` checks and pull requests.
-   - `.github/CODEOWNERS` names `@egressa-dev/kb-maintainers`; create that team.
-6. **M3 check, before publishing.** Open a pull request from `v1-build` to `main`. The `self-scan` job in
+   - Settings > Advanced Security: enable private vulnerability reporting, secret scanning and push
+     protection. `SECURITY.md` relies on private vulnerability reporting.
+   - A ruleset on `main`: require the `CI` checks and pull requests.
+   - `.github/CODEOWNERS` names `@J18Bharati`; add maintainers there as they join.
+   - Re-enable `release.yml` (`gh workflow enable release.yml`) only when step 7 is done.
+6. **M3 check, before publishing.** Open a pull request from a branch to `main`. The `self-scan` job in
    `ci.yml` uploads SARIF to code scanning. Confirm, on the pull request and under Security > Code
    scanning, that annotations appear on the right lines and that each rule's `help.markdown` renders with
    the disclaimer. If it does not render, fix it before step 7. This has never been verified live.
 7. **Configure the trusted publisher, once per package (four passes).** A new configuration must complete
    its first publish within 2 days, so do this immediately before step 8. On npmjs.com, for each package:
    Settings > Trusted publisher > GitHub Actions, then enter:
-   - Organization or user: `egressa-dev`
+   - Organization or user: `J18Bharati`
    - Repository: `egressa`
    - Workflow filename: `release.yml` (filename only, with extension, case-sensitive)
    - Environment: leave empty
@@ -83,7 +99,7 @@ later locally, 2FA on your npm account.
 
    Or from a terminal, per package (re-run with `egressa`, `@egressa/core`, `@egressa/kb`, `@egressa/mcp`):
    ```bash
-   npm trust github egressa --repo egressa-dev/egressa --file release.yml --allow-publish
+   npm trust github egressa --repo J18Bharati/egressa --file release.yml --allow-publish
    npm trust list egressa
    ```
    npm does not check the values when you save them; a typo only shows up as `ENEEDAUTH` at publish time.

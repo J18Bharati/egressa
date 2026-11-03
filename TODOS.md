@@ -9,18 +9,19 @@ roadmap too, and say so in the item.
 
 ### Create the GitHub repository and push
 
-**What:** Create `github.com/egressa-dev/egressa`, push `v1-build`, then install the plugin from a
+**What:** Create `github.com/J18Bharati/egressa` (private first, Actions off), push `main`, then install the plugin from a
 clean machine to confirm the documented path works.
 
 **Why:** The README's primary install instruction cannot work today. There is no git remote at all,
-so `/plugin marketplace add egressa-dev/egressa` resolves to nothing. Every install instruction in
+so `/plugin marketplace add J18Bharati/egressa` resolves to nothing. Every install instruction in
 the repository currently documents a 404, which is the worst possible first impression for a tool
 whose entire pitch is precision.
 
 **Context:** `git remote -v` is empty. Three files already name the org: `repository` in
 `.claude-plugin/plugin.json`, the marketplace manifest, and `action.yml`, which pins
-`uses: egressa-dev/egressa@v1`. The `egressa` GitHub org was confirmed free during the naming pass,
-but nothing has been reserved — check again before assuming. `claude plugin validate .` passes
+`uses: J18Bharati/egressa@v1`. Decided 2026-11-04: publish from the maintainer's personal account,
+with an npm organisation `egressa` for the `@egressa/*` scope; `docs/RELEASING.md` steps 3-5 hold the
+sequence. `claude plugin validate .` passes
 locally, which validates the manifests but not the install, because the install needs a remote.
 
 **Effort:** S

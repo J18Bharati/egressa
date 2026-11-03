@@ -438,7 +438,7 @@ function buildRemediation(ruleId: RuleId, vendor: VendorEntry | null): Remediati
   if (!vendor) {
     links.push({
       label: 'Request a knowledge base entry',
-      url: 'https://github.com/egressa-dev/egressa/issues/new?template=vendor-request.yml',
+      url: 'https://github.com/J18Bharati/egressa/issues/new?template=vendor-request.yml',
     });
   }
 

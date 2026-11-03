@@ -6,7 +6,7 @@
 The engine behind the [`egressa`](https://www.npmjs.com/package/egressa) CLI and the
 [`@egressa/mcp`](https://www.npmjs.com/package/@egressa/mcp) server. Use it to run a scan from your
 own code. For the command line, install `egressa` instead. Project overview, limitations and
-install status: the [main README](https://github.com/egressa-dev/egressa#readme).
+install status: the [main README](https://github.com/J18Bharati/egressa#readme).
 
 <!-- Remove this note at the first npm release. -->
 Until the first npm release, this package is available only from a checkout of that repository.

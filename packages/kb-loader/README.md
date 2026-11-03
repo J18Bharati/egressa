@@ -7,7 +7,7 @@ The Egressa vendor knowledge base, and the code that loads and indexes it. Each 
 where the vendor processes data, whether it documents an EU region, its transfer mechanisms, links
 to its DPA and sub-processor list, and the sources behind each fact. `adequacy-status.json` records
 the state of each EU adequacy decision, also sourced. Project overview: the
-[main README](https://github.com/egressa-dev/egressa#readme).
+[main README](https://github.com/J18Bharati/egressa#readme).
 
 <!-- Remove this note at the first npm release. -->
 Until the first npm release, this package is available only from a checkout of that repository.
@@ -33,10 +33,10 @@ claim, returns nothing rather than picking one. `staleEntries()` lists entries w
 The knowledge base version is a date, separate from the package version: a new knowledge base can
 change what a scan reports with no code changing. The entries are facts with citations; ratings are
 computed by `@egressa/core`, not stored here. To correct an entry, see
-[KB_POLICY.md](https://github.com/egressa-dev/egressa/blob/main/kb/KB_POLICY.md).
+[KB_POLICY.md](https://github.com/J18Bharati/egressa/blob/main/kb/KB_POLICY.md).
 
 ## Licence
 
 The loader code is Apache-2.0. The data in `kb/` is CC-BY-4.0, which requires attribution when you
 reuse it; see `kb/LICENSE` and
-[PROVENANCE.md](https://github.com/egressa-dev/egressa/blob/main/kb/PROVENANCE.md).
+[PROVENANCE.md](https://github.com/J18Bharati/egressa/blob/main/kb/PROVENANCE.md).

@@ -5,7 +5,7 @@
 
 A stdio MCP server that exposes the Egressa scanner and its vendor knowledge base to any MCP client.
 It has no write tools and makes no network calls. Project overview and limitations: the
-[main README](https://github.com/egressa-dev/egressa#readme).
+[main README](https://github.com/J18Bharati/egressa#readme).
 
 <!-- Remove this note at the first npm release. -->
 Until the first npm release, run the built server from a checkout:
@@ -33,6 +33,6 @@ In Claude Code: `claude mcp add egressa -- npx -y @egressa/mcp@latest`. The pack
 
 There is also a `transfer-review` prompt. `scan_repository` applies the repository's `.egressa.yml`
 the same way the CLI does, and returns the scan's errors rather than an empty summary when a path
-does not exist. Details: [docs/mcp.md](https://github.com/egressa-dev/egressa/blob/main/docs/mcp.md).
+does not exist. Details: [docs/mcp.md](https://github.com/J18Bharati/egressa/blob/main/docs/mcp.md).
 
 Code is Apache-2.0. The bundled knowledge base in `kb/` is CC-BY-4.0.

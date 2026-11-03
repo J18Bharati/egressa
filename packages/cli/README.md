@@ -9,7 +9,7 @@ mechanism that rests on. It runs offline, with no account, no API key and no tel
 
 <!-- Remove this note at the first npm release. -->
 Until the first npm release, build it from a checkout as the
-[main README](https://github.com/egressa-dev/egressa#readme) describes.
+[main README](https://github.com/J18Bharati/egressa#readme) describes.
 
 ```bash
 npx egressa scan .
@@ -49,7 +49,7 @@ A clean scan means no known vendor was matched by the analyzers that ran. A vend
 backend that is not in the scanned repository, a host supplied at runtime, a constant imported from
 another file, and a vendor with no knowledge base entry are all outside what it can report. A
 finding means the code references a vendor, not that personal data was sent. See
-[LIMITATIONS.md](https://github.com/egressa-dev/egressa/blob/main/docs/LIMITATIONS.md).
+[LIMITATIONS.md](https://github.com/J18Bharati/egressa/blob/main/docs/LIMITATIONS.md).
 
 ## Licence
 

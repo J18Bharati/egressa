@@ -18470,7 +18470,7 @@ function buildRemediation(ruleId, vendor) {
   if (!vendor) {
     links.push({
       label: "Request a knowledge base entry",
-      url: "https://github.com/egressa-dev/egressa/issues/new?template=vendor-request.yml"
+      url: "https://github.com/J18Bharati/egressa/issues/new?template=vendor-request.yml"
     });
   }
   return { summary: RULES[ruleId].help, links };
@@ -18971,7 +18971,7 @@ function longestRun(text, ch) {
 }
 var SARIF_VERSION = "2.1.0";
 var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
-var INFORMATION_URI = "https://github.com/egressa-dev/egressa";
+var INFORMATION_URI = "https://github.com/J18Bharati/egressa";
 function toSarif(result, options) {
   return {
     $schema: SARIF_SCHEMA,

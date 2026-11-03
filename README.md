@@ -60,7 +60,7 @@ in [docs/CLAIMS.md](docs/CLAIMS.md).
      reporting note at the first release. -->
 ## Status: not released yet
 
-Nothing is published to npm, and the GitHub repository `egressa-dev/egressa` that the plugin, the
+Nothing is published to npm, and the GitHub repository `J18Bharati/egressa` that the plugin, the
 Action and the issue links refer to has not been created. **Until the first release, the only path
 that works is a checkout:**
 
@@ -78,8 +78,8 @@ After the first release, these are the install paths. None of them works today.
 | Surface | Command | Needs |
 |---|---|---|
 | CLI | `npx egressa scan .` | npm release |
-| GitHub Action | `uses: egressa-dev/egressa@v1` (see below) | npm release, repository, `v1` tag |
-| Claude Code plugin | `/plugin marketplace add egressa-dev/egressa`, then `/plugin install egressa@egressa` | repository |
+| GitHub Action | `uses: J18Bharati/egressa@v1` (see below) | npm release, repository, `v1` tag |
+| Claude Code plugin | `/plugin marketplace add J18Bharati/egressa`, then `/plugin install egressa@egressa` | repository |
 | MCP server | `claude mcp add egressa -- npx -y @egressa/mcp@latest` | npm release |
 
 The scanner needs no account, no API key and no network. It runs offline against the knowledge base
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: egressa-dev/egressa@v1
+      - uses: J18Bharati/egressa@v1
         with:
           version: <released version>  # defaults to latest; pin it
           fail-on: warning

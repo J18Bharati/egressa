@@ -5,12 +5,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/egressa-dev/egressa.git",
+    "url": "git+https://github.com/J18Bharati/egressa.git",
     "directory": "packages/mcp"
   },
-  "homepage": "https://github.com/egressa-dev/egressa#readme",
+  "homepage": "https://github.com/J18Bharati/egressa#readme",
   "bugs": {
-    "url": "https://github.com/egressa-dev/egressa/issues"
+    "url": "https://github.com/J18Bharati/egressa/issues"
   },
   "keywords": [
     "gdpr",
