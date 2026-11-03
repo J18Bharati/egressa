@@ -26,6 +26,24 @@ passes locally, which validates the manifests but not the install.
 **Priority:** P0
 **Depends on:** None
 
+### Make the suite pass on Windows, then restore the CI leg
+
+**What:** Fix the 64 failures of the first Windows run (2026-11-04), then add `windows-latest` back
+to the `ci.yml` matrix and drop the LIMITATIONS entry.
+
+**Why:** Windows was taken off CI before the repository went public rather than shipped red. Until
+it is back, nothing says the CLI, the hook or the skills work there.
+
+**Context:** 48 failures are `packages/cli/src/cli.test.ts`, whose child process exits with status
+`null`: it spawns `npx`, which on Windows is `npx.cmd` and needs `shell: true` or a resolved path.
+Six are `scripts/scope-gates.test.ts`, where bash, FIFOs and symlinks may need a per-platform skip
+by design. The other ten are in kb-loader, config, facts, mcp and release-tooling, not yet read;
+likely path separators or symlinks. Line endings are already fixed by `.gitattributes`.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ### Decide whether to vendor the native parser binding
 
 **What:** Either ship `oxc-parser`'s platform binaries inside `plugin/skills/privacy-review/bin/`, or decide

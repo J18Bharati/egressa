@@ -385,6 +385,14 @@ Even a high-confidence, resolved call site only shows that code *references* a v
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
 
+## Windows is untested
+
+CI runs on Linux and macOS only. The first Windows run, on 2026-11-04, failed 64 tests in 8 files:
+most spawn `npx`, which on Windows is `npx.cmd` and needs a shell, and the privacy review's
+`scope.sh` assumes bash, git, FIFOs and symbolic links behave as they do on a Unix system. Neither
+the CLI nor the skills are known to work on Windows; WSL is the supported route there until the
+suite passes.
+
 ## Repository facts
 
 `.egressa/facts.json` lets a repository record legal facts it checked, and the scan applies them
