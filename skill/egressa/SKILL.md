@@ -103,8 +103,11 @@ Work through the findings in this order:
    says. A finding with `transfer.repositoryFacts` depends on it, one with `vendor.origin: "local"`
    comes from an entry the repository wrote, and one with `baselineRuleId` had that rule without
    the file. Report each of these as repository-supplied, with the fact's source URL and date, and
-   say which way the rule moved. `facts.notTrusted` counts facts that would have loosened a finding
-   and were not applied, because the scan was not run with `--trust-facts`.
+   say which way the rule moved. A local entry's line has no source URL of its own; its sources are
+   in the entry. `facts.notTrusted` counts facts that would have loosened a finding and were not
+   applied, because the scan was not run with `--trust-facts`. In the MCP `scan_repository`
+   summary the same fields are flat on each finding: `repositoryFacts`, `vendorOrigin` and
+   `baselineRuleId`.
 
 7. **Work the verification tasks.** `verification[]` on a finding (or the MCP tool
    `verification_tasks`) lists legal facts to re-check and where. Offer to check them and record

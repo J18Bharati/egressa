@@ -388,7 +388,9 @@ export function scan(options: ScanOptions): ScanResult {
 
 function factsSummary(overlay: Overlay, findings: Finding[]): FactsSummary {
   const count = (state: string) => overlay.items.filter((i) => i.state === state).length;
-  const active = findings.filter((f) => !f.suppressed);
+  // Suppressed findings count too. A suppression written for the looser rule
+  // matches only because the facts loosened the finding, so leaving them out
+  // would hide exactly the loosening a reviewer most needs to see.
   return {
     source: overlay.source,
     trusted: overlay.trusted,
@@ -399,11 +401,10 @@ function factsSummary(overlay: Overlay, findings: Finding[]): FactsSummary {
     expired: count('expired'),
     rejected: count('rejected'),
     localVendors: overlay.localIds.size,
-    findingsDependingOnFacts: active.filter((f) => (f.transfer?.repositoryFacts?.length ?? 0) > 0)
+    findingsDependingOnFacts: findings.filter((f) => (f.transfer?.repositoryFacts?.length ?? 0) > 0)
       .length,
-    // Measured on the finding, not on the fact's label: a fact can loosen in
-    // general and still leave this repository's finding stricter.
-    loosened: active.filter(loosenedByFacts).length,
+    // One definition with every surface: `factsDirection` in output/provenance.
+    loosened: findings.filter(loosenedByFacts).length,
   };
 }
 

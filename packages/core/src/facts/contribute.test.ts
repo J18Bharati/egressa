@@ -99,7 +99,7 @@ describe('facts contribute', () => {
     expect(dpf?.dpfCertified).toBe(false);
     // Kept only when the caller asks to credit whoever checked it.
     expect(contribution('notion', checked(root), kb, { keepVerifiedBy: true }).body).toContain(
-      'Checked by: Pat Example',
+      'Checked by: `Pat Example`',
     );
   });
 
@@ -127,7 +127,87 @@ describe('facts contribute', () => {
   it('imports no network, process or filesystem module', () => {
     const source = readFileSync('packages/core/src/facts/contribute.ts', 'utf8');
     const imports = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-    expect(imports.sort()).toEqual(['../claims.js', './load.js', './overlay.js', '@egressa/kb']);
+    expect(imports.sort()).toEqual([
+      '../claims.js',
+      '../output/display.js',
+      './load.js',
+      './overlay.js',
+      '@egressa/kb',
+    ]);
     expect(source).not.toMatch(/\bprocess\.|\bfetch\(|\brequire\(|\bimport\(/);
+  });
+
+  it('drops a local entry’s own DPF acceptance and recomputes its certification', () => {
+    const check = checked(ROOT);
+    const item = check.items.find((i) => i.kind === 'local-entry');
+    if (!item?.local) throw new Error('no local entry');
+    const entry = item.local.entry;
+    item.local = {
+      ...item.local,
+      entry: {
+        ...entry,
+        legal: {
+          ...entry.legal,
+          transferMechanisms: [
+            ...entry.legal.transferMechanisms,
+            {
+              mechanism: 'DPF',
+              dpfCertified: true,
+              observedStatus: 'Active - Re-certification under Review',
+              url: 'https://www.dataprivacyframework.gov/participant/1',
+              lastChecked: '2026-11-02',
+              acceptQualifiedStatus: { acceptedBy: 'Jane Doe, Head of Legal', reason: 'TICKET-9' },
+            },
+          ],
+        },
+      },
+    };
+    const bundle = contribution('acme-geo', check, kb);
+    const text = JSON.stringify(bundle);
+    expect(text).not.toContain('Jane Doe');
+    expect(text).not.toContain('TICKET-9');
+    const dpf = bundle.draft.legal.transferMechanisms.find((m) => m.mechanism === 'DPF');
+    expect(dpf?.dpfCertified).toBe(false);
+  });
+
+  it('shows a Changes section only for a field patch', () => {
+    expect(contribution('acme-geo', checked(ROOT), kb).body).not.toContain('### Changes');
+    expect(contribution('stripe', checked(ROOT), kb).body).toContain('### Changes');
+  });
+
+  it('records what a field patch changes, from and to, and cites each source once', () => {
+    const bundle = contribution('stripe', checked(ROOT), kb);
+    const change = bundle.changes[0];
+    expect(change?.from).not.toEqual(change?.to);
+    const urls = bundle.draft.sources.map((s) => s.url);
+    expect(urls.length).toBe(new Set(urls).size);
+  });
+
+  it('reports a collision with a shipped vendor as an issue', () => {
+    const check = checked(ROOT);
+    const item = check.items.find((i) => i.kind === 'local-entry');
+    if (!item?.local) throw new Error('no local entry');
+    const entry = item.local.entry;
+    item.local = {
+      ...item.local,
+      entry: {
+        ...entry,
+        aliases: {
+          ...entry.aliases,
+          hosts: [{ pattern: 'api.stripe.com', match: 'exact', purpose: 'api' }],
+        },
+      },
+    };
+    expect(contribution('acme-geo', check, kb).issues.join('\n')).toMatch(
+      /collid|claimed|already/i,
+    );
+  });
+
+  it('renders credited names as code spans, so they cannot mention or link', () => {
+    const root = plantedRepo((file) => {
+      file.facts[1] = { ...file.facts[1], verifiedBy: '@org/legal see www.evil.example' };
+    });
+    const body = contribution('stripe', checked(root), kb, { keepVerifiedBy: true }).body;
+    expect(body).toContain('Checked by: `@org/legal see www.evil.example`');
   });
 });

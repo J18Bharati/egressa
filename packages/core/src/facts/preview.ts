@@ -2,7 +2,7 @@ import { loadKnowledgeBase } from '@egressa/kb';
 import { loosenedByFacts } from '../output/provenance.js';
 import { type ScanOptions, scan } from '../scan.js';
 import type { FactsSummary, RuleId, ScanResult, VerifyTask } from '../types.js';
-import { FACTS_FILE, checkFacts, parseFacts } from './load.js';
+import { FACTS_FILE, FactsError, MAX_FACTS_BYTES, checkFacts, parseFacts } from './load.js';
 import { type OverlayItem, applyOverlay } from './overlay.js';
 
 /**
@@ -58,9 +58,24 @@ export interface FactsPreview {
  * that is not a facts document, exactly as `loadFacts` would for the file.
  */
 export function previewFacts(draft: string, options: Omit<ScanOptions, 'facts'>): FactsPreview {
-  const parsed = parseFacts(draft, `${FACTS_FILE} (draft)`);
+  const label = `${FACTS_FILE} (draft)`;
+  // The file's own cap, in bytes. A draft the preview accepts must be one the
+  // scan would read: a cap in characters let a non-ASCII draft through here.
+  if (Buffer.byteLength(draft, 'utf8') > MAX_FACTS_BYTES) {
+    throw new FactsError(`${label}: is larger than ${MAX_FACTS_BYTES / 1_048_576} MB; not read`);
+  }
+  const parsed = parseFacts(draft, label);
   const now = options.now ?? new Date();
-  const kb = options.kb ?? loadKnowledgeBase(options.kbPath ? { kbPath: options.kbPath } : {});
+  // Loaded as `scan` loads it, so an assumed lapse is in the baseline the
+  // overlay is measured against, not only in the scan that follows.
+  const kb =
+    options.kb ??
+    loadKnowledgeBase({
+      ...(options.kbPath ? { kbPath: options.kbPath } : {}),
+      ...(options.assumeAdequacyLapsed
+        ? { assumeAdequacyLapsed: options.assumeAdequacyLapsed }
+        : {}),
+    });
   const overlay = applyOverlay(kb, checkFacts(parsed, kb, now), {
     trustFacts: options.trustFacts === true,
   });

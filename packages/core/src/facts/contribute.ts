@@ -3,9 +3,11 @@ import {
   type VendorEntry,
   bundledSchemaIssues,
   collisionIssues,
+  dpfStatusVerdict,
   entryIssues,
 } from '@egressa/kb';
 import { findForbiddenClaims } from '../claims.js';
+import { markdownCode } from '../output/display.js';
 import { type FactsCheck, type RepositoryFact, safeIssue } from './load.js';
 import { withFact } from './overlay.js';
 
@@ -21,8 +23,11 @@ import { withFact } from './overlay.js';
  * anywhere is the user's decision and the user's action.
  *
  * What it leaves out on purpose:
- * - `acceptQualifiedStatus`: a team's own risk decision, not a fact about the
- *   vendor, so the record is drafted as the closed status table reads it;
+ * - `acceptQualifiedStatus`, on a fact or on a local entry's own DPF record: a
+ *   team's own risk decision, not a fact about the vendor, so every DPF record
+ *   is drafted as the closed status table reads it without acceptance. A
+ *   local entry's own `dpfCertified` is recomputed the same way, since a scan
+ *   never honours it either;
  * - `verifiedBy` names, unless the caller asks to keep them;
  * - expired and rejected items, and every other vendor in the file.
  */
@@ -88,7 +93,7 @@ export function contribution(
 
   const kind: ContributionKind = local ? 'new-entry' : 'field-patch';
   const base: VendorEntry = local?.local
-    ? { ...local.local.entry, verifiedBy: DRAFTED_BY }
+    ? { ...withoutLocalAcceptance(local.local.entry), verifiedBy: DRAFTED_BY }
     : (shipped as VendorEntry);
   const changes: FieldChange[] = [];
   let draft = base;
@@ -104,6 +109,7 @@ export function contribution(
     draft = withSource(next, fact);
   }
   if (kind === 'field-patch') draft = { ...draft, verifiedBy: DRAFTED_BY };
+  const reported = kind === 'field-patch' ? changes : [];
 
   const issues = validate(draft, kb, kind);
   const evidenceUrls = [...new Set(draft.sources.map((s) => s.url))];
@@ -119,11 +125,20 @@ export function contribution(
     kind,
     vendorId,
     draft,
-    changes: kind === 'field-patch' ? changes : [],
+    changes: reported,
     issues,
     checklist,
     evidenceUrls,
-    body: renderBody({ kind, vendorId, draft, changes, issues, checklist, evidenceUrls, credits }),
+    body: renderBody({
+      kind,
+      vendorId,
+      draft,
+      changes: reported,
+      issues,
+      checklist,
+      evidenceUrls,
+      credits,
+    }),
   };
 }
 
@@ -142,6 +157,24 @@ function withoutLocalDecision(fact: RepositoryFact): RepositoryFact {
   if (fact.fact !== 'dpf' || !fact.acceptQualifiedStatus) return fact;
   const { acceptQualifiedStatus: _accepted, ...rest } = fact;
   return rest;
+}
+
+/** A local entry's DPF records as the status table reads them, with no acceptance. */
+function withoutLocalAcceptance(entry: VendorEntry): VendorEntry {
+  return {
+    ...entry,
+    legal: {
+      ...entry.legal,
+      transferMechanisms: entry.legal.transferMechanisms.map((m) => {
+        if (m.mechanism !== 'DPF') return m;
+        const { acceptQualifiedStatus: _accepted, ...rest } = m;
+        const certified = m.observedStatus
+          ? dpfStatusVerdict(m.observedStatus, false).certified
+          : false;
+        return { ...rest, dpfCertified: certified };
+      }),
+    },
+  };
 }
 
 /** The fact's page joins the entry's sources, so the citation travels with the change. */
@@ -237,7 +270,9 @@ function renderBody(b: {
   lines.push('', '### Evidence', '');
   for (const url of b.evidenceUrls) lines.push(`- ${url}`);
   if (b.credits.length > 0) {
-    lines.push('', `Checked by: ${b.credits.join('; ')}`);
+    // A name is the repository's text: as code spans it cannot mention a team,
+    // link anywhere or add markup to an issue body.
+    lines.push('', `Checked by: ${b.credits.map(markdownCode).join('; ')}`);
   }
   lines.push(
     '',

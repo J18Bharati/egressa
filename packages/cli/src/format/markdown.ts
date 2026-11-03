@@ -8,6 +8,7 @@ import {
   factsHeadline,
   isLocalVendor,
   isReferenceOnly,
+  markdownCode,
   markdownText,
   markdownUrl,
   plainText,
@@ -87,14 +88,14 @@ export function formatMarkdown(result: ScanResult, options: { maxFindings?: numb
       lines.push(`- Entry last verified: ${f.transfer.lastVerified}${supplied}`);
       if (f.transfer.disputed) lines.push(`- **Disputed:** ${inert(f.transfer.disputed.summary)}`);
       for (const ref of f.transfer.repositoryFacts ?? []) {
-        lines.push(`- Facts: ${inert(factRefText(ref, plainText))}`);
+        lines.push(`- Facts: ${markdownCode(factRefText(ref, plainText))}`);
       }
     }
     lines.push('', 'Evidence:', '');
     for (const e of f.evidence.slice(0, 5)) {
       lines.push(`- \`${e.file}:${e.startLine}\` matched \`${e.matchedOn}\` (${e.kind})`);
     }
-    lines.push('', f.remediation.summary, '');
+    lines.push('', inert(f.remediation.summary), '');
     const tasks = f.verification ?? [];
     if (tasks.length > 0) {
       lines.push('To verify:', '');
@@ -174,8 +175,6 @@ function inert(text: string): string {
 }
 
 /** A path as a code span: no markup, no autolink, no mention inside it. */
-function codeSpan(text: string): string {
-  return `\`${plainText(text).replace(/`/g, "'")}\``;
-}
+const codeSpan = markdownCode;
 
 const MAX_WARNINGS = 20;

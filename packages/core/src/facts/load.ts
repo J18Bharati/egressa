@@ -139,7 +139,7 @@ function nestingDepth(text: string): number {
 }
 
 /** Larger than any facts file a team writes; the same cap as `.egressa.yml`. */
-const MAX_FACTS_BYTES = 8 * 1_048_576;
+export const MAX_FACTS_BYTES = 8 * 1_048_576;
 
 /** Reads `<root>/.egressa/facts.json`. Null when there is none, which is the normal case. */
 export function loadFacts(root: string): ParsedFacts | null {

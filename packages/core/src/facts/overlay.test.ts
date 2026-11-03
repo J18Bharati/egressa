@@ -5,6 +5,7 @@ import { type KnowledgeBase, buildKnowledgeBase, loadKnowledgeBase } from '@egre
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
+import { factsDirection } from '../output/provenance.js';
 import { scan } from '../scan.js';
 import { FINDINGS_SCHEMA_VERSION, type Finding, type ScanResult } from '../types.js';
 import { FactsError, checkFacts, loadFacts, parseFacts } from './load.js';
@@ -198,10 +199,14 @@ describe('applying facts', () => {
     expect(local.transfer?.repositoryFacts?.[0]?.effect).toBe('tightens');
   });
 
-  it('records a neutral fact and drops the task it answers', () => {
+  it('records a neutral fact, and drops the task it answers only under trust', () => {
     const openai = vendorFinding(untrusted, 'openai');
     expect(openai.transfer?.repositoryFacts?.[0]?.effect).toBe('neutral');
-    expect(openai.verification?.some((t) => t.reason === 'dpf-unknown') ?? false).toBe(false);
+    // Untrusted, the fact applies but cannot close the knowledge base's task:
+    // a supplier's repository must not be able to say there is nothing to check.
+    expect(openai.verification?.some((t) => t.reason === 'dpf-unknown') ?? false).toBe(true);
+    const answered = vendorFinding(trusted, 'openai');
+    expect(answered.verification?.some((t) => t.reason === 'dpf-unknown') ?? false).toBe(false);
   });
 
   it('never changes the shipped knowledge base it was given', () => {
@@ -850,8 +855,104 @@ describe('contracts review findings, each pinned', () => {
     expect(vendorFinding(plain, 'openai').verification?.map((t) => t.reason)).toContain(
       'dpf-unknown',
     );
-    expect(vendorFinding(run(), 'openai').verification?.map((t) => t.reason) ?? []).not.toContain(
-      'dpf-unknown',
-    );
+    expect(
+      vendorFinding(run({ trustFacts: true }), 'openai').verification?.map((t) => t.reason) ?? [],
+    ).not.toContain('dpf-unknown');
+  });
+});
+
+describe('Phase 7 review findings, each pinned', () => {
+  /** The fixture's facts file with its local entry edited. */
+  type LocalJson = { lastVerified?: string; processing: { jurisdictions: unknown[] } };
+  function withLocal(edit: (entry: LocalJson) => void): string {
+    const file = JSON.parse(fixtureText);
+    edit(file.localVendors[0].entry);
+    return JSON.stringify(file);
+  }
+  const inGermany = withLocal((e) => {
+    e.processing.jurisdictions = [{ country: 'DE', role: 'primary', note: 'Fixture.' }];
+  });
+
+  it('counts a local entry that loosens as loosened, on the finding and the run', () => {
+    const trusted = run({ text: inGermany, trustFacts: true });
+    const local = trusted.findings.find((f) => f.vendor?.id === 'acme-geo');
+    expect(local?.baselineRuleId).toBe('transfer/unknown-vendor-egress');
+    expect(local?.ruleId).toBe('transfer/eu-processing');
+    expect(local && factsDirection(local)).toBe('loosened');
+    // Notion's DPF fact and the local entry.
+    expect(trusted.facts?.loosened).toBe(2);
+    // Untrusted, the same entry is held back, and nothing is loosened.
+    const untrusted = run({ text: inGermany });
+    expect(untrusted.facts?.notTrusted).toBe(2);
+    expect(untrusted.facts?.loosened).toBe(0);
+  });
+
+  it('counts a suppressed finding the facts loosened', () => {
+    const result = scan({
+      root: ROOT,
+      toolVersion: '0.1.0',
+      kb,
+      now: NOW,
+      includeCallsites: true,
+      facts: loadFacts(ROOT),
+      trustFacts: true,
+      config: {
+        suppressions: [
+          { vendor: 'notion', rule: 'transfer/adequate-country-egress', reason: 'fixture' },
+        ],
+      },
+    });
+    const notion = vendorFinding(result, 'notion');
+    expect(notion.suppressed).toBe(true);
+    expect(factsDirection(notion)).toBe('loosened');
+    expect(result.facts?.loosened).toBe(1);
+    expect(result.facts?.findingsDependingOnFacts).toBeGreaterThan(0);
+  });
+
+  it('never emits kb/stale-entry for a local entry', () => {
+    const old = withLocal((e) => {
+      e.lastVerified = '2020-01-01';
+    });
+    for (const result of [run({ text: old }), run({ text: old, trustFacts: true })]) {
+      expect(
+        result.findings.some((f) => f.ruleId === 'kb/stale-entry' && f.vendor?.id === 'acme-geo'),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps every stale task open without trust, and lets facts answer them with it', () => {
+    const later = new Date('2027-09-01T12:00:00Z');
+    const facts = ['dpf', 'dpa', 'subprocessors'].map((fact) => ({
+      vendor: 'stripe',
+      fact,
+      value:
+        fact === 'dpf'
+          ? {
+              observedStatus: 'Active',
+              organizationName: 'Stripe, LLC',
+              participantUrl: 'https://www.dataprivacyframework.gov/participant/10014',
+            }
+          : fact === 'dpa'
+            ? { available: true, url: 'https://stripe.com/legal/dpa' }
+            : { url: 'https://stripe.com/legal/service-providers' },
+      source: {
+        url:
+          fact === 'dpf'
+            ? 'https://www.dataprivacyframework.gov/participant/10014'
+            : 'https://stripe.com/legal',
+        retrievedAt: '2027-08-30',
+      },
+      verifiedBy: 'fixture',
+    }));
+    const text = JSON.stringify({ version: 1, facts });
+    const tasksOf = (result: ScanResult) =>
+      result.findings
+        .filter((f) => f.vendor?.id === 'stripe')
+        .flatMap((f) => f.verification ?? [])
+        .map((t) => t.fact);
+    const baseline = tasksOf(run({ text: JSON.stringify({ version: 1 }), now: later }));
+    expect(baseline.length).toBeGreaterThan(0);
+    expect(tasksOf(run({ text, now: later }))).toEqual(baseline);
+    expect(tasksOf(run({ text, now: later, trustFacts: true }))).toEqual([]);
   });
 });

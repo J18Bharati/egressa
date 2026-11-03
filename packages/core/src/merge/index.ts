@@ -39,7 +39,16 @@ export interface MergeOptions {
  */
 export function mergeSignals(signals: Signal[], options: MergeOptions): Finding[] {
   const { kb, now, overlay } = options;
-  const staleVendorIds = new Set(kb.staleEntries(now).map((v) => v.id));
+  // Staleness belongs to the knowledge base's own entries. A local entry is
+  // the repository's, expires within 30 days, and is not "the knowledge base
+  // entry" a stale note asks someone to correct. Without trust, a repository
+  // fact cannot make a shipped entry fresh either: see `taskSource`.
+  const staleVendorIds = new Set(
+    taskSource(kb, overlay)
+      .staleEntries(now)
+      .filter((v) => !overlay?.localIds.has(v.id))
+      .map((v) => v.id),
+  );
   const groups = new Map<
     string,
     {
@@ -134,12 +143,15 @@ function withVerification(
       });
       return [{ ...finding, verification: [task] }];
     }
-    // Which tasks are open is decided on the overlaid entry, so an applied
-    // fact answers its task. Where each one points is not: a task's URLs are
-    // knowledge base data, so any the repository supplied are dropped.
+    // Which tasks are open is decided on the overlaid entry only when the
+    // caller trusts the repository, so an applied fact answers its task. An
+    // untrusted file cannot close one: a supplier's repository could otherwise
+    // tell the reviewer's agent there is nothing to re-check. Where each task
+    // points is never the repository's: a task's URLs are knowledge base data,
+    // so any the repository supplied are dropped.
     const shipped = overlay?.baseline.byId.get(vendor.id);
     const tasks = [
-      ...kb.verifyTasks(vendor, now),
+      ...taskSource(kb, overlay).verifyTasks(overlay?.trusted ? vendor : (shipped ?? vendor), now),
       ...expiredFactTasks(shipped ?? vendor, overlay),
     ].map((task) => (overlay ? shippedUrlsOnly(task, shipped) : task));
     if (!staleVendorIds.has(vendor.id)) {
@@ -149,6 +161,11 @@ function withVerification(
     noted.add(vendor.id);
     return [finding, staleNote(finding, vendor, tasks)];
   });
+}
+
+/** The knowledge base that decides which tasks are open: the overlaid one only under trust. */
+function taskSource(kb: KnowledgeBase, overlay: Overlay | undefined): KnowledgeBase {
+  return overlay && !overlay.trusted ? overlay.baseline : kb;
 }
 
 /**

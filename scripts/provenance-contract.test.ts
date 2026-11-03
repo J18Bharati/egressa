@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import {
   FACTS_FILE,
   FACTS_MARKER,
   type ScanResult,
   parseFacts,
+  previewFacts,
   scan,
   summarise,
   toSarif,
@@ -118,6 +119,10 @@ describe('SARIF', () => {
   it('carries the facts summary on the run', () => {
     expect(run.properties.facts?.headline).toContain(FACTS_MARKER);
   });
+  it('prefixes only a loosened finding, never a tightened one', () => {
+    expect(sarifResult('stripe')?.properties.baselineRuleId).toBeDefined();
+    expect(sarifResult('stripe')?.message.text).not.toMatch(/^\[loosened/);
+  });
   it('names the baseline rule and leads the message with the loosening', () => {
     const notion = sarifResult('notion');
     expect(notion?.properties.baselineRuleId).toBe(BASELINE);
@@ -178,8 +183,25 @@ describe('markdown', () => {
     expect(local).toContain('(supplied by this repository)');
   });
   it('shows the supplied DPA as a fact, never as the vendor link', () => {
-    expect(openai).toMatch(/^- Facts: dpa supplying https:\/\/repository-supplied\.example/m);
+    expect(openai).toMatch(/^- Facts: `dpa supplying https:\/\/repository-supplied\.example/m);
     expect(openai).not.toMatch(/\[Data processing agreement\]\(https:\/\/repository-supplied/);
+  });
+});
+
+/**
+ * GitHub turns a bare `https://` or `www.` into a link, so a URL a repository
+ * supplied is rendered only inside a code span, never clickable beside the
+ * vendor's own links.
+ */
+describe('a repository-supplied URL is never a link', () => {
+  const outsideCodeSpans = (text: string) => text.replace(/`[^`\n]*`/g, '');
+  it('in markdown', () => {
+    expect(markdown).toContain('repository-supplied.example');
+    expect(outsideCodeSpans(markdown)).not.toContain('repository-supplied.example');
+  });
+  it('in SARIF help', () => {
+    expect(sarifHelp).toContain('repository-supplied.example');
+    expect(outsideCodeSpans(sarifHelp)).not.toContain('repository-supplied.example');
   });
 });
 
@@ -197,5 +219,55 @@ describe('MCP summary', () => {
     const openai = summaryFinding('openai');
     expect(openai?.dpaUrl).not.toBe(SUPPLIED_DPA);
     expect(openai?.repositoryFacts?.some((r) => r.suppliedUrl === SUPPLIED_DPA)).toBe(true);
+  });
+});
+
+/**
+ * A scan with no facts file carries none of this. The verification lines are
+ * the one deliberate addition every scan has (they are what drives
+ * re-checking), so they are allowed; every facts field and marker is not.
+ */
+describe('a repository with no facts file', () => {
+  const repos = readdirSync('fixtures/repos').filter(
+    (name) => !existsSync(`fixtures/repos/${name}/${FACTS_FILE}`),
+  );
+  it('covers more than one fixture', () => {
+    expect(repos.length).toBeGreaterThan(1);
+  });
+  for (const name of repos) {
+    it(`has no facts fields or marker: ${name}`, () => {
+      const plain = scan({
+        root: `fixtures/repos/${name}`,
+        toolVersion: '0.1.0',
+        kbPath: 'kb',
+        includeCallsites: true,
+        now: new Date('2026-11-10T12:00:00Z'),
+      });
+      expect(plain.facts).toBeUndefined();
+      const json = JSON.stringify(plain);
+      for (const key of ['"baselineRuleId"', '"repositoryFacts"', '"origin"']) {
+        expect(json).not.toContain(key);
+      }
+      const sarifText = JSON.stringify(toSarif(plain, { toolVersion: '0.1.0' }));
+      for (const key of ['"baselineRuleId"', '"repositoryFacts"', '"vendorOrigin"', '"facts"']) {
+        expect(sarifText).not.toContain(key);
+      }
+      for (const text of [formatHuman(plain, { color: false }), formatMarkdown(plain)]) {
+        expect(text).not.toContain(FACTS_MARKER);
+      }
+      expect(JSON.stringify(summarise(plain, { maxFindings: 50 }))).not.toContain(
+        '"repositoryFacts"',
+      );
+    });
+  }
+});
+
+describe('previewing a draft', () => {
+  it('refuses a draft over the file cap in bytes, not characters', () => {
+    // 3 bytes per character: under the cap in characters, over it in bytes.
+    const draft = `{"version": 1, "x": "${'€'.repeat(3 * 1_048_576)}"}`;
+    expect(() => previewFacts(draft, { root: ROOT, toolVersion: '0.1.0', kbPath: 'kb' })).toThrow(
+      /larger than 8 MB/,
+    );
   });
 });

@@ -51,6 +51,17 @@ export function markdownText(text: string): string {
   return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, '\\$&');
 }
 
+/**
+ * Text as a markdown code span. Escaping punctuation is not enough for text
+ * that carries an address: GitHub turns a bare `https://` or `www.` into a
+ * link, so a URL a repository supplied would sit, clickable, beside the
+ * vendor's own. Nothing inside a code span is a link, a mention or markup.
+ * Backticks become quotes so the text cannot close the span.
+ */
+export function markdownCode(text: string): string {
+  return `\`${plainText(text).replace(/`/g, "'")}\``;
+}
+
 /** Control and bidi-override characters as spaces. */
 export function plainText(text: string): string {
   return Array.from(text, (ch) => {

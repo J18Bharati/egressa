@@ -410,8 +410,8 @@ export interface FactsSummary {
   expired: number;
   rejected: number;
   localVendors: number;
-  /** Findings computed from at least one repository fact. */
+  /** Findings computed from at least one repository fact, suppressed ones included. */
   findingsDependingOnFacts: number;
-  /** Findings whose rule a repository fact made less severe. */
+  /** Findings repository facts loosened (see `factsDirection`), suppressed ones included. */
   loosened: number;
 }

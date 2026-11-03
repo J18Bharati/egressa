@@ -96,8 +96,9 @@ purpose:
   surface;
 - it can never claim Data Privacy Framework certification for itself; only a separate `dpf` fact
   with a participant record can;
-- an id, host or package the shipped knowledge base already has is refused, and once a shipped
-  entry covers the vendor the local one is reported `superseded`.
+- a host or package the shipped knowledge base already has is rejected; an id it already has is
+  reported `superseded` and the shipped entry is used, which is also what happens once a shipped
+  entry covers the vendor.
 
 `references/verifying-facts.md` covers the file, consent and the trust rules in full.
 

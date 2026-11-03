@@ -104,6 +104,10 @@ that would **loosen** one, such as a DPF status that clears a third-country find
 when the caller passes `--trust-facts` (MCP: `trustFacts: true`). Without it the item is reported
 as `loosening-not-trusted` and the knowledge base's answer stands.
 
+Trust also decides which verification tasks a fact answers. With it, a recorded fact closes its
+task; without it, every task the knowledge base raises stays open, so a repository cannot tell
+your agent there is nothing to re-check.
+
 **Pass `--trust-facts` only when the user confirms they own the repository under review.** A facts
 file is something anyone with commit access can write. For a repository the user is reviewing but
 does not control, such as a supplier's or a pull request from outside, never pass it, and say that

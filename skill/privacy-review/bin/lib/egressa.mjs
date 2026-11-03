@@ -15950,8 +15950,17 @@ function effectOf(before, after) {
 }
 var FACTS_MARKER = "repository-supplied facts";
 var LEVEL = { note: 1, warning: 2, error: 3 };
+function factsDirection(finding) {
+  if (!finding.baselineRuleId) return null;
+  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
+  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+  if (now < before) return "loosened";
+  if (now > before) return "tightened";
+  const gated = finding.transfer?.repositoryFacts?.some((r3) => r3.effect === "loosens") ?? false;
+  return gated ? "loosened" : "changed";
+}
 function loosenedByFacts(finding) {
-  return finding.baselineRuleId !== void 0 && LEVEL[RULES[finding.ruleId].defaultLevel] < LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+  return factsDirection(finding) === "loosened";
 }
 function isLocalVendor(finding) {
   return finding.vendor?.origin === "local";
@@ -15982,10 +15991,8 @@ function factRefText(ref, render2) {
   return `${ref.fact}${status}${supplied} (${ref.effect}) from ${render2(ref.file)} ${render2(ref.at)}, retrieved ${ref.retrievedAt} by ${render2(ref.verifiedBy)}, expires ${ref.expiresOn}${source}`;
 }
 function baselineText(finding) {
-  if (!finding.baselineRuleId) return null;
-  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
-  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
-  const how = now < before ? "loosened" : now > before ? "tightened" : "changed";
+  const how = factsDirection(finding);
+  if (!how) return null;
   return `${how} by ${FACTS_MARKER}; without them this finding is ${finding.baselineRuleId}`;
 }
 function confidenceForDependency(record2, alias) {
@@ -18207,7 +18214,9 @@ function dedupe(records) {
 }
 function mergeSignals(signals, options) {
   const { kb, now, overlay } = options;
-  const staleVendorIds = new Set(kb.staleEntries(now).map((v2) => v2.id));
+  const staleVendorIds = new Set(
+    taskSource(kb, overlay).staleEntries(now).filter((v2) => !overlay?.localIds.has(v2.id)).map((v2) => v2.id)
+  );
   const groups = /* @__PURE__ */ new Map();
   for (const signal of signals) {
     const vendor = signal.vendorId ? kb.byId.get(signal.vendorId) ?? null : null;
@@ -18258,7 +18267,7 @@ function withVerification(findings, kb, now, staleVendorIds, overlay) {
     }
     const shipped = overlay?.baseline.byId.get(vendor.id);
     const tasks = [
-      ...kb.verifyTasks(vendor, now),
+      ...taskSource(kb, overlay).verifyTasks(overlay?.trusted ? vendor : shipped ?? vendor, now),
       ...expiredFactTasks(shipped ?? vendor, overlay)
     ].map((task) => overlay ? shippedUrlsOnly(task, shipped) : task);
     if (!staleVendorIds.has(vendor.id)) {
@@ -18268,6 +18277,9 @@ function withVerification(findings, kb, now, staleVendorIds, overlay) {
     noted.add(vendor.id);
     return [finding, staleNote(finding, vendor, tasks)];
   });
+}
+function taskSource(kb, overlay) {
+  return overlay && !overlay.trusted ? overlay.baseline : kb;
 }
 function expiredFactTasks(vendor, overlay) {
   return (overlay?.expiredByVendor.get(vendor.id) ?? []).flatMap((item) => {
@@ -18708,7 +18720,6 @@ function scan(options) {
 }
 function factsSummary(overlay, findings) {
   const count = (state) => overlay.items.filter((i2) => i2.state === state).length;
-  const active = findings.filter((f3) => !f3.suppressed);
   return {
     source: overlay.source,
     trusted: overlay.trusted,
@@ -18719,10 +18730,9 @@ function factsSummary(overlay, findings) {
     expired: count("expired"),
     rejected: count("rejected"),
     localVendors: overlay.localIds.size,
-    findingsDependingOnFacts: active.filter((f3) => (f3.transfer?.repositoryFacts?.length ?? 0) > 0).length,
-    // Measured on the finding, not on the fact's label: a fact can loosen in
-    // general and still leave this repository's finding stricter.
-    loosened: active.filter(loosenedByFacts).length
+    findingsDependingOnFacts: findings.filter((f3) => (f3.transfer?.repositoryFacts?.length ?? 0) > 0).length,
+    // One definition with every surface: `factsDirection` in output/provenance.
+    loosened: findings.filter(loosenedByFacts).length
   };
 }
 var ORDER2 = { low: 0, medium: 1, high: 2 };
@@ -18754,6 +18764,32 @@ function publicOverlayItem(item) {
   const { local: _local, ...rest } = item;
   return rest;
 }
+function displayName(finding) {
+  return finding.vendor?.name ?? "Unrecognised destination";
+}
+function isReferenceOnly(finding) {
+  return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
+}
+function markdownText(text) {
+  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, "\\$&");
+}
+function markdownCode(text) {
+  return `\`${plainText(text).replace(/`/g, "'")}\``;
+}
+function plainText(text) {
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    const control = code < 32 || code >= 127 && code <= 159 || code === 8232 || code === 8233;
+    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
+    return control || bidi ? " " : ch;
+  }).join("");
+}
+function markdownUrl(url) {
+  return plainText(url).trim().replace(
+    /[\s()<>"'`\\[\]{}|^*_]/g,
+    (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
 var ContributionError = class extends Error {
 };
 var DRAFTED_BY = "contributor draft from repository facts; maintainer to re-verify";
@@ -18775,7 +18811,7 @@ function contribution(vendorId, checked, kb, options = {}) {
     );
   }
   const kind = local ? "new-entry" : "field-patch";
-  const base = local?.local ? { ...local.local.entry, verifiedBy: DRAFTED_BY } : shipped;
+  const base = local?.local ? { ...withoutLocalAcceptance(local.local.entry), verifiedBy: DRAFTED_BY } : shipped;
   const changes = [];
   let draft = base;
   for (const fact of facts) {
@@ -18790,6 +18826,7 @@ function contribution(vendorId, checked, kb, options = {}) {
     draft = withSource(next, fact);
   }
   if (kind === "field-patch") draft = { ...draft, verifiedBy: DRAFTED_BY };
+  const reported = kind === "field-patch" ? changes : [];
   const issues = validate2(draft, kb, kind);
   const evidenceUrls = [...new Set(draft.sources.map((s2) => s2.url))];
   const checklist = CHECKLIST(kind);
@@ -18802,11 +18839,20 @@ function contribution(vendorId, checked, kb, options = {}) {
     kind,
     vendorId,
     draft,
-    changes: kind === "field-patch" ? changes : [],
+    changes: reported,
     issues,
     checklist,
     evidenceUrls,
-    body: renderBody({ kind, vendorId, draft, changes, issues, checklist, evidenceUrls, credits })
+    body: renderBody({
+      kind,
+      vendorId,
+      draft,
+      changes: reported,
+      issues,
+      checklist,
+      evidenceUrls,
+      credits
+    })
   };
 }
 var PATHS = {
@@ -18821,6 +18867,20 @@ function withoutLocalDecision(fact) {
   if (fact.fact !== "dpf" || !fact.acceptQualifiedStatus) return fact;
   const { acceptQualifiedStatus: _accepted, ...rest } = fact;
   return rest;
+}
+function withoutLocalAcceptance(entry) {
+  return {
+    ...entry,
+    legal: {
+      ...entry.legal,
+      transferMechanisms: entry.legal.transferMechanisms.map((m2) => {
+        if (m2.mechanism !== "DPF") return m2;
+        const { acceptQualifiedStatus: _accepted, ...rest } = m2;
+        const certified = m2.observedStatus ? dpfStatusVerdict(m2.observedStatus, false).certified : false;
+        return { ...rest, dpfCertified: certified };
+      })
+    }
+  };
 }
 function withSource(entry, fact) {
   if (entry.sources.some((s2) => s2.url === fact.source.url)) return entry;
@@ -18885,7 +18945,7 @@ function renderBody(b2) {
   lines.push("", "### Evidence", "");
   for (const url of b2.evidenceUrls) lines.push(`- ${url}`);
   if (b2.credits.length > 0) {
-    lines.push("", `Checked by: ${b2.credits.join("; ")}`);
+    lines.push("", `Checked by: ${b2.credits.map(markdownCode).join("; ")}`);
   }
   lines.push(
     "",
@@ -18908,29 +18968,6 @@ function longestRun(text, ch) {
     best = Math.max(best, run2);
   }
   return best;
-}
-function displayName(finding) {
-  return finding.vendor?.name ?? "Unrecognised destination";
-}
-function isReferenceOnly(finding) {
-  return finding.evidence.some((e2) => e2.kind === "reference") && !finding.evidence.some((e2) => e2.kind === "callsite");
-}
-function markdownText(text) {
-  return plainText(text).replace(/[\\`*_{}[\]()#+!<>|@~]/g, "\\$&");
-}
-function plainText(text) {
-  return Array.from(text, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    const control = code < 32 || code >= 127 && code <= 159 || code === 8232 || code === 8233;
-    const bidi = code >= 8234 && code <= 8238 || code >= 8294 && code <= 8297;
-    return control || bidi ? " " : ch;
-  }).join("");
-}
-function markdownUrl(url) {
-  return plainText(url).trim().replace(
-    /[\s()<>"'`\\[\]{}|^*_]/g,
-    (ch) => `%${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
 }
 var SARIF_VERSION = "2.1.0";
 var SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json";
@@ -19040,7 +19077,7 @@ function buildHelpMarkdown(id, result) {
       }
       lines.push(`- Last verified: ${transfer.lastVerified}${supplied}`);
       for (const ref of transfer.repositoryFacts ?? []) {
-        lines.push(`- Repository fact: ${markdownText(factRefText(ref, plainText))}`);
+        lines.push(`- Repository fact: ${markdownCode(factRefText(ref, plainText))}`);
       }
       const baseline = baselineText(finding);
       if (baseline) lines.push(`- **${markdownText(baseline)}**`);
@@ -19580,14 +19617,14 @@ function formatMarkdown(result, options = {}) {
       lines.push(`- Entry last verified: ${f3.transfer.lastVerified}${supplied}`);
       if (f3.transfer.disputed) lines.push(`- **Disputed:** ${inert(f3.transfer.disputed.summary)}`);
       for (const ref of f3.transfer.repositoryFacts ?? []) {
-        lines.push(`- Facts: ${inert(factRefText(ref, plainText))}`);
+        lines.push(`- Facts: ${markdownCode(factRefText(ref, plainText))}`);
       }
     }
     lines.push("", "Evidence:", "");
     for (const e2 of f3.evidence.slice(0, 5)) {
       lines.push(`- \`${e2.file}:${e2.startLine}\` matched \`${e2.matchedOn}\` (${e2.kind})`);
     }
-    lines.push("", f3.remediation.summary, "");
+    lines.push("", inert(f3.remediation.summary), "");
     const tasks = f3.verification ?? [];
     if (tasks.length > 0) {
       lines.push("To verify:", "");
@@ -19635,9 +19672,7 @@ function euRegionCell(finding) {
 function inert(text) {
   return markdownText(text);
 }
-function codeSpan(text) {
-  return `\`${plainText(text).replace(/`/g, "'")}\``;
-}
+var codeSpan = markdownCode;
 var MAX_WARNINGS = 20;
 
 // src/version.ts

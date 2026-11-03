@@ -19,12 +19,30 @@ export const FACTS_MARKER = 'repository-supplied facts';
 
 const LEVEL: Record<Severity, number> = { note: 1, warning: 2, error: 3 };
 
+/**
+ * How repository facts moved this finding's rule, or null when they did not.
+ *
+ * One definition for every surface and for the run's counts. A move to a less
+ * severe rule loosens. So does a move between rules of the same level when an
+ * applied fact on the finding was judged to loosen by the trust gate: a local
+ * entry turns `transfer/unknown-vendor-egress` into `transfer/eu-processing`,
+ * both notes, and that is exactly the change `--trust-facts` exists to gate.
+ * A move to a more severe rule tightens, whatever the fact's label: a fact can
+ * loosen in general and still leave this finding stricter.
+ */
+export function factsDirection(finding: Finding): 'loosened' | 'tightened' | 'changed' | null {
+  if (!finding.baselineRuleId) return null;
+  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
+  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
+  if (now < before) return 'loosened';
+  if (now > before) return 'tightened';
+  const gated = finding.transfer?.repositoryFacts?.some((r) => r.effect === 'loosens') ?? false;
+  return gated ? 'loosened' : 'changed';
+}
+
 /** True when repository facts moved this finding to a less severe rule. */
 export function loosenedByFacts(finding: Finding): boolean {
-  return (
-    finding.baselineRuleId !== undefined &&
-    LEVEL[RULES[finding.ruleId].defaultLevel] < LEVEL[RULES[finding.baselineRuleId].defaultLevel]
-  );
+  return factsDirection(finding) === 'loosened';
 }
 
 /** True when the vendor entry itself came from the scanned repository. */
@@ -70,9 +88,7 @@ export function factRefText(ref: RepositoryFactRef, render: (s: string) => strin
 
 /** The per-finding note: the rule before facts were applied, when they changed it. */
 export function baselineText(finding: Finding): string | null {
-  if (!finding.baselineRuleId) return null;
-  const now = LEVEL[RULES[finding.ruleId].defaultLevel];
-  const before = LEVEL[RULES[finding.baselineRuleId].defaultLevel];
-  const how = now < before ? 'loosened' : now > before ? 'tightened' : 'changed';
+  const how = factsDirection(finding);
+  if (!how) return null;
   return `${how} by ${FACTS_MARKER}; without them this finding is ${finding.baselineRuleId}`;
 }

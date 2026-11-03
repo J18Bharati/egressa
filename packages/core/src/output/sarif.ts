@@ -2,7 +2,14 @@ import { isAbsolute } from 'node:path';
 import { DISCLAIMER } from '../claims.js';
 import { RULES, RULE_IDS } from '../rules.js';
 import type { Finding, ScanResult, Severity } from '../types.js';
-import { displayName, isReferenceOnly, markdownText, markdownUrl, plainText } from './display.js';
+import {
+  displayName,
+  isReferenceOnly,
+  markdownCode,
+  markdownText,
+  markdownUrl,
+  plainText,
+} from './display.js';
 import {
   FACTS_MARKER,
   baselineText,
@@ -158,7 +165,7 @@ function buildHelpMarkdown(id: (typeof RULE_IDS)[number], result: ScanResult): s
       }
       lines.push(`- Last verified: ${transfer.lastVerified}${supplied}`);
       for (const ref of transfer.repositoryFacts ?? []) {
-        lines.push(`- Repository fact: ${markdownText(factRefText(ref, plainText))}`);
+        lines.push(`- Repository fact: ${markdownCode(factRefText(ref, plainText))}`);
       }
       const baseline = baselineText(finding);
       if (baseline) lines.push(`- **${markdownText(baseline)}**`);

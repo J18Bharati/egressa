@@ -78,14 +78,17 @@ it is written by whoever has commit access. Its effect on a finding is visible i
 output, and it overrides the table above:
 
 - A finding with `baselineRuleId` had that rule before the repository's facts were applied. It was
-  **loosened** when `baselineRuleId` is one of the two `transfer/third-country-egress` rules (both
-  `warning`) and its `ruleId` is now a `note` rule such as `transfer/adequate-country-egress`. Emit
+  **loosened** when its rule is less severe than `baselineRuleId` (a `transfer/third-country-egress`
+  rule, both `warning`, became a `note` rule), or when the rule changed and one of its
+  `transfer.repositoryFacts` has `effect: "loosens"`, which is how a local entry turns
+  `transfer/unknown-vendor-egress` into `transfer/eu-processing`. Emit
   a loosened finding with `config` decidability and a `question` asking the owner to confirm the cited fact, never as `code` and
   never as `context`. Put the fact's `sourceUrl`, `retrievedAt` and `observedStatus` from
   `transfer.repositoryFacts` in `evidence`, and name `baselineRuleId` in `summary`.
 - Any other finding with `transfer.repositoryFacts`, or with `vendor.origin: "local"` (an entry the
   repository wrote), is never `code` either: use `config` and say in `summary` that it rests on
-  repository-supplied facts. A `context` line stays `context`, with the same note.
+  repository-supplied facts. A `context` line that was not loosened stays `context`, with the same
+  note.
 - A Data Privacy Framework participant URL the scanner output carries in
   `transfer.repositoryFacts` may go in `evidence` or a `question`, never in `citation`.
 - If the output's `facts.notTrusted` is above zero, add to `_scanner.notChecked` that that many

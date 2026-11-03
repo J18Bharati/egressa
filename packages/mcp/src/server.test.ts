@@ -420,7 +420,12 @@ describe('the repository’s own .egressa/facts.json', () => {
 
   it('lists verification tasks once each, with pages from knowledge base data', async () => {
     const result = await call('verification_tasks', { path: repo(loosening) });
+    expect(result.count).toBeGreaterThan(0);
     expect(result.count).toBe(result.tasks.length);
+    for (const task of result.tasks as { reason: string; where: string[] }[]) {
+      expect(task.reason).toMatch(/^[a-z-]+$/);
+      for (const url of task.where) expect(url).toMatch(/^https:\/\//);
+    }
     const ids = result.tasks.map((t: { id: string }) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(result.disclaimer).toContain('does not assess or certify GDPR compliance');
