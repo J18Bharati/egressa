@@ -38,6 +38,7 @@ packages/*/kb/
 # Licence files copied into each package by scripts/copy-kb.mjs (prepack and build)
 packages/*/LICENSE
 packages/*/NOTICE
+packages/*/THIRD_PARTY_NOTICES
 
 # Confidential working material: field-test triage written against private
 # codebases, and the internal design record (customer names, pricing). Kept

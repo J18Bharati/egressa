@@ -6,6 +6,7 @@
  * git. Each tarball must carry what governs it:
  *
  *   - LICENSE (MIT requires it with every copy) and NOTICE (the code/data split) in every package;
+ *   - THIRD_PARTY_NOTICES in every package whose bundle inlines third-party code;
  *   - kb/ with its own kb/LICENSE (CC-BY-4.0) in every package that ships data.
  *
  * Two entry points, one script:
@@ -30,12 +31,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Packages and whether they ship the knowledge base. */
+/** Packages, whether they ship the knowledge base, and whether their bundle inlines dependencies. */
 const packages = {
-  core: { kb: false },
-  'kb-loader': { kb: true },
-  cli: { kb: true },
-  mcp: { kb: true },
+  core: { kb: false, inlines: false },
+  'kb-loader': { kb: true, inlines: false },
+  cli: { kb: true, inlines: true },
+  mcp: { kb: true, inlines: true },
 };
 
 const only = process.argv[2];
@@ -46,7 +47,7 @@ if (only !== undefined && !Object.hasOwn(packages, only)) {
   process.exit(1);
 }
 
-for (const [dir, { kb }] of Object.entries(packages)) {
+for (const [dir, { kb, inlines }] of Object.entries(packages)) {
   if (only !== undefined && only !== dir) continue;
   const pkg = join(root, 'packages', dir);
 
@@ -55,10 +56,17 @@ for (const [dir, { kb }] of Object.entries(packages)) {
     process.exit(1);
   }
 
-  for (const file of ['LICENSE', 'NOTICE']) {
+  const files = ['LICENSE', 'NOTICE', ...(inlines ? ['THIRD_PARTY_NOTICES'] : [])];
+  const missing = files.filter((file) => !existsSync(join(root, file)));
+  if (missing.length > 0) {
+    // A package that inlines MIT code and ships without its notices is out of licence.
+    console.error(`copy-kb: ${missing.join(', ')} missing at the root -- run \`pnpm build\``);
+    process.exit(1);
+  }
+  for (const file of files) {
     cpSync(join(root, file), join(pkg, file));
   }
-  console.log(`copied LICENSE, NOTICE -> packages/${dir}`);
+  console.log(`copied ${files.join(', ')} -> packages/${dir}`);
 
   if (kb) {
     const target = join(pkg, 'kb');

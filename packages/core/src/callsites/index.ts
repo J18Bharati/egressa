@@ -948,6 +948,12 @@ const AXIOS_CONFIG_INDEX: Record<string, number> = {
 /**
  * axios's `isAbsoluteURL`, verbatim. It tests the raw string -- no trimming --
  * so `' https://x'` and `'https:/x'` are relative and join under the base.
+ *
+ * The regular expression is copied from axios 1.12.2
+ * (lib/helpers/isAbsoluteURL.js), and the method table above and
+ * `resolveAxiosRequest` below follow its `buildFullPath` and request helpers.
+ * axios is Copyright (c) 2014-present Matt Zabriskie & Collaborators, MIT
+ * License; see THIRD_PARTY_NOTICES.
  */
 const AXIOS_ABSOLUTE = /^([a-z][a-z\d+\-.]*:)?\/\//i;
 

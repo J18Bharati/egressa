@@ -31,6 +31,10 @@ mkdirSync(join(OUT, 'lib'), { recursive: true });
 // nothing consumes it here.
 cpSync(SRC_CLI, join(OUT, 'lib', 'egressa.mjs'));
 cpSync(SRC_KB, join(OUT, 'kb'), { recursive: true });
+// The bundle inlines third-party code, and its licences travel with every copy.
+for (const file of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES']) {
+  cpSync(join(ROOT, file), join(OUT, file));
+}
 
 const toolVersion = readFileSync(join(ROOT, 'packages/cli/src/version.ts'), 'utf8').match(
   /TOOL_VERSION\s*=\s*'([^']+)'/,

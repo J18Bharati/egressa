@@ -101,7 +101,8 @@ describe('copy-kb, one package at a time', () => {
     const dir = scratch();
     mkdirSync(join(dir, 'scripts'));
     cpSync(join(ROOT, 'scripts/copy-kb.mjs'), join(dir, 'scripts/copy-kb.mjs'));
-    for (const f of ['LICENSE', 'NOTICE']) cpSync(join(ROOT, f), join(dir, f));
+    for (const f of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES'])
+      cpSync(join(ROOT, f), join(dir, f));
     mkdirSync(join(dir, 'kb'));
     writeFileSync(join(dir, 'kb', 'kb.version'), 'test\n');
     for (const p of PACKAGES) {
@@ -128,11 +129,22 @@ describe('copy-kb, one package at a time', () => {
   it('copies the licences and the knowledge base into a built package', () => {
     const dir = tree(true);
     expect(run(join(dir, 'scripts/copy-kb.mjs'), dir, ['cli']).code).toBe(0);
-    for (const f of ['LICENSE', 'NOTICE', 'kb/kb.version']) {
+    for (const f of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES', 'kb/kb.version']) {
       expect(existsSync(join(dir, 'packages/cli', f))).toBe(true);
     }
     // Only the named package: a parallel pack of another must not be touched.
     expect(existsSync(join(dir, 'packages/mcp/LICENSE'))).toBe(false);
+  });
+
+  it('refuses to pack a bundling package without THIRD_PARTY_NOTICES', () => {
+    const dir = tree(true);
+    rmSync(join(dir, 'THIRD_PARTY_NOTICES'));
+    const { code, err } = run(join(dir, 'scripts/copy-kb.mjs'), dir, ['cli']);
+    expect(code).toBe(1);
+    expect(err).toContain('THIRD_PARTY_NOTICES missing');
+    // core inlines nothing, so it does not need the file.
+    expect(run(join(dir, 'scripts/copy-kb.mjs'), dir, ['core']).code).toBe(0);
+    expect(existsSync(join(dir, 'packages/core/THIRD_PARTY_NOTICES'))).toBe(false);
   });
 });
 

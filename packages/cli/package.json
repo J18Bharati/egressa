@@ -28,7 +28,15 @@
   "bin": {
     "egressa": "./dist/cli.js"
   },
-  "files": ["dist", "!dist/**/*.map", "kb", "LICENSE", "NOTICE", "README.md"],
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "kb",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES",
+    "README.md"
+  ],
   "publishConfig": {
     "provenance": true
   },

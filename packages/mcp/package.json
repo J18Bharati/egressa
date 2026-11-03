@@ -29,7 +29,15 @@
   "bin": {
     "egressa-mcp": "./dist/server.js"
   },
-  "files": ["dist", "!dist/**/*.map", "kb", "LICENSE", "NOTICE", "README.md"],
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "kb",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
