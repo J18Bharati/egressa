@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "egressa",
-      "source": "./",
+      "source": "./plugin",
       "description": "Privacy review skills: transfer exposure, consent gating, retention, personal data in logs, session replay, opt-out signals.",
       "category": "code-review",
       "keywords": ["gdpr", "privacy", "consent", "data-transfer"],

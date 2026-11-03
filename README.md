@@ -58,11 +58,24 @@ in [docs/CLAIMS.md](docs/CLAIMS.md).
 
 <!-- Update this section, the Action note under "Watching for changes", and SECURITY.md's
      reporting note at the first release. -->
-## Status: not released yet
+## Status: not on npm yet
 
-Nothing is published to npm, and the GitHub repository `J18Bharati/egressa` that the plugin, the
-Action and the issue links refer to stays private until the first release. **Until then, the only
-path that works is a checkout:**
+Nothing is published to npm yet, so the CLI, the MCP server and the GitHub Action are not
+installable by name. Two paths work today.
+
+**The Claude Code plugin**, which carries both skills, the write-time hook and a prebuilt copy of
+the scanner:
+
+```
+/plugin marketplace add J18Bharati/egressa
+/plugin install egressa@egressa
+```
+
+The prebuilt copy runs without the native parser, so it reads dependency manifests but not call
+sites, and the skills say so in their reports (see
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md#the-native-parser-can-be-absent)).
+
+**A checkout**, for the full engine:
 
 ```bash
 pnpm install
@@ -73,13 +86,12 @@ node packages/cli/dist/cli.js scan path/to/your/repo
 This needs Node 20.11 or later and pnpm 9. The commands below are written as `egressa`; from a
 checkout, that is `node packages/cli/dist/cli.js`.
 
-After the first release, these are the install paths. None of them works today.
+After the first npm release, these paths work too:
 
 | Surface | Command | Needs |
 |---|---|---|
 | CLI | `npx egressa scan .` | npm release |
-| GitHub Action | `uses: J18Bharati/egressa@v1` (see below) | npm release, repository, `v1` tag |
-| Claude Code plugin | `/plugin marketplace add J18Bharati/egressa`, then `/plugin install egressa@egressa` | repository |
+| GitHub Action | `uses: J18Bharati/egressa@v1` (see below) | npm release, `v1` tag |
 | MCP server | `claude mcp add egressa -- npx -y @egressa/mcp@latest` | npm release |
 
 The scanner needs no account, no API key and no network. It runs offline against the knowledge base
@@ -273,7 +285,7 @@ review it like code and give it an owner:
 
 `egressa facts check` shows what the file would do. The transfer triage skill can look facts up for
 you from the pages a task names; see
-[skill/egressa/references/verifying-facts.md](skill/egressa/references/verifying-facts.md). The
+[plugin/skills/egressa/references/verifying-facts.md](plugin/skills/egressa/references/verifying-facts.md). The
 checks are on the file's shape, not on its truth, which [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
 spells out.
 
@@ -284,11 +296,11 @@ versioned findings schema ([`schemas/`](schemas/)).
 
 - **MCP server** (`@egressa/mcp`): scanning and knowledge base lookups for any MCP client. No write
   tools, no network calls. See [docs/mcp.md](docs/mcp.md).
-- **Transfer triage skill** ([skill/egressa](skill/egressa/SKILL.md)): a Claude Code skill that
+- **Transfer triage skill** ([plugin/skills/egressa](plugin/skills/egressa/SKILL.md)): a Claude Code skill that
   works through the findings a scanner cannot judge alone, and researches an unknown vendor from
   primary sources to draft a knowledge base request. It does not research an unresolved host,
   because that answer is in your deployment configuration.
-- **Privacy review skill** ([skill/privacy-review](skill/privacy-review/SKILL.md)): a wider review
+- **Privacy review skill** ([plugin/skills/privacy-review](plugin/skills/privacy-review/SKILL.md)): a wider review
   the engine does not perform: trackers firing before consent, personal data in logs, session
   replay recording inputs, storage with no expiry, and opt-out signals. Its checklists are applied
   by an agent reading code, so each finding also says whether the source can settle the question at

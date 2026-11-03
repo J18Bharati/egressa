@@ -352,7 +352,7 @@ provenance nobody could reason about, and the confidence model exists to prevent
 `engine.degraded` is the honest alternative. `packages/core/src/degraded.test.ts` forces the binding
 failure and asserts the output stays schema-valid.
 
-The copy of the CLI bundled inside `skill/privacy-review/bin/` does not ship the native binding, so
+The copy of the CLI bundled inside `plugin/skills/privacy-review/bin/` does not ship the native binding, so
 it normally runs in this mode. `scan-transfers.sh` prefers the build in the checkout the skill lives in
 for that reason — never a build in the repository being scanned, which is untrusted input.
 
@@ -411,7 +411,7 @@ true:
 
 ## The privacy review's file set
 
-`skill/privacy-review/scripts/scope.sh` decides which files the privacy review reads, and in a git
+`plugin/skills/privacy-review/scripts/scope.sh` decides which files the privacy review reads, and in a git
 repository it asks git. The repository under review is untrusted, and so is its `.git`, which an
 archive or shared folder carries. The script blocks the execution and outside-read paths reviews
 have found, and reports `DEGRADED` -- which the skill must carry into its report -- whenever it
@@ -446,14 +446,14 @@ Everything above is about the engine, and every limitation above has a correspon
 failing-by-design case in `packages/core/src/callsites/golden.test.ts`. That is what makes those
 limits a contract rather than a list of good intentions.
 
-`skill/privacy-review/` works differently. It is a set of checklists an agent applies by reading
+`plugin/skills/privacy-review/` works differently. It is a set of checklists an agent applies by reading
 code, so there is no parser whose output a table can pin down, and no equivalent contract. Its
 limits live in three places instead:
 
-- `skill/privacy-review/references/legal-basis.md` — the only provisions and citations a specialist
+- `plugin/skills/privacy-review/references/legal-basis.md` — the only provisions and citations a specialist
   may use, plus the two checks that are deliberately not built and why, plus a table of widely
   repeated enforcement claims that did not survive checking against the authority's own decision.
-- `skill/privacy-review/specialists/retention.md` — the narrowest checklist in the set, and the one
+- `plugin/skills/privacy-review/specialists/retention.md` — the narrowest checklist in the set, and the one
   that lists what cannot be checked at more length than what can.
 - Each checklist's own **Do not report** section, which is where the false-positive traps are
   recorded — the strict-necessity exemption for session and CSRF cookies being the largest.
@@ -484,7 +484,7 @@ States answer for a repository deployed to Frankfurt.
 
 Where no region is found the finding reports `regionSource:none` and the vendor's full jurisdiction
 set, unnarrowed. That is the honest answer, and
-`skill/egressa/references/reconciling-a-cloud-region.md` is how to settle it against a live account.
+`plugin/skills/egressa/references/reconciling-a-cloud-region.md` is how to settle it against a live account.
 
 Not collected at all: files under dot-directories such as `.github/` and `.terraform/`, because the
 walker runs with `dot: false`; TOML beyond `fly.toml`; and CDK stack definitions, whose region is an

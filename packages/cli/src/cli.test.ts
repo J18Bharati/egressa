@@ -488,9 +488,9 @@ describe('cli end to end', () => {
     // It was in PASS_THROUGH and exited 1 with "No version specified", because
     // the root command's meta carried no version for citty to print.
     //
-    // citty prints it through consola, which silences itself when the
-    // environment says a test runner is active -- and the child inherits
-    // vitest's. Without these removed the version is printed nowhere.
+    // The test-runner variables are removed so the child runs as a user's
+    // shell would: when citty printed the version through consola, they
+    // silenced it entirely.
     const { NODE_ENV, TEST, VITEST, ...env } = process.env;
     for (const flag of ['--version', '-v']) {
       const stdout = execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', flag], {
@@ -503,6 +503,22 @@ describe('cli end to end', () => {
         out: readFileSync('VERSION', 'utf8').trim(),
       });
     }
+  });
+
+  it('prints --version and --help plainly when CI is set', () => {
+    // citty printed both through consola, whose CI reporter prefixes `[log] `,
+    // so every CI job read the version as "[log] 0.2.0".
+    const { NODE_ENV, TEST, VITEST, ...env } = process.env;
+    const out = (args: string[]) =>
+      execFileSync('npx', ['tsx', 'packages/cli/src/cli.ts', ...args], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...env, CI: 'true' },
+      });
+    expect(out(['--version']).trim()).toBe(readFileSync('VERSION', 'utf8').trim());
+    const help = out(['scan', '--help']);
+    expect(help).not.toContain('[log]');
+    expect(help).toContain('USAGE');
   });
 
   it('explains a rule without needing a scan', () => {

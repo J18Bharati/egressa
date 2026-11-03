@@ -27,7 +27,7 @@ const CODE_FILE = /\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|astro|html|htm)$/
 
 /** Paths where these patterns are documentation or test data, not behaviour. */
 const NOT_UNDER_REVIEW =
-  /(^|\/)(node_modules|dist|build|\.next|coverage|fixtures)\/|\.(test|spec)\.[jt]sx?$|(^|\/)skill\/privacy-review\//;
+  /(^|\/)(node_modules|dist|build|\.next|coverage|fixtures)\/|\.(test|spec)\.[jt]sx?$|(^|\/)plugin\/skills\/privacy-review\//;
 
 /** An edit that already gates itself needs no comment. */
 const CONSENT_IN_EDIT =

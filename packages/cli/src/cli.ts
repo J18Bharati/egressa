@@ -1,4 +1,4 @@
-import { type ArgsDef, defineCommand, runCommand, runMain } from 'citty';
+import { type ArgsDef, defineCommand, renderUsage, runCommand, runMain } from 'citty';
 import { explainCommand } from './commands/explain.js';
 import { factsCommand } from './commands/facts.js';
 import { scanCommand } from './commands/scan.js';
@@ -82,11 +82,23 @@ if (command !== undefined && Object.hasOwn(subCommands, command)) {
 // this tool's "findings" code: an internal error would read as findings in CI.
 // It is kept for --help and --version only; commands run through runCommand,
 // so an error reaches this handler and exits as what it is.
-const metaOnly =
-  rawArgs.includes('--help') ||
-  rawArgs.includes('-h') ||
-  (rawArgs.length === 1 && rawArgs[0] === '--version');
-const run = metaOnly ? runMain(main, { rawArgs }) : runCommand(main, { rawArgs });
+//
+// Neither --help nor --version is printed through citty's own output. citty
+// writes both with consola, which switches to its plain reporter when `CI` is
+// set and prefixes the line with `[log] `: every CI job read the version as
+// "[log] 0.2.0". Version and usage text go straight to stdout instead.
+const versionOnly = rawArgs.length === 1 && rawArgs[0] === '--version';
+const helpRequested = rawArgs.includes('--help') || rawArgs.includes('-h');
+const run = versionOnly
+  ? Promise.resolve(void process.stdout.write(`${TOOL_VERSION}\n`))
+  : helpRequested
+    ? runMain(main, {
+        rawArgs,
+        showUsage: async (cmd, parent) => {
+          process.stdout.write(`${await renderUsage(cmd, parent)}\n`);
+        },
+      })
+    : runCommand(main, { rawArgs });
 run.catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`egressa: ${message}\n`);

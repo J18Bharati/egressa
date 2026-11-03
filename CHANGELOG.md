@@ -9,9 +9,9 @@ no code moving at all. A reader working out why today's findings differ from las
 know which half moved. Knowledge base versions are dates (`kb.version`); the tool version is semver.
 
 <!-- Update at the first release: the next sentence stops being true then. -->
-Nothing has been published yet. There is no npm release, and the repository is private until the
-first one, so every version below describes the state of the repository rather than an artifact
-anyone can install.
+Nothing has been published to npm yet, so every version below describes the state of the
+repository rather than a package anyone can install. The Claude Code plugin installs from the
+repository.
 
 ## [Unreleased]
 
@@ -322,6 +322,14 @@ behaves as it does. Schema `1.1.0` was corrected in place for the same reason: n
   status the table does not know are not. `kb:validate` refuses a record that disagrees, and the
   engine applies the same table at scan time, so a `--kb` directory cannot read a status two ways.
   A certified record with no observed status is a validation warning and a verification task.
+- **The plugin is the `plugin/` directory.** The skills moved from `skill/` to `plugin/skills/` and
+  the hook from `hooks/` to `plugin/hooks/`, and the marketplace points at `./plugin`, so an install
+  copies the plugin (about 1.5 MB) rather than the whole repository. The install id is unchanged:
+  `egressa@egressa`.
+- **`--version` and `--help` print plainly in CI.** citty printed both through consola, which
+  prefixes `[log] ` when `CI` is set, so every CI job read the version as `[log] 0.2.0`. The
+  repository also gains a `.gitattributes` that keeps line endings LF on a Windows checkout, where
+  the formatter rejected every file.
 - **Code is licensed MIT, not Apache-2.0.** `kb/` stays CC-BY-4.0. Nothing had been published under
   Apache-2.0.
 - **The authored-override layer is removed.** `kb/ratings/exposure-overrides.json` was read by

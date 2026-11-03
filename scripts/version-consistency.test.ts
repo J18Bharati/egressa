@@ -28,7 +28,7 @@ const manifests = [
   // Claude Code decides whether an installed plugin needs updating from this
   // field. It sat at 0.1.0 while the tree moved to 0.2.0, so plugin installs of
   // the skills and the hook would never have been offered a new release.
-  '.claude-plugin/plugin.json',
+  'plugin/.claude-plugin/plugin.json',
 ];
 
 /** Each source literal, with the pattern that finds it. */
@@ -65,7 +65,9 @@ describe('the version is stated once and everything agrees with it', () => {
    * that reports the previous version.
    */
   it('the committed skill bundle reports VERSION', () => {
-    const bundle = JSON.parse(readFileSync('skill/privacy-review/bin/BUNDLE.json', 'utf8')) as {
+    const bundle = JSON.parse(
+      readFileSync('plugin/skills/privacy-review/bin/BUNDLE.json', 'utf8'),
+    ) as {
       toolVersion?: string;
     };
     expect(bundle.toolVersion, 'run `pnpm build && pnpm skill:bundle`').toBe(VERSION);

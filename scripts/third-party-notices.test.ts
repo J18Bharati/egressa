@@ -11,7 +11,7 @@ import { inlinedPackages } from './third-party-notices.mjs';
 
 const root = join(import.meta.dirname, '..');
 const notices = readFileSync(join(root, 'THIRD_PARTY_NOTICES'), 'utf8');
-const skillBin = join(root, 'skill/privacy-review/bin');
+const skillBin = join(root, 'plugin/skills/privacy-review/bin');
 
 describe('THIRD_PARTY_NOTICES', () => {
   it('reads package names from esbuild module comments, and skips workspace packages', () => {

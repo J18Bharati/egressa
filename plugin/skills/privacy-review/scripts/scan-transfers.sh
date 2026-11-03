@@ -42,8 +42,8 @@ cd "$SELF" || exit 3
 PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep '^/' | paste -sd: -)"
 
 # The checkout this skill lives in, if it lives in one -- never the target.
-if [ -f "$SELF/../../packages/cli/dist/cli.js" ]; then
-  exec node "$SELF/../../packages/cli/dist/cli.js" scan "$target" --format json "$@"
+if [ -f "$SELF/../../../packages/cli/dist/cli.js" ]; then
+  exec node "$SELF/../../../packages/cli/dist/cli.js" scan "$target" --format json "$@"
 fi
 
 if [ -f "$SELF/bin/lib/egressa.mjs" ]; then

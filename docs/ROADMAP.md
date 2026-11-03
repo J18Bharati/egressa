@@ -45,7 +45,7 @@ dot-directories, which the walker does not collect.
 ## Covered by the review skills rather than the engine
 
 Consent gating, retention, personal data in logs, session replay configuration and opt-out signals
-are checked by `skill/privacy-review/`, not by engine rules. That split is deliberate: these
+are checked by `plugin/skills/privacy-review/`, not by engine rules. That split is deliberate: these
 questions turn on reading surrounding control flow and on judgements a rule table cannot encode —
 whether a cookie is strictly necessary, whether a logged object was redacted first — and a wrong
 answer to any of them is worse than no answer.
@@ -58,7 +58,7 @@ The rest should stay agent-driven.
 ## Open decisions
 
 **Whether to vendor the native parser binding into the skill bundle.** The bundled CLI in
-`skill/privacy-review/bin/` runs without `oxc-parser`, so it reads dependency manifests only and
+`plugin/skills/privacy-review/bin/` runs without `oxc-parser`, so it reads dependency manifests only and
 reports `engine.degraded`. Shipping the binding would give it full call-site analysis, at roughly
 2 MB per platform committed to git — about 8 MB to cover Linux, macOS and Windows. The alternative is
 to leave the bundle manifest-only and rely on a real build where one exists, which is what it does

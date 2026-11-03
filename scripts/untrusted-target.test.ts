@@ -23,7 +23,7 @@ import { afterEach, describe, expect, it } from 'vitest';
  * first `packages/cli/dist/cli.js` they found, so a repository that committed one
  * had it run with the reviewer's credentials. And both skills ran their scripts
  * by paths relative to the working directory, which is usually the repository
- * under review, so a committed `skill/privacy-review/scripts/...` was the copy
+ * under review, so a committed `plugin/skills/privacy-review/scripts/...` was the copy
  * that ran.
  *
  * The first half plants a marker-writing `cli.js` in the target and in its
@@ -66,9 +66,9 @@ afterEach(() => {
 const sandbox = (skill: string, file: string): Sandbox => {
   const root = mkdtempSync(join(tmpdir(), 'egressa-untrusted-'));
   roots.push(root);
-  const script = join(root, 'install', 'skill', skill, 'scripts', file);
+  const script = join(root, 'install', 'plugin', 'skills', skill, 'scripts', file);
   mkdirSync(dirname(script), { recursive: true });
-  copyFileSync(resolve('skill', skill, 'scripts', file), script);
+  copyFileSync(resolve('plugin/skills', skill, 'scripts', file), script);
 
   const bin = join(root, 'bin');
   mkdirSync(bin);
@@ -154,7 +154,7 @@ describe.each(SCRIPTS)('$file never runs a build the scan target supplies', ({ s
   });
 });
 
-/** Every markdown file shipped under `skill/`, computed so a new one is covered. */
+/** Every markdown file shipped under `plugin/skills/`, computed so a new one is covered. */
 const skillMarkdown = (): string[] => {
   const found: string[] = [];
   const walk = (dir: string) => {
@@ -167,7 +167,7 @@ const skillMarkdown = (): string[] => {
       }
     }
   };
-  walk('skill');
+  walk('plugin/skills');
   return found.sort();
 };
 
@@ -175,8 +175,8 @@ describe('skill text resolves nothing from the working directory', () => {
   const files = skillMarkdown();
 
   it('finds the skill markdown', () => {
-    expect(files).toContain(join('skill', 'privacy-review', 'SKILL.md'));
-    expect(files).toContain(join('skill', 'egressa', 'SKILL.md'));
+    expect(files).toContain(join('plugin', 'skills', 'privacy-review', 'SKILL.md'));
+    expect(files).toContain(join('plugin', 'skills', 'egressa', 'SKILL.md'));
   });
 
   // A line that runs something, in any of the forms a shell or a model would use.
@@ -196,7 +196,7 @@ describe('skill text resolves nothing from the working directory', () => {
     expect(offending).toEqual([]);
   });
 
-  it.each(['skill/privacy-review/SKILL.md', 'skill/egressa/SKILL.md'])(
+  it.each(['plugin/skills/privacy-review/SKILL.md', 'plugin/skills/egressa/SKILL.md'])(
     '%s anchors SKILL_DIR before it names its first reference',
     (file) => {
       const text = readFileSync(file, 'utf8');
@@ -210,7 +210,7 @@ describe('skill text resolves nothing from the working directory', () => {
   );
 
   it('reads specialist checklists from $SKILL_DIR and has no working-directory candidates', () => {
-    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    const skill = readFileSync('plugin/skills/privacy-review/SKILL.md', 'utf8');
     expect(skill).toContain('`$SKILL_DIR/specialists/`');
     expect(skill).not.toMatch(/"\.claude\/skills\/privacy-review"|"skill\/privacy-review"/);
     // The specialists are told which copy to run.

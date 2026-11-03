@@ -13,7 +13,7 @@
       "LICENSE",
       "kb/LICENSE",
       "schemas/vendor/**",
-      "skill/*/bin/**"
+      "plugin/skills/*/bin/**"
     ]
   },
   "formatter": {

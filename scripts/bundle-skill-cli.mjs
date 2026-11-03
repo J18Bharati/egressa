@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copy the built CLI and the knowledge base into skill/privacy-review/bin/ so the
+ * Copy the built CLI and the knowledge base into plugin/skills/privacy-review/bin/ so the
  * transfers specialist can run a scan with no install step.
  *
  * Layout matters. kb-loader's bundledKbPath() looks for `../kb` relative to the
@@ -17,7 +17,7 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const SRC_CLI = join(ROOT, 'packages/cli/dist/cli.js');
 const SRC_KB = join(ROOT, 'kb');
-const OUT = join(ROOT, 'skill/privacy-review/bin');
+const OUT = join(ROOT, 'plugin/skills/privacy-review/bin');
 
 if (!existsSync(SRC_CLI)) {
   console.error('bundle-skill-cli: packages/cli/dist/cli.js is missing. Run `pnpm build` first.');
@@ -50,4 +50,6 @@ writeFileSync(
   `${JSON.stringify({ toolVersion, kbVersion, bundledAt: new Date().toISOString().slice(0, 10) }, null, 2)}\n`,
 );
 
-console.log(`bundled egressa ${toolVersion} + kb ${kbVersion} -> skill/privacy-review/bin/`);
+console.log(
+  `bundled egressa ${toolVersion} + kb ${kbVersion} -> plugin/skills/privacy-review/bin/`,
+);

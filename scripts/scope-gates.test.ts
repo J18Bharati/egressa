@@ -35,7 +35,7 @@ import { afterAll, describe, expect, it } from 'vitest';
  *    must not raise it.
  */
 
-const SCOPE = resolve('skill/privacy-review/scripts/scope.sh');
+const SCOPE = resolve('plugin/skills/privacy-review/scripts/scope.sh');
 
 // Comfortably past the 64 KiB Linux pipe buffer once joined with newlines:
 // the paths below run about 55 bytes each, so 1,800 of them is ~99 KiB.
@@ -454,7 +454,7 @@ describe('session replay inside a general SDK routes the specialist', () => {
 // deliberate. Every gate scope.sh emits must now be named in SKILL.md, either in
 // the dispatch table or in the context-only list.
 describe('every gate is accounted for in SKILL.md', () => {
-  const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+  const skill = readFileSync('plugin/skills/privacy-review/SKILL.md', 'utf8');
   const step2At = skill.indexOf('## Step 2');
   const step3At = skill.indexOf('## Step 3');
   const step2 = skill.slice(step2At, step3At);
@@ -557,9 +557,9 @@ describe('every git call in scope.sh goes through git_safe', () => {
     // SKILL.md used to hand specialists `git ls-files` and `git diff`, which
     // run the reviewed repository's core.fsmonitor and diff drivers.
     const docs = [
-      'skill/privacy-review/SKILL.md',
-      ...readdirSync('skill/privacy-review/specialists').map(
-        (f) => `skill/privacy-review/specialists/${f}`,
+      'plugin/skills/privacy-review/SKILL.md',
+      ...readdirSync('plugin/skills/privacy-review/specialists').map(
+        (f) => `plugin/skills/privacy-review/specialists/${f}`,
       ),
     ];
     for (const doc of docs) {
@@ -833,7 +833,7 @@ describe('git is believed only about this directory, and only for paths inside i
 
 describe('SKILL.md carries every DEGRADED line into the report', () => {
   it('names DEGRADED as a coverage gap the report must state', () => {
-    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    const skill = readFileSync('plugin/skills/privacy-review/SKILL.md', 'utf8');
     expect(skill).toMatch(/`DEGRADED:`[\s\S]{0,400}NOT CHECKED/);
   });
 });
@@ -964,7 +964,7 @@ describe('portability and the last borrowed-repository forms', () => {
   });
 
   it('tells the orchestrator a run without SCOPE_END is a stop, not an empty review', () => {
-    const skill = readFileSync('skill/privacy-review/SKILL.md', 'utf8');
+    const skill = readFileSync('plugin/skills/privacy-review/SKILL.md', 'utf8');
     expect(skill).toMatch(/`SCOPE_END: ok`[\s\S]{0,300}(stop|not run)/i);
   });
 });

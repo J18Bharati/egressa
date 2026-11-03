@@ -13,7 +13,7 @@ packages/*/kb/
 # gstack tool artifacts (biome honours .gitignore via vcs.useIgnoreFile)
 .gstack/
 
-# Local skill install: a symlink into skill/ so /privacy-review resolves in this
+# Local skill install: a symlink into plugin/skills/ so /privacy-review resolves in this
 # checkout. Not committed -- symlinks are unreliable on the Windows CI leg.
 .claude/skills/
 

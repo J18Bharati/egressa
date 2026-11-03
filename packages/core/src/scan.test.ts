@@ -356,7 +356,7 @@ describe('scan: what the skills promise about kb/stale-entry', () => {
   // with it. For a long time the rule existed and nothing emitted it, so the
   // promise was to a finding no scan could produce.
   it('is emitted whenever a skill mentions it', () => {
-    const skillText = execFileSync('grep', ['-rl', 'kb/stale-entry', 'skill'], {
+    const skillText = execFileSync('grep', ['-rl', 'kb/stale-entry', 'plugin/skills'], {
       encoding: 'utf8',
     });
     expect(skillText.trim()).not.toBe('');

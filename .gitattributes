@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# Binary assets are never converted.
+*.png binary
+*.tgz binary

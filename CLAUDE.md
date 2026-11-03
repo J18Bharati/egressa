@@ -24,7 +24,7 @@ pnpm lint:fix        # biome check --write
 pnpm kb:validate     # schema + source + collision checks over kb/
 pnpm kb:coverage     # fraction of detected hosts/packages matching a KB entry
 pnpm kb:tasks        # verification tasks the KB itself generates (JSON; --as-of YYYY-MM-DD)
-pnpm skill:bundle    # rebuild skill/privacy-review/bin/ (committed) after a KB or engine change
+pnpm skill:bundle    # rebuild plugin/skills/privacy-review/bin/ (committed) after a KB or engine change
 pnpm schema:check    # asserts types.ts, schemas/, and the disclaimer agree
 ```
 
@@ -51,8 +51,8 @@ packages/core       @egressa/core  — discovery, manifests, callsites, merge, e
 packages/kb-loader  @egressa/kb    — loads and indexes kb/, ships the data
 packages/cli        egressa        — the npx binary
 packages/mcp        @egressa/mcp   — stdio MCP server
-skill/egressa      Claude Code skill: transfer triage (shells out to the CLI, not to MCP)
-skill/privacy-review Claude Code skill: consent, retention, logs, session replay, opt-out signals
+plugin/skills/egressa      Claude Code skill: transfer triage (shells out to the CLI, not to MCP)
+plugin/skills/privacy-review Claude Code skill: consent, retention, logs, session replay, opt-out signals
 kb/                 CC-BY-4.0 data, its own LICENSE
 schemas/            published findings + vendor JSON Schemas
 ```
@@ -240,7 +240,7 @@ narrowed, because suppressions apply after the vendor and confidence filters.
 
 **`scripts/claims-contract.test.ts`** asserts the disclaimer from `packages/core/src/claims.ts`
 reaches JSON, the SARIF driver, every rule's `help.markdown`, markdown, human output, the README,
-`skill/egressa/SKILL.md` and the MCP source, and that no generated surface or KB entry contains a
+`plugin/skills/egressa/SKILL.md` and the MCP source, and that no generated surface or KB entry contains a
 forbidden claim word. If you reword user-facing output, run `pnpm test` before assuming it is fine.
 The forbidden-word list lives in `claims.ts`. Entries there are **stems**, not exact words: the
 matcher appends a small suffix set, because a list of exact words let "GDPR violations: 3" and
@@ -251,10 +251,10 @@ to link to a regulator decision filed under a slug ending "-illegal".
 
 `references/language-rules.md` is the only file allowed to quote those words.
 
-It also walks `skill/` and `kb/vendors/` and asserts every `SKILL.md` carries `NON_ASSESSMENT` and
+It also walks `plugin/skills/` and `kb/vendors/` and asserts every `SKILL.md` carries `NON_ASSESSMENT` and
 no shipped markdown or knowledge base entry carries a forbidden word. **Both file lists are
 computed, not hardcoded** — a hardcoded one would let the next specialist checklist or vendor entry
-ship outside the contract just by nobody remembering to add it. Adding a file under `skill/`, or an
+ship outside the contract just by nobody remembering to add it. Adding a file under `plugin/skills/`, or an
 entry under `kb/vendors/`, therefore opts it in automatically, and the `language-rules.md` exemption
 is itself asserted, so a file stops being exempt if it stops being the vocabulary table.
 
@@ -284,7 +284,7 @@ from `kb/` instead.
 
 ## The review skills
 
-`skill/privacy-review/` is an orchestrator plus six specialist checklists, dispatched in parallel as
+`plugin/skills/privacy-review/` is an orchestrator plus six specialist checklists, dispatched in parallel as
 subagents. It covers what the engine does not: trackers firing before consent, personal data in logs,
 session replay recording inputs, storage with no expiry, opt-out signals. `transfers.md` shells out
 to the CLI rather than reimplementing detection by grep.
@@ -364,7 +364,7 @@ balancer — which is an exemption in Art 5(3) itself and the largest false-posi
 
 ### The bundled CLI inside the skill
 
-`pnpm skill:bundle` copies the built CLI and `kb/` into `skill/privacy-review/bin/`, so the
+`pnpm skill:bundle` copies the built CLI and `kb/` into `plugin/skills/privacy-review/bin/`, so the
 transfers specialist runs with no install. Layout is `bin/lib/egressa.mjs` beside `bin/kb/`, because
 kb-loader resolves `../kb` from the JavaScript file — and the directory is `lib`, not `dist`, since
 `.gitignore` excludes `dist/` everywhere and would silently drop the bundle.
@@ -382,7 +382,7 @@ glossed.
 location, never from the scan target, and both `SKILL.md` files run scripts and read checklists from
 `$SKILL_DIR` — the base directory the harness prints when a skill loads — never from the working
 directory. The scripts used to walk up from the target and run the first `packages/cli/dist/cli.js`
-they found, and the skills ran `bash skill/...` relative to the working directory, which is usually
+they found, and the skills ran `bash skill/...` (the layout before `plugin/`) relative to the working directory, which is usually
 the repository under review: either way a repository could commit code that a "read-only" review
 then ran with the reviewer's credentials. The scripts also `cd` out of the target and drop
 relative `PATH` entries before any `exec`, because npm reads a project `.npmrc` from the working
@@ -391,12 +391,16 @@ directory — a `registry=` line there would point the opt-in npx branch at an a
 
 ## Plugin packaging
 
-`.claude-plugin/plugin.json` makes the repository installable as a Claude Code plugin, and
-`.claude-plugin/marketplace.json` makes it its own single-plugin marketplace. `skills: "./skill/"`
-points at the existing directory rather than moving anything, and `hooks: "./hooks/hooks.json"`
-registers the write-time hook. `claude plugin validate .` checks both manifests.
+The plugin is the `plugin/` directory and nothing else: `plugin/.claude-plugin/plugin.json`, the
+skills under `plugin/skills/` and the hook under `plugin/hooks/`. `.claude-plugin/marketplace.json`
+at the root makes the repository its own single-plugin marketplace with `"source": "./plugin"`, so
+an install copies about 1.5 MB into the plugin cache rather than the whole repository with its
+packages, fixtures and this file. Anything the plugin runs must live under `plugin/`: a path out of
+it does not exist in an installed copy. The scan scripts still find a checkout's own build, three
+levels up from a skill. `claude plugin validate .` checks the marketplace and `claude plugin
+validate ./plugin` the plugin.
 
-`hooks/tracker-write-check.mjs` is a `PreToolUse` hook on `Write|Edit|MultiEdit`. Four invariants,
+`plugin/hooks/tracker-write-check.mjs` is a `PreToolUse` hook on `Write|Edit|MultiEdit`. Four invariants,
 all tested in `scripts/tracker-hook.test.ts` and the last also in the claims contract:
 
 - **It never blocks.** No `permissionDecision` is ever emitted and it never exits 2, which is the
@@ -407,7 +411,7 @@ all tested in `scripts/tracker-hook.test.ts` and the last also in the claims con
 - **It exits 0 in silence on anything unexpected.** A hook that breaks an editing session is worse
   than one that misses something.
 
-It skips test files, fixtures, non-code extensions, `skill/privacy-review/**` and any edit that
+It skips test files, fixtures, non-code extensions, `plugin/skills/privacy-review/**` and any edit that
 already contains a consent check, and it applies the Art 5(3) strict-necessity exemption to storage
 writes. Those exclusions are the difference between a hook people keep and one they disable — and
 disabling it disables the skills with it, since they ship in the same plugin.
@@ -502,8 +506,8 @@ the failure arrives as a `SyntaxError` at link time before any code runs. `parse
 ## Current state
 
 v1 is complete and **unpublished**. Nothing is on npm. The repository is `J18Bharati/egressa`,
-**private** until the first release, with `release.yml` and `link-check.yml` disabled on GitHub
-until npm trusted publishing is configured. Code is MIT; `kb/` is CC-BY-4.0, attributed to "The
+public, with `release.yml` and `link-check.yml` disabled on GitHub until npm trusted publishing is
+configured. The plugin installs from GitHub today; npm has nothing yet. Code is MIT; `kb/` is CC-BY-4.0, attributed to "The
 Egressa Authors"; `THIRD_PARTY_NOTICES` is generated from the bundles by
 `scripts/third-party-notices.mjs` during `pnpm build`. The release pipeline exists
 (`.changeset/`, `.github/workflows/release.yml`, npm trusted publishing over OIDC, no token) but has
@@ -531,8 +535,8 @@ installing the plugin from the private repository, then making it public.
 has moved out of that list: `packages/core/src/infrastructure/` reads Terraform, Serverless and
 Vercel configuration for the regions a repository declares.
 
-`skill/egressa/scripts/reconcile-aws.sh` is the only thing in the project that reaches the network
+`plugin/skills/egressa/scripts/reconcile-aws.sh` is the only thing in the project that reaches the network
 during an ordinary run. It is opt-in through `EGRESSA_ALLOW_AWS=1`, read-only, never invoked by a
 scan, and emits region strings only — resolving one to a country stays the knowledge base's job.
-The claims contract now walks `skill/**/*.sh` as well as the markdown, because a script used to
+The claims contract now walks `plugin/skills/**/*.sh` as well as the markdown, because a script used to
 ship with no claim-scope enforcement at all.

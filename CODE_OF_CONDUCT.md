@@ -11,6 +11,6 @@ statements about named companies, so a disagreement about an entry is settled by
 
 ## Reporting
 
-Report conduct concerns to the maintainer, [@J18Bharati](https://github.com/J18Bharati), and ask
-for a private channel rather than describing the problem in public. Reports are handled in
-confidence, and the enforcement guidelines of the Contributor Covenant 2.1 apply.
+Report conduct concerns privately to contact@jatinbharati.com, not in a public issue or comment.
+Reports are handled in confidence, and the enforcement guidelines of the Contributor Covenant 2.1
+apply.

@@ -27,7 +27,7 @@ const DATA = mkdtempSync(join(tmpdir(), 'egressa-hook-test-'));
 
 const run = (event: unknown): { out: HookOutput | null; code: number } => {
   try {
-    const stdout = execFileSync('node', ['hooks/tracker-write-check.mjs'], {
+    const stdout = execFileSync('node', ['plugin/hooks/tracker-write-check.mjs'], {
       input: JSON.stringify(event),
       encoding: 'utf8',
       env: { ...process.env, CLAUDE_PLUGIN_DATA: DATA },
@@ -186,7 +186,7 @@ describe('the tracker write hook stays silent on', () => {
   // The self-reference lesson: this repository documents the patterns it detects.
   silent(
     "the skill's own checklists",
-    write('skill/privacy-review/specialists/consent-gating.md', 'mixpanel.init("T");'),
+    write('plugin/skills/privacy-review/specialists/consent-gating.md', 'mixpanel.init("T");'),
   );
   silent('a markdown file', write('docs/x.md', 'mixpanel.init("T");'));
   silent('ordinary code', write('app/x.ts', 'export const port = 3000;'));

@@ -53,7 +53,7 @@ function versionTree(dir: string, version: string): void {
   for (const f of [
     'packages/cli/src/version.ts',
     'packages/mcp/src/server.ts',
-    '.claude-plugin/plugin.json',
+    'plugin/.claude-plugin/plugin.json',
   ]) {
     mkdirSync(join(dir, f, '..'), { recursive: true });
     cpSync(join(ROOT, f), join(dir, f));
@@ -70,9 +70,9 @@ describe('sync-version', () => {
     expect(readFileSync(join(dir, 'VERSION'), 'utf8')).toBe('9.8.7\n');
     expect(readFileSync(join(dir, 'packages/cli/src/version.ts'), 'utf8')).toContain("'9.8.7'");
     expect(readFileSync(join(dir, 'packages/mcp/src/server.ts'), 'utf8')).toContain("'9.8.7'");
-    expect(JSON.parse(readFileSync(join(dir, '.claude-plugin/plugin.json'), 'utf8')).version).toBe(
-      '9.8.7',
-    );
+    expect(
+      JSON.parse(readFileSync(join(dir, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version,
+    ).toBe('9.8.7');
   });
 
   it('refuses when the four packages disagree', () => {

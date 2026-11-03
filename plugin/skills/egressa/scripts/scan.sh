@@ -34,8 +34,8 @@ fi
 cd "$SELF" || exit 3
 PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep '^/' | paste -sd: -)"
 
-if [ -f "$SELF/../../packages/cli/dist/cli.js" ]; then
-  exec node "$SELF/../../packages/cli/dist/cli.js" scan "$target" --format json "$@"
+if [ -f "$SELF/../../../packages/cli/dist/cli.js" ]; then
+  exec node "$SELF/../../../packages/cli/dist/cli.js" scan "$target" --format json "$@"
 fi
 
 # Sibling skill in the same plugin ships a prebuilt copy.

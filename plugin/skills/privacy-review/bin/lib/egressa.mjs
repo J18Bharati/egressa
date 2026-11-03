@@ -21601,8 +21601,16 @@ Run \`egressa ${command} --help\` for the options.
     process.exit(EXIT.USAGE);
   }
 }
-var metaOnly = rawArgs.includes("--help") || rawArgs.includes("-h") || rawArgs.length === 1 && rawArgs[0] === "--version";
-var run = metaOnly ? runMain(main, { rawArgs }) : runCommand(main, { rawArgs });
+var versionOnly = rawArgs.length === 1 && rawArgs[0] === "--version";
+var helpRequested = rawArgs.includes("--help") || rawArgs.includes("-h");
+var run = versionOnly ? Promise.resolve(void process.stdout.write(`${TOOL_VERSION}
+`)) : helpRequested ? runMain(main, {
+  rawArgs,
+  showUsage: async (cmd, parent) => {
+    process.stdout.write(`${await renderUsage(cmd, parent)}
+`);
+  }
+}) : runCommand(main, { rawArgs });
 run.catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`egressa: ${message}

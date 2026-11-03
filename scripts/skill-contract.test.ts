@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * test can run it; these pin the text that field test 4 found contradicting
  * itself, so the contradictions cannot come back one file at a time.
  */
-const SKILL = 'skill/privacy-review';
+const SKILL = 'plugin/skills/privacy-review';
 const read = (path: string) => readFileSync(join(SKILL, path), 'utf8');
 
 describe('privacy-review contract', () => {
@@ -33,7 +33,7 @@ describe('privacy-review contract', () => {
   it('treats every exit status but 0 and 1 as a scan that did not run', () => {
     // Red team: a strict config exits 2 with no JSON, and the lane read as
     // clean because only exit 3 was named.
-    for (const text of [transfers, readFileSync('skill/egressa/SKILL.md', 'utf8')]) {
+    for (const text of [transfers, readFileSync('plugin/skills/egressa/SKILL.md', 'utf8')]) {
       expect(text).toMatch(/exits 0 or 1/);
       expect(text).toMatch(/any other status/i);
     }
@@ -74,10 +74,10 @@ describe('privacy-review contract', () => {
  * settled fact, and fetched pages are data. These pin the text.
  */
 describe('repository facts in the skills', () => {
-  const egressa = readFileSync('skill/egressa/SKILL.md', 'utf8');
-  const verifying = readFileSync('skill/egressa/references/verifying-facts.md', 'utf8');
+  const egressa = readFileSync('plugin/skills/egressa/SKILL.md', 'utf8');
+  const verifying = readFileSync('plugin/skills/egressa/references/verifying-facts.md', 'utf8');
   const research = readFileSync(
-    'skill/egressa/references/researching-an-unknown-vendor.md',
+    'plugin/skills/egressa/references/researching-an-unknown-vendor.md',
     'utf8',
   );
   const orchestrator = read('SKILL.md');

@@ -28,7 +28,7 @@ passes locally, which validates the manifests but not the install.
 
 ### Decide whether to vendor the native parser binding
 
-**What:** Either ship `oxc-parser`'s platform binaries inside `skill/privacy-review/bin/`, or decide
+**What:** Either ship `oxc-parser`'s platform binaries inside `plugin/skills/privacy-review/bin/`, or decide
 not to and document the bundle as manifest-only for good.
 
 **Why:** The bundled CLI runs without the native parser, so it reports `engine.degraded` and reads
@@ -153,7 +153,7 @@ facts while looking current. Adequacy status and vendor jurisdictions change; th
 **Context:** gstack solves this with `bin/gstack-update-check`, and the lesson worth copying is that
 it **fails loud**: silence is the up-to-date signal, so a crashing check was indistinguishable from a
 current install and produced a 45-release silent-staleness incident. Their fix is an `ERR` trap that
-prints `CHECK_FAILED ... status UNKNOWN`. `skill/privacy-review/bin/BUNDLE.json` already records
+prints `CHECK_FAILED ... status UNKNOWN`. `plugin/skills/privacy-review/bin/BUNDLE.json` already records
 `toolVersion`, `kbVersion` and `bundledAt`, and `kb/adequacy-status.json` carries `asOf`, so the
 inputs exist. Must be cached and snoozable, and must not reach the network without consent — the
 same rule that keeps `EGRESSA_ALLOW_NPX` opt-in.
@@ -660,10 +660,10 @@ never exercised. That is G4 in the private field test 3 triage notes.
 
 ### Teach the transfers specialist that a reference is not a call
 
-**What:** Add a rule to `skill/privacy-review/specialists/transfers.md`: a finding whose evidence
+**What:** Add a rule to `plugin/skills/privacy-review/specialists/transfers.md`: a finding whose evidence
 contains no `kind: "callsite"` entry is at most `decidability: "config"` and must emit a `question`,
 never a `fix`, whatever its rule id — and must say "named, not called" in its summary. Mirror it in
-`references/finding-schema.md` and in `skill/egressa/references/interpreting-findings.md`, which
+`references/finding-schema.md` and in `plugin/skills/egressa/references/interpreting-findings.md`, which
 still describes confidence without mentioning the kind axis.
 
 **Why:** The `reference` kind does not survive the CLI-to-skill boundary, and the skill converts it
@@ -690,7 +690,7 @@ claim scope.
 
 ### Test `reconcile-aws.sh`, the one shell script that still has none
 
-**What:** Add a vitest-driven test for `skill/egressa/scripts/reconcile-aws.sh`, reusing the
+**What:** Add a vitest-driven test for `plugin/skills/egressa/scripts/reconcile-aws.sh`, reusing the
 `execFileSync` pattern from `scripts/tracker-hook.test.ts:26`. `scan-transfers.sh` and `scan.sh`
 are now covered by `scripts/untrusted-target.test.ts`.
 

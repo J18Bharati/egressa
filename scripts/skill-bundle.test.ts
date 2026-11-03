@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The bundled CLI inside skill/privacy-review/ is a build artifact committed to
+ * The bundled CLI inside plugin/skills/privacy-review/ is a build artifact committed to
  * the repository, which means it can silently fall behind the source it was
  * built from. A stale privacy tool is worse than an absent one: it reports on
  * an old knowledge base while looking current.
@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
  * than letting a drifted bundle ship quietly.
  */
 
-const BIN = 'skill/privacy-review/bin';
+const BIN = 'plugin/skills/privacy-review/bin';
 const FIX = 'run `pnpm build && pnpm skill:bundle`';
 
 const bundle = () =>

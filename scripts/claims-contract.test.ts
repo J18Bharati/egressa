@@ -82,7 +82,7 @@ describe('the disclaimer reaches every surface', () => {
   });
 
   it('the skill', () => {
-    expect(flat(read('skill/egressa/SKILL.md'))).toContain(flat(DISCLAIMER));
+    expect(flat(read('plugin/skills/egressa/SKILL.md'))).toContain(flat(DISCLAIMER));
   });
 
   it('the MCP server, which scopes every tool description', () => {
@@ -148,7 +148,7 @@ describe('no generated output can claim compliance', () => {
   it('the skill instructions do not themselves make a forbidden claim', () => {
     // SKILL.md gives instructions; the forbidden-word table lives in
     // references/language-rules.md, which quotes them deliberately.
-    expect(findForbiddenClaims(read('skill/egressa/SKILL.md'))).toEqual([]);
+    expect(findForbiddenClaims(read('plugin/skills/egressa/SKILL.md'))).toEqual([]);
   });
 
   it('knowledge base entries contain no evaluative language', () => {
@@ -165,7 +165,7 @@ describe('no generated output can claim compliance', () => {
 });
 
 describe('shipped shell scripts are inside the claim scope', () => {
-  // The markdown walk above covers `.md` only, so a script under skill/ used to
+  // The markdown walk above covers `.md` only, so a script under plugin/skills/ used to
   // ship with no claim-scope enforcement at all. The hook block below is the
   // precedent for extending the contract to a non-markdown surface.
   const scripts = skillFiles('.sh');
@@ -183,7 +183,7 @@ describe('shipped shell scripts are inside the claim scope', () => {
   it('the live AWS script refuses to run unless it is opted into', () => {
     // It is the only thing here that reaches the network, so the default has
     // to be off and the refusal has to be loud.
-    const script = read('skill/egressa/scripts/reconcile-aws.sh');
+    const script = read('plugin/skills/egressa/scripts/reconcile-aws.sh');
     expect(script).toContain('EGRESSA_ALLOW_AWS');
     expect(script).toContain('DID NOT RUN');
     // Read-only: nothing that changes state in someone's account.
@@ -199,7 +199,7 @@ const vendorIds = (): string[] =>
     .sort();
 
 /**
- * Every markdown file shipped under `skill/`, found by walking the tree rather
+ * Every markdown file shipped under `plugin/skills/`, found by walking the tree rather
  * than by a hand-maintained list.
  *
  * The list is computed on purpose. A hardcoded one lets the next specialist
@@ -215,7 +215,7 @@ const skillFiles = (extension: string): string[] => {
       else if (entry.name.endsWith(extension)) out.push(path);
     }
   };
-  walk('skill');
+  walk('plugin/skills');
   return out.sort();
 };
 
@@ -264,7 +264,7 @@ describe('the plugin hook is inside the claim scope too', () => {
   // session, which makes it a claim-bearing surface exactly like the CLI and
   // the skills -- and one that no reviewer reads as often, because it only
   // speaks when it fires.
-  const hook = read('hooks/tracker-write-check.mjs');
+  const hook = read('plugin/hooks/tracker-write-check.mjs');
 
   it('makes no forbidden claim', () => {
     expect(findForbiddenClaims(hook)).toEqual([]);
