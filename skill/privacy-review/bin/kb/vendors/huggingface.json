@@ -58,6 +58,11 @@
         "role": "primary",
         "regionSelected": true,
         "note": "Team and Enterprise organizations can select the EU storage region for new repositories; per Hugging Face, Spaces storage and runtime then use that region, and its page states that datasets, models, buckets and inference endpoints can all be stored in EU data centers. The region is a per-organization setting on those plans only."
+      },
+      {
+        "country": "CA",
+        "role": "support",
+        "note": "Hugging Face, Corp., a wholly-owned subsidiary, is listed in Canada in the Subprocessors list (last updated January 23, 2025) for 'All of the above'."
       }
     ],
     "euRegion": {
@@ -69,13 +74,22 @@
   },
   "legal": {
     "dpa": {
-      "available": false
+      "available": true,
+      "url": "https://cdn-media.huggingface.co/landing/assets/Data+Processing+Agreement.pdf",
+      "type": "incorporated-by-reference",
+      "lastChecked": "2026-11-03"
+    },
+    "subprocessors": {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Subprocessors.pdf",
+      "listType": "pdf",
+      "notifications": "page-only",
+      "lastChecked": "2026-11-03"
     },
     "transferMechanisms": [
       {
-        "mechanism": "none",
-        "url": "https://huggingface.co/privacy",
-        "lastChecked": "2026-11-02"
+        "mechanism": "SCC",
+        "url": "https://cdn-media.huggingface.co/landing/assets/Data+Processing+Agreement.pdf",
+        "lastChecked": "2026-11-03"
       },
       {
         "mechanism": "DPF",
@@ -198,9 +212,33 @@
       "title": "npm registry metadata: @huggingface/inference (repository github.com/huggingface/huggingface.js)",
       "publisher": "other",
       "accessedAt": "2026-11-02"
+    },
+    {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Data+Processing+Agreement.pdf",
+      "title": "Hugging Face Data Processing Agreement (sections 6, 12-14; Exhibit A)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-03"
+    },
+    {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Subprocessors.pdf",
+      "title": "Hugging Face Subprocessors List, last updated January 23, 2025",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-03"
+    },
+    {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Supplemental+Terms+-+Inference+Services.pdf",
+      "title": "Supplemental Terms - Inference Services (effective April 28, 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-03"
+    },
+    {
+      "url": "https://cdn-media.huggingface.co/landing/assets/Supplemental+Terms+-+Enterprise+Hub.pdf",
+      "title": "Supplemental Terms - Enterprise Hub (effective April 28, 2025)",
+      "publisher": "vendor",
+      "accessedAt": "2026-11-03"
     }
   ],
   "lastVerified": "2026-11-02",
   "verifiedBy": "egressa-kb",
-  "notes": "Common case first: huggingface-hub (and libraries built on it, such as transformers and @huggingface/transformers) is very often used only to download open model weights or datasets from huggingface.co to run locally. In that case the request carries the repository name, an access token if one is set, and library telemetry unless HF_HUB_DISABLE_TELEMETRY or DO_NOT_TRACK is set, but no application data; HF_HUB_OFFLINE stops the calls altogether. A dependency on huggingface-hub is therefore not by itself evidence that application data reaches Hugging Face; a call to router.huggingface.co, api-inference.huggingface.co or an endpoints.huggingface.cloud host is. DPA: Hugging Face's Hub security page and Inference Endpoints security page each state that a GDPR data processing agreement is offered through an Enterprise plan or Enterprise Hub subscription. No published DPA document was found (huggingface.co/DPA is a user profile, not an agreement), so dpa is recorded as unavailable to a caller without that subscription rather than as nonexistent. Transfers: the Privacy Policy states that personal information may be transferred to and processed in the U.S. and other countries and relies on the user's consent to that transfer; it names no SCCs or other Art 46 instrument, and no other page read for this entry does, so mechanism is recorded as none. DPF: the Privacy Policy and Terms do not mention the Data Privacy Framework, and a search of the participant list for 'Hugging Face', 'Hugging' and 'huggingface' returned no record, active or inactive, through the JSON API the list's own site calls (POST https://dpfapi.azurewebsites.net/api/participants); Stripe, LLC was returned by the same query as a control. Inference Providers: Hugging Face states it does not store request or response bodies when routing and that external providers are responsible for their own security; the downstream provider is a further recipient not described by this entry. Packages: huggingface-hub lists Hugging Face, Inc. as author; @huggingface/inference and @huggingface/hub are published from github.com/huggingface/huggingface.js. @huggingface/* is recorded as a scope, which also covers @huggingface/transformers, a library that runs models locally after downloading weights. The Data Privacy Framework participant list was searched on 2026-11-03, active and inactive, for Hugging Face, Hugging, huggingface, Hugging Face, Inc, and returned no record; a control search for Stripe returned its record."
+  "notes": "Common case first: huggingface-hub (and libraries built on it, such as transformers and @huggingface/transformers) is very often used only to download open model weights or datasets from huggingface.co to run locally. In that case the request carries the repository name, an access token if one is set, and library telemetry unless HF_HUB_DISABLE_TELEMETRY or DO_NOT_TRACK is set, but no application data; HF_HUB_OFFLINE stops the calls altogether. A dependency on huggingface-hub is therefore not by itself evidence that application data reaches Hugging Face; a call to router.huggingface.co, api-inference.huggingface.co or an endpoints.huggingface.cloud host is. DPA: the Terms of Service link Supplemental Terms, which link service-specific Supplemental Terms (effective April 28, 2025) for Inference Services, Enterprise Hub, Enterprise Plus and Hub Premium Features; each states that Hugging Face will process the customer's data in accordance with the Hugging Face Data Processing Agreement. The DPA is issued under the agreement between the customer and Hugging Face, Inc., and 'is incorporated into and forms part of the Agreement by reference'. It is attached to those services; no page read for this entry attaches it to free use of the Hub. Transfers: DPA section 12 states that a transfer of personal data out of the EEA to Hugging Face in a country without an adequacy decision 'will be governed by the EU SCCs', defined as the controller-to-processor clauses of Commission Implementing Decision (EU) 2021/914; sections 13 and 14 cover UK and Swiss transfers. The Privacy Policy, which covers Hugging Face's own processing of its users' data, separately states that personal information may be transferred to the U.S. and other countries with the user's consent. Sub-processors: DPA section 6.3 states that Hugging Face updates the Subprocessors list for a new sub-processor and that a customer may object within 30 days of its publication. DPF: the Privacy Policy and Terms do not mention the Data Privacy Framework, and a search of the participant list for 'Hugging Face', 'Hugging' and 'huggingface' returned no record, active or inactive, through the JSON API the list's own site calls (POST https://dpfapi.azurewebsites.net/api/participants); Stripe, LLC was returned by the same query as a control. Inference Providers: Hugging Face states it does not store request or response bodies when routing and that external providers are responsible for their own security; the downstream provider is a further recipient not described by this entry. Packages: huggingface-hub lists Hugging Face, Inc. as author; @huggingface/inference and @huggingface/hub are published from github.com/huggingface/huggingface.js. @huggingface/* is recorded as a scope, which also covers @huggingface/transformers, a library that runs models locally after downloading weights. The Data Privacy Framework participant list was searched on 2026-11-03, active and inactive, for Hugging Face, Hugging, huggingface, Hugging Face, Inc, and returned no record; a control search for Stripe returned its record."
 }
