@@ -28,7 +28,12 @@ while [ $# -gt 0 ]; do
     # substituting an empty branch name wedges the review before it starts,
     # which is worse than any gate this file was rewritten to fix.
     --base) BASE="${2:-}"; shift; shift ;;
-    *) shift ;;
+    # An unknown argument is refused, never dropped: `scope.sh --list some/dir`
+    # used to ignore the path and review the working directory instead, which
+    # from the wrong directory is a different tree. Run it from the root of the
+    # repository under review. No SCOPE_END line, so the orchestrator stops.
+    *) printf 'scope.sh: unknown argument: %s (run it from the repository root; options are --repo, --base <ref>, --list)\n' "$1" >&2
+       exit 2 ;;
   esac
 done
 
@@ -560,7 +565,10 @@ gate SCOPE_SCHEMA        paths 'schema\.prisma$|(^|/)migrations?/|(^|/)drizzle/|
 gate SCOPE_IAC           paths '\.tf$|(^|/)cdk/|cdk\.json$|serverless\.ya?ml$|template\.ya?ml$|docker-compose\.ya?ml$'
 
 gate SCOPE_TRACKERS      declared 'posthog|mixpanel|amplitude|@segment/|analytics-node|react-ga|gtag|logrocket|fullstory|@microsoft/clarity|hotjar|smartlook|heap-api|react-facebook-pixel|@snapchat|tiktok-pixel'
-gate SCOPE_TRACKER_CODE  hits 'gtag\(|dataLayer|fbq\(|_linkedin_partner_id|ttq\.|snaptr\(|clarity\(|hj\(|posthog\.init|mixpanel\.init|amplitude\.(init|getInstance)|analytics\.load|LogRocket\.init|FS\.identify|Smartlook'
+# A tracker reached without its SDK -- a beacon or a fetch to its collection
+# host -- routes too. `sendBeacon(` alone is a route, not a finding: a beacon to
+# the site's own backend is cheap to look at, and a missed tracker is not.
+gate SCOPE_TRACKER_CODE  hits 'gtag\(|dataLayer|fbq\(|_linkedin_partner_id|ttq\.|snaptr\(|clarity\(|hj\(|posthog\.init|mixpanel\.init|amplitude\.(init|getInstance)|analytics\.load|LogRocket\.init|FS\.identify|Smartlook|sendBeacon\(|google-analytics\.com|googletagmanager\.com|connect\.facebook\.net|facebook\.com/tr|analytics\.tiktok\.com|px\.ads\.linkedin\.com|snap\.licdn\.com|tr\.snapchat\.com|clarity\.ms|static\.hotjar\.com|i\.posthog\.com|api\.mixpanel\.com|api2?\.amplitude\.com|api\.segment\.io|cdn\.segment\.com'
 gate SCOPE_SESSION_REPLAY hits 'logrocket|fullstory|@microsoft/clarity|hotjar|smartlook|session_?[Rr]ecording|record[Cc]anvas|maskAllInputs|replayIntegration|replaysSessionSampleRate|replaysOnErrorSampleRate|@sentry/replay|rrweb|sessionReplaySampleRate|startSessionReplayRecording|new (Sentry\.)?Replay\('
 
 gate SCOPE_CONSENT       hits '__tcfapi|__cmp\(|onetrust|OneTrust|Cookiebot|klaro|osano|cookieconsent|CookieConsent|consent[_-]?[Mm]ode|hasConsent|consentGranted|analytics_storage|ad_storage'

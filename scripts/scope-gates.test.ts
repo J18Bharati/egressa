@@ -1008,3 +1008,66 @@ describe.skipIf(!hasBash32)('scope.sh under bash 3.2', () => {
     expect(run('--repo --list')).toContain('src/a.js');
   }, 120000);
 });
+
+describe('a tracker reached without its SDK still routes', () => {
+  it('reads SCOPE_TRACKER_CODE on a beacon to a collection host', () => {
+    const root = scratch('beacon');
+    plant(root, 'package.json', '{"name":"x"}');
+    plant(
+      root,
+      'src/analytics.ts',
+      "navigator.sendBeacon('https://www.google-analytics.com/g/collect', e);\n",
+    );
+    expect(runScope(root).lines.SCOPE_TRACKER_CODE).toBe('true');
+  });
+
+  it('reads it on a plain fetch to a collection host, and not on a first-party fetch', () => {
+    const root = scratch('beacon-host');
+    plant(root, 'package.json', '{"name":"x"}');
+    plant(root, 'src/a.ts', "fetch('https://eu.i.posthog.com/capture/', { method: 'POST' });\n");
+    expect(runScope(root).lines.SCOPE_TRACKER_CODE).toBe('true');
+    const clean = scratch('first-party');
+    plant(clean, 'package.json', '{"name":"x"}');
+    plant(clean, 'src/a.ts', "fetch('/api/events', { method: 'POST' });\n");
+    expect(runScope(clean).lines.SCOPE_TRACKER_CODE).toBe('false');
+  });
+
+  it('routes without asserting: the tracker conjunction is unchanged', () => {
+    const root = scratch('beacon-signal');
+    plant(root, 'package.json', '{"name":"x"}');
+    plant(
+      root,
+      'src/a.ts',
+      "navigator.sendBeacon('https://www.google-analytics.com/g/collect');\n",
+    );
+    expect(runScope(root).lines.SIGNAL_TRACKERS_NO_CONSENT).toBe('false');
+  });
+});
+
+describe('an argument scope.sh does not know is refused', () => {
+  it.each([['some/dir'], ['--repo', 'some/dir'], ['--lst']])(
+    'exits 2 with no SCOPE_END for %s',
+    (...args) => {
+      const root = scratch('args');
+      plant(root, 'package.json', '{"name":"x"}');
+      let code = 0;
+      let stdout = '';
+      let stderr = '';
+      try {
+        stdout = execFileSync('bash', [SCOPE, ...args], {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      } catch (error) {
+        const e = error as { status: number; stdout: string; stderr: string };
+        code = e.status;
+        stdout = e.stdout;
+        stderr = e.stderr;
+      }
+      expect(code).toBe(2);
+      expect(stdout).not.toContain('SCOPE_END');
+      expect(stderr).toContain('unknown argument');
+    },
+  );
+});
