@@ -39,8 +39,7 @@ Vendor hosting, DPAs and sub-processor lists change. Entries older than 180 days
 `kb/stale-entry` findings at scan time rather than presented as current, each carrying the legal
 facts to re-check and where. A DPF record runs on a shorter clock of its own (see
 [Re-verification cadence](#re-verification-cadence)). `.github/workflows/link-check.yml` checks that
-every cited URL still resolves and files an issue when one does not; it is switched off until the
-repository is public.
+every cited URL still resolves and files an issue when one does not.
 
 ## Re-verifying
 

@@ -506,7 +506,7 @@ the failure arrives as a `SyntaxError` at link time before any code runs. `parse
 ## Current state
 
 v1 is complete and **unpublished**. Nothing is on npm. The repository is `J18Bharati/egressa`,
-public, with `release.yml` and `link-check.yml` disabled on GitHub until npm trusted publishing is
+public, with `release.yml` disabled on GitHub until npm trusted publishing is
 configured. The plugin installs from GitHub today; npm has nothing yet. Code is MIT; `kb/` is CC-BY-4.0, attributed to "The
 Egressa Authors"; `THIRD_PARTY_NOTICES` is generated from the bundles by
 `scripts/third-party-notices.mjs` during `pnpm build`. The release pipeline exists
@@ -527,8 +527,7 @@ frameworks and build tools, so that figure is a floor rather than an accuracy me
 by date); read `private/designs/` before proposing product direction when it is present.
 
 `TODOS.md` tracks actionable engineering work, and is deliberately not the roadmap: the roadmap
-records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is
-making the repository public.
+records product scope decisions, `TODOS.md` records work someone could pick up.
 
 `docs/ROADMAP.md` records what v1 deliberately excludes (Python call sites, cross-module constants, HTML
 `<script src>`, tag managers, PII data-flow) and what is not planned at all. Infrastructure as code

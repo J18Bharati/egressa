@@ -710,10 +710,12 @@ describe('output survives a pipe', () => {
   //
   // Every fixture repository is far below 64 KB, so this scans the repository
   // itself: the smallest input on hand that crosses the threshold.
+  // `fixtures`, not `.`: this repository's .egressaignore leaves a scan of `.`
+  // well under the pipe buffer.
   const pipeSelf = (format: string) =>
     execFileSync(
       'sh',
-      ['-c', `npx tsx packages/cli/src/cli.ts scan . --format ${format} 2>/dev/null | cat`],
+      ['-c', `npx tsx packages/cli/src/cli.ts scan fixtures --format ${format} 2>/dev/null | cat`],
       { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
     );
 

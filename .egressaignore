@@ -1,0 +1,3 @@
+# Test inputs. They exist to name vendors, so a scan of this repository would
+# report each one as this project's own egress.
+fixtures/
