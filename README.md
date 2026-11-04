@@ -158,6 +158,7 @@ on:
     branches: [main]
   pull_request:
 permissions:
+  actions: read # needed in a private repository
   contents: read
   security-events: write
 jobs:

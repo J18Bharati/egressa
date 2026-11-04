@@ -74,8 +74,9 @@ runs:
         echo "sarif=$sarif" >> "$GITHUB_OUTPUT"
 
     - name: Upload SARIF
-      # Needs `security-events: write` on the calling job. Runs only when the
-      # scan above succeeded, so a crash is not buried under a second error.
+      # Needs `security-events: write` on the calling job, and `actions: read` in a
+      # private repository. Runs only when the scan above succeeded, so a crash
+      # is not buried under a second error.
       if: inputs.upload-sarif == 'true' && steps.scan.outputs.sarif != ''
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
