@@ -17,10 +17,9 @@ concurrency:
 
 jobs:
   verify:
-    # Node 20 is the engines floor (>=20.11); 24 is what release.yml uses.
-    # Linux only for now: macOS and Windows are off until the suite passes there
-    # (TODOS.md, docs/LIMITATIONS.md). The native parser binding breaks silently
-    # per platform, so both should come back.
+    # The native parser binding breaks silently per platform, so the matrix is not
+    # optional. Node 20 is the engines floor (>=20.11); 24 is what release.yml uses.
+    # Windows is off until the suite passes there (TODOS.md, docs/LIMITATIONS.md).
     strategy:
       fail-fast: false
       matrix:

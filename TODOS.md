@@ -7,26 +7,6 @@ roadmap too, and say so in the item.
 
 ## Distribution
 
-### Make the suite pass on macOS, then restore the CI leg
-
-**What:** Add `macos-latest` back to the `ci.yml` matrix, confirm the suite finishes, and update the
-LIMITATIONS entry.
-
-**Why:** It came off before the repository went public. macOS is a likely platform for users, and
-the native parser binding breaks silently per platform.
-
-**Context:** The first run (2026-11-04) finished 44 of 45 test files, then stalled in
-`scripts/scope-gates.test.ts` until GitHub's six-hour limit, leaving a `grep` running. Simulating
-BSD grep's documented default on Linux (`grep -D read`, `timeout` hidden) left a `grep` running in
-the same way, and `-D skip` stopped it. That is unconfirmed on a Mac, and the simulation fails within
-a minute instead of stalling, so the stall is still unexplained. Every `scope.sh` spawn in that file is now bounded, CI prints per test and the job stops
-at 20 minutes, so the next run should name what is stuck. The timeout test is skipped where
-`timeout` does not exist. Public repositories get standard macOS runners free.
-
-**Effort:** S
-**Priority:** P1
-**Depends on:** None
-
 ### Make the suite pass on Windows, then restore the CI leg
 
 **What:** Fix the 64 failures of the first Windows run (2026-11-04), then add `windows-latest` back
