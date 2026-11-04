@@ -7,12 +7,12 @@ roadmap too, and say so in the item.
 
 ## Distribution
 
-### Install the plugin from the private repository, then make it public
+### Make the repository public
 
 **What:** `github.com/J18Bharati/egressa` exists (created private on 2026-11-04, `main` pushed,
-`release.yml` and `link-check.yml` disabled). Install the plugin from a clean machine with access
-to it, to confirm the documented path works, then make the repository public and enable private
-vulnerability reporting, which `SECURITY.md` points at.
+`release.yml` and `link-check.yml` disabled). The install from it was tested on 2026-11-04 from an
+isolated config. Make it public and enable private vulnerability reporting, which `SECURITY.md`
+points at.
 
 **Why:** Until the repository is public, `/plugin marketplace add J18Bharati/egressa` resolves for
 nobody else, and every install instruction in the README documents a 404.
@@ -25,6 +25,27 @@ passes locally, which validates the manifests but not the install.
 **Effort:** S
 **Priority:** P0
 **Depends on:** None
+
+### Make the suite pass on macOS, then restore the CI leg
+
+**What:** Add `macos-latest` back to the `ci.yml` matrix, confirm the suite finishes, and update the
+LIMITATIONS entry.
+
+**Why:** It came off before the repository went public. macOS is a likely platform for users, and
+the native parser binding breaks silently per platform.
+
+**Context:** The first run (2026-11-04) finished 44 of 45 test files, then stalled in
+`scripts/scope-gates.test.ts` until GitHub's six-hour limit, leaving a `grep` running. Simulating
+BSD grep's documented default on Linux (`grep -D read`, `timeout` hidden) left a `grep` running in
+the same way, and `-D skip` stopped it. That is unconfirmed on a Mac, and the simulation fails within
+a minute instead of stalling, so the stall is still unexplained. Every `scope.sh` spawn in that file is now bounded, CI prints per test and the job stops
+at 20 minutes, so the next run should name what is stuck. The timeout test is skipped where
+`timeout` does not exist. Public repositories get standard macOS runners free, so restore this
+after going public.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** The repository being public
 
 ### Make the suite pass on Windows, then restore the CI leg
 

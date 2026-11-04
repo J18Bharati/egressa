@@ -37,6 +37,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 const SCOPE = resolve('plugin/skills/privacy-review/scripts/scope.sh');
 
+// vitest's own test timeout cannot interrupt execFileSync, which blocks the
+// event loop, so an unbounded spawn turns a hang into a stalled suite that names
+// no test: the first macOS CI run sat for six hours. Every spawn of scope.sh
+// carries this instead, and a hang fails as the test it belongs to.
+const SPAWN_LIMIT = 60_000;
+const HAS_TIMEOUT =
+  execFileSync('sh', ['-c', 'command -v timeout || true'], { encoding: 'utf8' }).trim() !== '';
+
 // Comfortably past the 64 KiB Linux pipe buffer once joined with newlines:
 // the paths below run about 55 bytes each, so 1,800 of them is ~99 KiB.
 const BIG = 1800;
@@ -55,6 +63,7 @@ const runScope = (cwd: string, env: NodeJS.ProcessEnv = {}): Run => {
     stdout = execFileSync('bash', [SCOPE, '--repo'], {
       cwd,
       encoding: 'utf8',
+      timeout: SPAWN_LIMIT,
       env: { ...process.env, ...env },
       maxBuffer: 64 * 1024 * 1024,
     });
@@ -525,7 +534,12 @@ describe('the reviewed repository cannot run code through its own git config', (
   };
 
   const run = (cwd: string, args: string[]) =>
-    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', env: process.env });
+    execFileSync('bash', [SCOPE, ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: process.env,
+      timeout: SPAWN_LIMIT,
+    });
 
   it.each([
     ['repo mode', ['--repo']],
@@ -602,7 +616,11 @@ describe('the reviewed repository cannot run a filter driver through git diff', 
       join(root, 'package.json'),
     ]);
 
-    const out = execFileSync('bash', [SCOPE, '--base', 'main'], { cwd: root, encoding: 'utf8' });
+    const out = execFileSync('bash', [SCOPE, '--base', 'main'], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: SPAWN_LIMIT,
+    });
     expect(existsSync(marker)).toBe(false);
     expect(out).toMatch(/^FILES_UNDER_REVIEW: [1-9]/m);
   });
@@ -640,6 +658,7 @@ describe('a symlink out of the reviewed repository is not reviewed', () => {
     const out = execFileSync('bash', [SCOPE, '--repo', '--list'], {
       cwd: linked(),
       encoding: 'utf8',
+      timeout: SPAWN_LIMIT,
     });
     expect(out.split('\n').filter(Boolean).sort()).toEqual(['package.json', 'src/app.js']);
   });
@@ -652,7 +671,7 @@ describe('git in the reviewed repository reaches no network, no submodule, and f
       encoding: 'utf8',
     });
   const runIn = (cwd: string, args: string[] = []) =>
-    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8' });
+    execFileSync('bash', [SCOPE, ...args], { cwd, encoding: 'utf8', timeout: SPAWN_LIMIT });
 
   /** main with one commit; feature adds src/t.js carrying a tracker call. */
   const branched = (tag: string) => {
@@ -854,6 +873,18 @@ describe('plain bugs from the fourth hardening review', () => {
     expect(runIn(root, ['--repo'])).toMatch(/^SCOPE_END: ok$/m);
   });
 
+  it('tells a recursive grep to skip FIFOs, which BSD grep otherwise blocks on', () => {
+    const script = readFileSync(SCOPE, 'utf8');
+    const recursive = script
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .filter((l) =>
+        /\bgrep\b[^|;]*\s(-[A-Za-z]*[rR][A-Za-z]*|--recursive|-d\s+recurse)\b/.test(l),
+      );
+    expect(recursive.length).toBeGreaterThan(0);
+    for (const line of recursive) expect(line).toContain('-D skip');
+  });
+
   it('does not read a package.json linked from outside the repository', () => {
     const top = scratch('pkglink');
     plant(top, 'outside/package.json', '{"dependencies":{"next":"14.0.0"}}\n');
@@ -863,19 +894,25 @@ describe('plain bugs from the fourth hardening review', () => {
     expect(runIn(root, ['--repo'])).not.toMatch(/^STACK: .*\bnext\b/m);
   });
 
-  it('stops asking git after the first timeout, and says it timed out', () => {
-    const root = scratch('reffifo');
-    plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
-    git(root, 'init', '-q', '-b', 'main');
-    for (const ref of ['main', 'master', 'develop']) {
-      execFileSync('mkfifo', [join(root, '.git', 'refs', 'heads', ref)]);
-    }
-    const started = Date.now();
-    const out = runIn(root);
-    expect(Date.now() - started).toBeLessThan(40000);
-    expect(out).toMatch(/^DEGRADED: .*timed out/m);
-    expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
-  }, 60000);
+  // Needs `timeout`: without one a git call is unbounded by design, which
+  // docs/LIMITATIONS.md records, and this test can only hang there.
+  it.skipIf(!HAS_TIMEOUT)(
+    'stops asking git after the first timeout, and says it timed out',
+    () => {
+      const root = scratch('reffifo');
+      plant(root, 'src/a.js', "gtag('config', 'G-X');\n");
+      git(root, 'init', '-q', '-b', 'main');
+      for (const ref of ['main', 'master', 'develop']) {
+        execFileSync('mkfifo', [join(root, '.git', 'refs', 'heads', ref)]);
+      }
+      const started = Date.now();
+      const out = runIn(root);
+      expect(Date.now() - started).toBeLessThan(40000);
+      expect(out).toMatch(/^DEGRADED: .*timed out/m);
+      expect(out).toMatch(/^SCOPE_TRACKER_CODE: true$/m);
+    },
+    60000,
+  );
 
   it("ignores a GIT_INDEX_FILE in the reviewer's environment", () => {
     const other = scratch('otherindex');
@@ -1058,6 +1095,7 @@ describe('an argument scope.sh does not know is refused', () => {
           cwd: root,
           encoding: 'utf8',
           stdio: 'pipe',
+          timeout: SPAWN_LIMIT,
         });
       } catch (error) {
         const e = error as { status: number; stdout: string; stderr: string };

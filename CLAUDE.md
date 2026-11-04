@@ -528,7 +528,7 @@ by date); read `private/designs/` before proposing product direction when it is 
 
 `TODOS.md` tracks actionable engineering work, and is deliberately not the roadmap: the roadmap
 records product scope decisions, `TODOS.md` records work someone could pick up. The P0 there is
-installing the plugin from the private repository, then making it public.
+making the repository public.
 
 `docs/ROADMAP.md` records what v1 deliberately excludes (Python call sites, cross-module constants, HTML
 `<script src>`, tag managers, PII data-flow) and what is not planned at all. Infrastructure as code

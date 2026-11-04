@@ -16,5 +16,9 @@ export default defineConfig({
   test: {
     include: ['packages/**/*.test.ts', 'scripts/**/*.test.ts'],
     environment: 'node',
+    // In CI, a line per test as it finishes rather than per file, so a stalled
+    // run shows how far it got. Setting this replaces the defaults, so the
+    // annotations from github-actions have to be named too.
+    reporters: process.env.CI ? ['verbose', 'github-actions'] : ['default'],
   },
 });

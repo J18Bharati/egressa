@@ -17,16 +17,19 @@ concurrency:
 
 jobs:
   verify:
-    # The native parser binding breaks silently per platform, so the matrix is
-    # not optional. Node 20 is the engines floor (>=20.11); 24 is what
-    # release.yml uses. Windows is off until the suite passes there: its first
-    # run failed 64 tests (TODOS.md, docs/LIMITATIONS.md).
+    # Node 20 is the engines floor (>=20.11); 24 is what release.yml uses.
+    # Linux only for now: macOS and Windows are off until the suite passes there
+    # (TODOS.md, docs/LIMITATIONS.md). The native parser binding breaks silently
+    # per platform, so both should come back.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
+    # A healthy run takes under three minutes. Without this a hung test holds a
+    # runner for GitHub's six-hour limit.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

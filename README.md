@@ -83,7 +83,8 @@ pnpm build
 node packages/cli/dist/cli.js scan path/to/your/repo
 ```
 
-This needs Node 20.11 or later and pnpm 9. The commands below are written as `egressa`; from a
+This needs Node 20.11 or later and pnpm 9, and only Linux is tested so far (see
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md#only-linux-is-tested)). The commands below are written as `egressa`; from a
 checkout, that is `node packages/cli/dist/cli.js`.
 
 After the first npm release, these paths work too:

@@ -442,7 +442,9 @@ declared() {
   for _d in "${GENERATED_DIRS[@]}"; do
     _d_exclude_flags+=("--exclude-dir=$_d")
   done
-  _d_found="$(grep -rIlE "$1" --include=package.json "${_d_exclude_flags[@]}" . 2>/dev/null)"
+  # -D skip: GNU grep already skips FIFOs when recursing; BSD grep, which macOS
+  # ships, defaults to reading them, so a FIFO named package.json blocks forever.
+  _d_found="$(grep -D skip -rIlE "$1" --include=package.json "${_d_exclude_flags[@]}" . 2>/dev/null)"
   GATE_STATUS=$?
   GATE_OUT="$(printf '%s' "$_d_found" \
     | { [ -n "${SELF_REL:-}" ] && grep -v "^\./${SELF_REL}/" || cat; })"

@@ -385,13 +385,23 @@ Even a high-confidence, resolved call site only shows that code *references* a v
 show that the code runs, that personal data flows through it, that the data is personal, or that
 sending it is unlawful. See [CLAIMS.md](CLAIMS.md).
 
-## Windows is untested
+## Only Linux is tested
 
-CI runs on Linux and macOS only. The first Windows run, on 2026-11-04, failed 64 tests in 8 files:
-most spawn `npx`, which on Windows is `npx.cmd` and needs a shell, and the privacy review's
-`scope.sh` assumes bash, git, FIFOs and symbolic links behave as they do on a Unix system. Neither
-the CLI nor the skills are known to work on Windows; WSL is the supported route there until the
-suite passes.
+CI runs on Linux only, on Node 20, 22 and 24. Other systems have had one CI run each, which did not
+finish cleanly:
+
+- **Windows.** The first run, on 2026-11-04, failed 64 tests in 8 files: most spawn `npx`, which on
+  Windows is `npx.cmd` and needs a shell, and the privacy review's `scope.sh` assumes bash, git,
+  FIFOs and symbolic links behave as they do on a Unix system. WSL is the route there until the
+  suite passes.
+- **macOS.** The first run, the same day, finished 44 of 45 test files with no failures, then
+  stalled in `scripts/scope-gates.test.ts` until GitHub's six-hour limit, leaving a `grep` running.
+  A probable cause of that `grep` is addressed, unconfirmed on a Mac: BSD grep is documented as
+  reading a FIFO when recursing by default, where GNU grep skips it, so a FIFO named `package.json`
+  could block `scope.sh` with nothing to end it. It now passes `-D skip`. On Linux, with grep forced
+  to read FIFOs and `timeout` hidden, the old script leaves a `grep` running and the new one passes.
+  That same simulation fails in under a minute rather than stalling, so **the stall itself is
+  unexplained**.
 
 ## Repository facts
 
