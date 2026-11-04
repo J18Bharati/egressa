@@ -385,7 +385,7 @@ emit CODE_FILES "$(printf '%s\n' "$CODE" | sed '/^$/d' | wc -l | tr -d ' ')"
 # genuine failure, but `xargs` flattens both into 123, so the status of an `xargs`
 # run says nothing on its own. The wrapper below therefore maps grep's own status
 # inside each batch: 0 and 1 become 0, anything worse becomes 255, which is the one
-# value `xargs` reports distinctly (as 124).
+# value that makes `xargs` stop and exit non-zero (GNU says 124, BSD says 1).
 #
 # GATE_OUT / GATE_STATUS are the last helper's result; `gate` reads them.
 #
@@ -405,6 +405,10 @@ hits() {
   GATE_STATUS=$?
   [ -n "$GATE_OUT" ] && return 0
   [ "$GATE_STATUS" -eq 0 ] && return 1
+  # The batch exits 0 on a match and on no match, so anything else is a failure,
+  # whatever number xargs picks for it. GNU xargs reports a child's 255 as 124;
+  # BSD xargs reports it as 1, which is what a clean no-match looks like here.
+  GATE_STATUS=124
   return "$GATE_STATUS"
 }
 
@@ -508,7 +512,7 @@ _comment_sed() {
 # one character.
 #
 # Error handling mirrors hits(): grep's own status is mapped inside the batch,
-# and only a genuine failure becomes 255, which xargs reports distinctly as 124.
+# and only a genuine failure becomes 255, so any non-zero status from xargs is one.
 hits_live() {
   [ -z "$CODE" ] && return 1
   _hl_worst=1
@@ -527,7 +531,7 @@ hits_live() {
           ' sh 2>/dev/null)"
     GATE_STATUS=$?
     [ -n "$GATE_OUT" ] && return 0
-    [ "$GATE_STATUS" -gt 1 ] && _hl_worst="$GATE_STATUS"
+    [ "$GATE_STATUS" -ne 0 ] && _hl_worst=124
   done
   GATE_STATUS="$_hl_worst"
   return "$_hl_worst"

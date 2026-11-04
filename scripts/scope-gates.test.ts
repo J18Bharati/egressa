@@ -205,6 +205,29 @@ describe('an unhealthy gate is loud', () => {
     expect(logging[0]).not.toMatch(/exit=(0|1)$/);
   });
 
+  // BSD xargs reports a child's exit 255 as 1, not GNU's 124, and macOS ships it.
+  // This shim gives Linux that behaviour, so either platform catches the bug: a
+  // gate that could not run reading as a clean no-match.
+  it('reports SCOPE_DEGRADED when xargs says 1 for a failed batch, as BSD xargs does', () => {
+    const root = scratch('degraded-bsd-xargs');
+    plant(root, 'package.json', '{"name":"degraded","private":true}\n');
+    fill(root, 3, "export const go = () => { console.log('hello'); };\n");
+
+    const bin = scratch('bin-bsd-xargs');
+    writeFileSync(join(bin, 'grep'), grepShim('-lIE'));
+    const realXargs = execFileSync('sh', ['-c', 'command -v xargs'], { encoding: 'utf8' }).trim();
+    writeFileSync(join(bin, 'xargs'), `#!/bin/sh\n${realXargs} "$@" || exit 1\n`);
+    chmodSync(join(bin, 'grep'), 0o755);
+    chmodSync(join(bin, 'xargs'), 0o755);
+
+    const run = runScope(root, { PATH: `${bin}:${process.env.PATH}` });
+    expect(run.lines.SCOPE_END).toBe('ok');
+    expect(run.lines.SCOPE_LOGGING).toBe('false');
+    expect(run.degraded.filter((d) => d.startsWith('SCOPE_LOGGING '))).toEqual([
+      'SCOPE_LOGGING exit=124',
+    ]);
+  });
+
   // The case above drives a hits()-based gate. declared() is the only helper
   // whose pipeline continues past the search, so its status was the one that
   // could be masked by a downstream filter -- a real failure reading manifests
@@ -610,8 +633,8 @@ describe('the reviewed repository cannot run a filter driver through git diff', 
     git(root, 'config', `filter.evil.${kind}`, `sh -c 'touch "${marker}"; cat'`);
     // Re-date every file, as extracting an archive does.
     execFileSync('touch', [
-      '-d',
-      '2001-01-01',
+      '-t',
+      '200101010000',
       join(root, 'src/app.ts'),
       join(root, 'package.json'),
     ]);
@@ -729,7 +752,7 @@ describe('git in the reviewed repository reaches no network, no submodule, and f
     const marker = join(root, '..', `${root.split('/').pop()}-RAN`);
     git(join(root, 'lib'), 'config', 'filter.evil.clean', `sh -c 'touch "${marker}"; cat'`);
     plant(root, '.git/modules/lib/info/attributes', '* filter=evil\n');
-    execFileSync('touch', ['-d', '2001-01-01', join(root, 'lib', 'f.txt')]);
+    execFileSync('touch', ['-t', '200101010000', join(root, 'lib', 'f.txt')]);
     runIn(root);
     expect(existsSync(marker)).toBe(false);
   });
