@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
         node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     # A healthy run takes under three minutes. Without this a hung test holds a
