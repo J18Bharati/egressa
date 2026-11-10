@@ -28,16 +28,46 @@ jobs:
         id: check
         continue-on-error: true
         run: node scripts/check-links.mjs
-      - name: Open an issue when a source has moved
-        if: steps.check.outcome == 'failure'
+      # One tracking issue, kept current: opened on the first failing night,
+      # rewritten on each later one, closed on the first clean one. It used to
+      # call issues.create unconditionally and filed a duplicate every night.
+      - name: Open, update or close the tracking issue
+        if: steps.check.outcome == 'failure' || steps.check.outcome == 'success'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
         with:
           script: |
-            const body = require('fs').readFileSync('link-report.md', 'utf8');
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Knowledge base: cited sources no longer resolve',
-              body,
-              labels: ['kb-correction'],
-            });
+            const title = 'Knowledge base: cited sources no longer resolve';
+            const { owner, repo } = context.repo;
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const open = (await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'kb-correction', per_page: 100,
+            })).filter((i) => !i.pull_request && i.title === title && i.user?.type === 'Bot');
+            const [current, ...duplicates] = open.sort((a, b) => a.number - b.number);
+
+            if (process.env.CHECK_OUTCOME === 'success') {
+              for (const issue of open) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number,
+                  body: `Every cited source resolved in [this run](${run}). Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number,
+                  state: 'closed', state_reason: 'completed' });
+              }
+              return;
+            }
+
+            const report = require('fs').readFileSync('link-report.md', 'utf8');
+            const body = `${report}\n\n_Last checked: [${new Date().toISOString().slice(0, 10)}](${run})._`;
+            if (!current) {
+              await github.rest.issues.create({ owner, repo, title, body, labels: ['kb-correction'] });
+              return;
+            }
+            if (current.body !== body) {
+              await github.rest.issues.update({ owner, repo, issue_number: current.number, body });
+            }
+            for (const issue of duplicates) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number,
+                body: `Duplicate of #${current.number}, which is kept current.` });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number,
+                state: 'closed', state_reason: 'not_planned' });
+            }
