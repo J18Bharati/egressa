@@ -47,7 +47,10 @@ const probe = async (url) => {
     const response = await fetch(url, {
       method: 'GET',
       redirect: 'follow',
-      headers: { 'user-agent': 'egressa-link-check' },
+      // Ask for HTML, as a reader's browser does. fetch's default `*/*` got a
+      // 500 from github.com/customer-terms/* while the page served text/html
+      // with a 200 (2026-11-11), and filed issue #1 for a page that worked.
+      headers: { 'user-agent': 'egressa-link-check', accept: 'text/html,*/*;q=0.8' },
       signal: AbortSignal.timeout(20_000),
     });
     await response.body?.cancel();
